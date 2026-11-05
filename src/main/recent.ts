@@ -122,6 +122,10 @@ function updateJumpList(): void {
     });
     const result = app.setJumpList(categories);
     if (result !== 'ok') console.warn('Jump list update returned', result);
+    // Lets end-to-end tests confirm Windows accepted the jump list.
+    if (process.env.PIGMENTO_E2E === '1') {
+      (globalThis as unknown as Record<string, unknown>).__pigmentoJumpList = { result, items: items.length };
+    }
   } catch (err) {
     console.warn('Jump list update failed', err);
   }

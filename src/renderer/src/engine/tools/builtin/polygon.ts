@@ -68,8 +68,7 @@ export default registerTool({
       const sp0 = ctx.view.toScreen(pts[0].x, pts[0].y);
       const nearStart = Math.hypot(sp0.x - e.sx, sp0.y - e.sy) < 9;
       if ((nearStart || e.detail >= 2) && pts.length >= 3) {
-        // Double-click: the first click already added this point.
-        if (e.detail >= 2 && !nearStart) refresh(ctx, s, () => s.points.pop());
+        // Double-click: the first click of the pair already added this corner, so just close.
         close(ctx);
         return;
       }

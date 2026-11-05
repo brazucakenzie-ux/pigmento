@@ -42,6 +42,11 @@ test('saves a PNG, reopens it and keeps the pixels', async () => {
     expect([...bytes.subarray(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
     await expect(h.page.locator('.topbar .dirty')).toHaveCount(0);
     await expect(h.page.locator('.topbar .title')).toHaveText('drawing.png');
+    // The file is now in the recent list and the Windows jump list.
+    await expect.poll(() => h.page.evaluate(() => window.pigmento.recent.list().then((l) => l.map((r) => r.path)))).toEqual([file]);
+    await expect
+      .poll(() => h.app.evaluate(() => (globalThis as unknown as { __pigmentoJumpList?: unknown }).__pigmentoJumpList))
+      .toEqual({ result: 'ok', items: 1 });
 
     // New blank image, then reopen the saved file.
     await h.page.keyboard.press('Control+n');

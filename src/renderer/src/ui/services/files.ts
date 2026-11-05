@@ -178,13 +178,20 @@ export async function setWallpaper(style: WallpaperStyle): Promise<void> {
 
 // ---- clipboard ------------------------------------------------------------------------
 
-async function writeClipboard(img: ImageBuf): Promise<void> {
-  try {
-    const png = await engine.codecs.encode('png', img.w, img.h, img.data.slice(), 100, engine.doc.dpi);
-    await window.pigmento.clipboard.writeImage(png);
-  } catch {
-    showToast({ kind: 'error', key: 'error.clipboard' });
-  }
+/** Copy finishes asynchronously; a paste right after a copy must see the new content. */
+let pendingCopy: Promise<void> = Promise.resolve();
+
+function writeClipboard(img: ImageBuf): Promise<void> {
+  const data = img.data.slice();
+  pendingCopy = pendingCopy.then(async () => {
+    try {
+      const png = await engine.codecs.encode('png', img.w, img.h, data, 100, engine.doc.dpi);
+      await window.pigmento.clipboard.writeImage(png);
+    } catch {
+      showToast({ kind: 'error', key: 'error.clipboard' });
+    }
+  });
+  return pendingCopy;
 }
 
 export async function copy(): Promise<void> {
@@ -198,6 +205,7 @@ export async function cut(): Promise<void> {
 }
 
 async function readClipboard(): Promise<ImageBuf | null> {
+  await pendingCopy;
   let bytes: Uint8Array | null;
   try {
     bytes = await window.pigmento.clipboard.readImage();
@@ -240,6 +248,7 @@ export async function paste(): Promise<void> {
 
 export async function pasteAsNew(): Promise<void> {
   if (!(await confirmDiscard())) return;
+  await pendingCopy;
   const bytes = await window.pigmento.clipboard.readImage().catch(() => null);
   if (!bytes) {
     showToast({ kind: 'info', key: 'error.clipboardEmpty' });

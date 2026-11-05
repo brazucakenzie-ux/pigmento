@@ -40,7 +40,11 @@ export async function launchApp(extraArgs: string[] = []): Promise<AppHandle> {
         })
         .catch(() => undefined);
       await app.close().catch(() => undefined);
-      rmSync(userData, { recursive: true, force: true });
+      try {
+        rmSync(userData, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+      } catch {
+        // Chromium may still hold a lock file briefly; the OS temp folder is cleaned later.
+      }
     },
   };
 }

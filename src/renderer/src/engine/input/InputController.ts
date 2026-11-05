@@ -60,6 +60,11 @@ export class InputController {
     return this.toolPointer !== null;
   }
 
+  /** Any drag in progress (drawing, panning, pinching, resizing the canvas). */
+  get isBusy(): boolean {
+    return this.toolPointer !== null || this.panning !== null || this.pinch !== null || this.canvasDrag !== null;
+  }
+
   private local(e: PointerEvent | WheelEvent): Point {
     const r = this.el.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
@@ -85,9 +90,38 @@ export class InputController {
       alt: e.altKey,
       ctrl: e.ctrlKey || e.metaKey,
       eraser: type === 'pen' && (e.buttons & 32) !== 0,
-      detail: e.detail,
+      detail: this.clickCount,
       timeStamp: e.timeStamp,
     };
+  }
+
+  /**
+   * Pointer events don't carry a reliable click count, so double-clicks are detected here
+   * (Windows defaults: 500 ms, a few pixels).
+   */
+  private clickCount = 1;
+  private lastDown: { t: number; x: number; y: number; button: number } | null = null;
+
+  /** Capture can fail (e.g. the pointer was already released); input keeps working without it. */
+  private capture(id: number): void {
+    try {
+      this.el.setPointerCapture(id);
+    } catch {
+      // ignore
+    }
+  }
+
+  private countClick(e: PointerEvent): void {
+    const sp = this.local(e);
+    const prev = this.lastDown;
+    const repeat =
+      prev !== null &&
+      prev.button === e.button &&
+      e.timeStamp - prev.t < 500 &&
+      Math.abs(sp.x - prev.x) <= 5 &&
+      Math.abs(sp.y - prev.y) <= 5;
+    this.clickCount = repeat ? this.clickCount + 1 : 1;
+    this.lastDown = { t: e.timeStamp, x: sp.x, y: sp.y, button: e.button };
   }
 
   // ---- canvas resize handles ------------------------------------------------------------
@@ -153,7 +187,7 @@ export class InputController {
         // Second finger: finish any stroke and switch to pinch/pan.
         if (this.toolPointer !== null) this.endTool(e);
         this.startPinch();
-        this.el.setPointerCapture(e.pointerId);
+        this.capture(e.pointerId);
         return;
       }
       if (this.touches.size > 2) return;
@@ -164,7 +198,7 @@ export class InputController {
     if (e.button === 1 || (this.spaceDown && e.button === 0)) {
       e.preventDefault();
       this.panning = { id: e.pointerId, last: sp };
-      this.el.setPointerCapture(e.pointerId);
+      this.capture(e.pointerId);
       this.refreshCursor();
       return;
     }
@@ -172,11 +206,12 @@ export class InputController {
     const ch = e.button === 0 ? this.hitCanvasHandle(sp) : null;
     if (ch) {
       this.canvasDrag = { id: e.pointerId, handle: ch, w: engine.doc.width, h: engine.doc.height };
-      this.el.setPointerCapture(e.pointerId);
+      this.capture(e.pointerId);
       return;
     }
 
     if (e.button !== 0 && e.button !== 2 && e.button !== 5) return;
+    this.countClick(e);
     const button: 0 | 2 = e.button === 2 || (e.pointerType === 'pen' && (e.buttons & 2) !== 0) ? 2 : 0;
     const te = this.toToolEvent(e, button);
     if (te.eraser && engine.activeTool.paints && engine.activeTool.id !== 'eraser') {
@@ -186,7 +221,7 @@ export class InputController {
     this.toolPointer = e.pointerId;
     this.toolPointerType = e.pointerType;
     this.toolButton = button;
-    this.el.setPointerCapture(e.pointerId);
+    this.capture(e.pointerId);
     this.el.focus({ preventScroll: true });
     engine.activeTool.pointerDown(engine, te);
     engine.requestRender();

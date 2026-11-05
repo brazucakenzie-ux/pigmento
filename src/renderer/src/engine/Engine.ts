@@ -206,10 +206,16 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     if (this.frame) return;
     this.frame = requestAnimationFrame(() => {
       this.frame = 0;
+      this.renderer.interactive = this.input?.isBusy ?? false;
       this.renderer.render();
       this.renderOverlay();
+      // After interaction ends, redraw once at full downscale quality.
+      window.clearTimeout(this.settleTimer);
+      if (this.renderer.interactive) this.settleTimer = window.setTimeout(() => this.requestRender(), 160);
     });
   }
+
+  private settleTimer = 0;
 
   invalidate(r: Rect | null): void {
     this.renderer.invalidate(r);

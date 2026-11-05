@@ -7,7 +7,7 @@ import { useUi } from '../state/store';
 
 export type RbVariant = 'large' | 'compact' | 'small';
 
-const ICON_SIZE: Record<RbVariant, number> = { large: 26, compact: 18, small: 16 };
+const ICON_SIZE: Record<RbVariant, number> = { large: 26, compact: 16, small: 16 };
 
 /** Ribbon button bound to an action: label, icon, shortcut tooltip, enabled/pressed state. */
 export function ActionButton({ id, variant = 'large', label, icon }: { id: string; variant?: RbVariant; label?: string; icon?: string }) {

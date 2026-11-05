@@ -57,6 +57,8 @@ export class Renderer {
   showPixelGrid = true;
   activeFilters: LayerFilter[] = [];
   liveDrawer: LiveDrawer | null = null;
+  /** True while the user is drawing/panning; trades downscale quality for speed. */
+  interactive = false;
 
   constructor(
     private doc: PaintDocument,
@@ -242,7 +244,8 @@ export class Renderer {
     if (vis) {
       const z = view.zoom * dpr;
       ctx.imageSmoothingEnabled = view.zoom < 2;
-      ctx.imageSmoothingQuality = 'high';
+      // High-quality downscaling of a huge canvas is costly: use it only when idle.
+      ctx.imageSmoothingQuality = this.interactive ? 'low' : 'high';
       ctx.drawImage(
         this.composite,
         vis.x,

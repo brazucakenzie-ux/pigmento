@@ -9,7 +9,8 @@ body,
 #root {
   height: 100%;
   margin: 0;
-  overflow: hidden;
+  /* clip (not hidden): focusing a control must never scroll the whole window sideways. */
+  overflow: clip;
 }
 
 body {

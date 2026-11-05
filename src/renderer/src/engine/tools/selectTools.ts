@@ -27,7 +27,7 @@ interface SelectToolConfig {
  * into a floating object that can be moved, scaled and rotated; Ctrl+drag moves a copy.
  */
 export function createSelectTool(cfg: SelectToolConfig): Tool {
-  let creating: { start: Point; current: Point; points: Point[]; sp: Point; shift: boolean; alt: boolean } | null = null;
+  let creating: { start: Point; current: Point; points: Point[]; sp: Point; shift: boolean; alt: boolean; moved: boolean } | null = null;
   let draggingFloat = false;
 
   const snap = (p: Point): Point => ({ x: Math.round(p.x), y: Math.round(p.y) });
@@ -77,7 +77,7 @@ export function createSelectTool(cfg: SelectToolConfig): Tool {
         }
         ctx.setSelection(null);
       }
-      creating = { start: p, current: p, points: [p], sp, shift: e.shift, alt: e.alt };
+      creating = { start: p, current: p, points: [p], sp, shift: e.shift, alt: e.alt, moved: false };
     },
 
     pointerMove(ctx, e) {
@@ -92,6 +92,8 @@ export function createSelectTool(cfg: SelectToolConfig): Tool {
       }
       if (!creating) return;
       creating.current = p;
+      // A lasso ends where it began, so "was it a click?" must look at the whole gesture.
+      if (Math.hypot(e.sx - creating.sp.x, e.sy - creating.sp.y) >= 3) creating.moved = true;
       creating.shift = e.shift;
       creating.alt = e.alt;
       if (cfg.kind === 'lasso') {
@@ -112,7 +114,7 @@ export function createSelectTool(cfg: SelectToolConfig): Tool {
       creating = null;
       if (!c) return;
       const doc = ctx.doc;
-      if (Math.hypot(e.sx - c.sp.x, e.sy - c.sp.y) < 3) {
+      if (!c.moved) {
         ctx.setSelection(null);
         return;
       }

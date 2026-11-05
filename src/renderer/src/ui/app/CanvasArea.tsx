@@ -146,7 +146,7 @@ function TextEditor() {
     const el = ref.current;
     if (!el) return;
     el.value = engine.live?.kind === 'text' ? (useUi.getState().text?.text ?? '') : '';
-    requestAnimationFrame(() => el.focus());
+    el.focus();
   }, [session]);
 
   if (!text) return null;
