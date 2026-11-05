@@ -21,6 +21,8 @@ async function stubMessageBox(h: AppHandle, response: number): Promise<void> {
 
 async function drawRedLine(h: AppHandle): Promise<void> {
   await h.page.keyboard.press('p');
+  // 4 px wide so the sampled row is covered whatever sub-pixel offset the view has.
+  await h.page.getByRole('group', { name: 'Size' }).getByRole('button', { name: '4' }).click();
   await h.page.getByRole('button', { name: /Colour #D7263D/ }).click();
   await drag(h.page, [
     [10, 10],
@@ -70,12 +72,15 @@ for (const format of ['jpg', 'bmp', 'gif', 'webp'] as const) {
       await ready(h.page);
       await h.page.keyboard.press('r');
       await h.page.getByRole('radio', { name: 'Fill', exact: true }).click();
-      await h.page.getByRole('button', { name: /Colour #1E88E5/ }).click({ button: 'right' });
+      // Fill uses the secondary colour: pick blue as primary, then swap with X.
+      await h.page.getByRole('button', { name: /Colour #1E88E5/ }).click();
+      await h.page.keyboard.press('x');
       await drag(h.page, [
         [0, 0],
         [200, 200],
       ]);
       await h.page.keyboard.press('Enter');
+      expect(await pixel(h.page, 100, 100)).toEqual({ r: 0x1e, g: 0x88, b: 0xe5, a: 255 });
       const file = tempFile(`picture.${format}`);
       await stubSaveDialog(h, file);
       await h.page.keyboard.press('Control+Shift+s');

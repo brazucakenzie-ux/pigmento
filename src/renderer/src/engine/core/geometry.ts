@@ -51,13 +51,14 @@ export function rectInflate(r: Rect, d: number): Rect {
   return { x: r.x - d, y: r.y - d, w: r.w + 2 * d, h: r.h + 2 * d };
 }
 
-/** Smallest integer rect covering r. */
+/** Smallest integer rect covering r (ignoring floating-point noise like 99.9999999). */
 export function rectRoundOut(r: Rect): Rect {
-  const x0 = Math.floor(r.x);
-  const y0 = Math.floor(r.y);
-  const x1 = Math.ceil(r.x + r.w);
-  const y1 = Math.ceil(r.y + r.h);
-  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  const eps = 1e-6;
+  const x0 = Math.floor(r.x + eps);
+  const y0 = Math.floor(r.y + eps);
+  const x1 = Math.ceil(r.x + r.w - eps);
+  const y1 = Math.ceil(r.y + r.h - eps);
+  return { x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0) };
 }
 
 export function rectContains(r: Rect, x: number, y: number): boolean {

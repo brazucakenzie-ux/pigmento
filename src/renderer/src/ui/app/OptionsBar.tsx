@@ -82,7 +82,11 @@ function OptionControl({ toolId, spec, values }: { toolId: string; spec: OptionS
         </span>
       );
     case 'hint':
-      return <span className="opt-hint">{label}</span>;
+      return (
+        <span className="opt-hint" data-tip={label}>
+          {label}
+        </span>
+      );
   }
 }
 

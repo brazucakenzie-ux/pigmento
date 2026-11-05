@@ -444,6 +444,7 @@
 }
 .opt {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 8px;
   font-size: var(--fs-xs);
@@ -452,6 +453,14 @@
 .opt-hint {
   font-size: var(--fs-xs);
   color: var(--text-faint);
+  /* Hints give way first so Apply/Cancel stay visible on narrow windows. */
+  flex: 0 1 auto;
+  min-width: 40px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.optionsbar > .btn {
+  flex-shrink: 0;
 }
 .optionsbar .grow {
   flex: 1;

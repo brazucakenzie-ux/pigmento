@@ -143,20 +143,29 @@ Pointer Events with `getCoalescedEvents()`, pressure and tilt, and the pen erase
 ## 5. Milestones
 
 ### Milestone 1 — Foundation and complete Paint parity
-- [ ] 1.1 Prerequisites checked (node 26.13, npm 11.20, git 2.56); git init; PLAN.md, CLAUDE.md
-- [ ] 1.2 Scaffold: electron-vite + React + TS strict, ESLint/Prettier, Vitest, Playwright, `npm run dev`/`check`; secure window (CSP, app:// protocol, preload bridge)
-- [ ] 1.3 Brand + theming: logo SVG, generated icons, tokens, light/dark/high-contrast + forced-colors, accent colour from Windows, i18n layer, Inter font, LICENSES.md
-- [ ] 1.4 Engine core: geometry/colour, tiled Surface + TileDelta, Document/Layer, History, Compositor, View (zoom 1–3200 %, pan), overlay, input pipeline (+ unit tests)
-- [ ] 1.5 App shell: top bar (title-bar overlay, Snap Layouts), ribbon (Home/Image/View), options bar, status bar (coords, sizes, zoom slider, fit), side panels (History, Navigator), rulers, gridlines, pixel grid, scrollbars, canvas resize handles
-- [ ] 1.6 Colours: palette, primary/secondary, swap/reset, Edit colours dialog (HSV/RGB/hex/alpha), recent + custom colours
-- [ ] 1.7 Freehand tools: pencil, brush (pressure), eraser, flood fill (tolerance, worker), colour picker, magnifier (+ fill tests)
-- [ ] 1.8 Shape tools: line, curve, rectangle, rounded rectangle, ellipse, polygon — outline/fill styles, live editing handles (move/resize/rotate/recolour), Shift/Alt modifiers, commit/cancel
-- [ ] 1.9 Text tool: system fonts, size, B/I/U/S, alignment, colour, transparent/opaque background, in-place editing
-- [ ] 1.10 Selection: rectangle + free-form; move, Ctrl-copy, cut/copy/paste/delete, flip, rotate 90/180/270 + free rotation, scale handles, skew, crop, transparent selection, select all/invert, nudge (+ selection/transform tests)
-- [ ] 1.11 Image ops: resize & skew dialog (%, px, aspect lock, resampling), canvas size with anchor, rotate, flip, invert colours, crop, image properties (size, units, DPI, paper) (+ transform tests)
-- [ ] 1.12 File I/O + Windows: New/Open/Save/Save As (PNG/JPEG+quality/WebP/BMP/GIF), worker codecs, drag-and-drop, native clipboard in/out (+ paste as new image, paste from file), "Open with"/argv + single instance, recent files + jump list, print, set as wallpaper, unsaved prompt, settings persistence (atomic)
-- [ ] 1.13 Keyboard shortcuts (defaults from brief §3.2) through action registry; Help menu (shortcut cheat sheet, About)
-- [ ] 1.14 E2E tests (draw, save, reopen, undo/redo), `npm run check` green, perf sanity on 4000×3000, report
+- [x] 1.1 Prerequisites checked (node 26.13, npm 11.20, git 2.56); git init; PLAN.md, CLAUDE.md
+- [x] 1.2 Scaffold: electron-vite + React + TS strict, ESLint/Prettier, Vitest, Playwright, `npm run dev`/`check`; secure window (CSP, app:// protocol, preload bridge)
+- [x] 1.3 Brand + theming: logo SVG, generated icons, tokens, light/dark/high-contrast + forced-colors, accent colour from Windows, i18n layer, Inter font, LICENSES.md
+- [x] 1.4 Engine core: geometry/colour, tiled Surface + TileDelta, Document/Layer, History, Compositor, View (zoom 1–3200 %, pan), overlay, input pipeline (+ unit tests)
+- [x] 1.5 App shell: top bar (title-bar overlay, Snap Layouts), ribbon (Home/Image/View), options bar, status bar (coords, sizes, zoom slider, fit), side panels (History, Navigator), rulers, gridlines, pixel grid, scrollbars, canvas resize handles
+- [x] 1.6 Colours: palette, primary/secondary, swap/reset, Edit colours dialog (HSV/RGB/hex/alpha), recent + custom colours
+- [x] 1.7 Freehand tools: pencil, brush (pressure), eraser, flood fill (tolerance, worker), colour picker, magnifier (+ fill tests)
+- [x] 1.8 Shape tools: line, curve, rectangle, rounded rectangle, ellipse, polygon — outline/fill styles, live editing handles (move/resize/rotate/recolour), Shift/Alt modifiers, commit/cancel
+- [x] 1.9 Text tool: system fonts, size, B/I/U/S, alignment, colour, transparent/opaque background, in-place editing
+- [x] 1.10 Selection: rectangle + free-form; move, Ctrl-copy, cut/copy/paste/delete, flip, rotate 90/180/270 + free rotation, scale handles, skew, crop, transparent selection, select all/invert, nudge (+ selection/transform tests)
+- [x] 1.11 Image ops: resize & skew dialog (%, px, aspect lock, resampling), canvas size with anchor, rotate, flip, invert colours, crop, image properties (size, units, DPI, paper) (+ transform tests)
+- [x] 1.12 File I/O + Windows: New/Open/Save/Save As (PNG/JPEG+quality/WebP/BMP/GIF), worker codecs, drag-and-drop, native clipboard in/out (+ paste as new image, paste from file), "Open with"/argv + single instance, recent files + jump list, print, set as wallpaper, unsaved prompt, settings persistence (atomic)
+- [x] 1.13 Keyboard shortcuts (defaults from brief §3.2) through action registry; Help menu (shortcut cheat sheet, About)
+- [x] 1.14 E2E tests (draw, save, reopen, undo/redo), `npm run check` green, perf sanity on 4000×3000, report
+
+**Milestone 1 notes (for resuming)**
+- Sub-steps were committed in larger batches than one per sub-step (scaffold, engine, UI, hardening), because the engine and UI pieces only run end to end together.
+- Measured on this PC: a 32 px brush on 4000×3000 takes a median of 13.3 ms and a p95 of 13.7 ms per pointer event, including the next frame. Committing the stroke takes about 62 ms. Flood fill of the whole canvas is well under budget in the unit test.
+- Verified only by code and partial tests, so check these by hand: Snap Layouts and rounded corners (native caption buttons via `titleBarOverlay`), per-monitor DPI changes, real pen hardware (synthetic pen events are tested), drag-and-drop from Explorer, the real print dialog (the pipeline is tested with a stub), and actually changing the wallpaper (only the read-only P/Invoke query runs in tests).
+- The clipboard e2e test is opt-in (`PIGMENTO_E2E_CLIPBOARD=1`) because it overwrites the user's clipboard.
+- Decision: switching from a selection tool to any other tool deselects, as in Paint. Painting clips to an active selection, which matters once Milestone 2 adds the magic wand.
+
+**Carried into Milestone 2:** saved palette files (.json/.gpl/.ase) and SVG export, as planned in the Assumptions.
 
 ### Milestone 2 — Layers, selections, shapes system
 Layers and the Layers panel (blend modes, groups, thumbnails); advanced selection (ellipse, lasso variants, magic wand, colour range, boolean modes, feather, grow/shrink, save/load); transform handles with numeric input (including distort); gradient and pattern fill; guides and snapping; `.pigm` project format, autosave and crash recovery; export dialog; `ShapeRegistry` with 150+ shapes, parametric sliders, vector shape objects, fills and outline styles; Shape Editor, custom shape library, selection-to-shape, SVG import, shape packs (`docs/shape-format.md`); palette files; SVG export. Tests per the brief.
