@@ -1,6 +1,6 @@
 # Pigmento: notes for Claude
 
-Pigmento is a paint-style raster editor (Electron + React + a framework-free TS engine) for **Windows 11 only**. Scope, milestones and the resumable checklist live in `PLAN.md`; read it first and tick items there as they land.
+Pigmento is a paint-style raster editor (Electron + React + a framework-free TS engine) for **Windows 11 only**. Scope, milestones and the resumable checklist live in `PLAN.md`; read it first. Tick each checklist item the moment its sub-step runs and passes its tests, in the same commit as the work. Never tick items in a batch at the end of a milestone.
 
 ## Commands (PowerShell-safe, no bash syntax in scripts)
 | Command | What it does |
@@ -37,4 +37,4 @@ Opt-in e2e switches: `PIGMENTO_E2E_CLIPBOARD=1` (overwrites the real clipboard),
 - Writes from main go through `atomicWrite()` (`src/main/files.ts`).
 - Styling: plain CSS with tokens from `ui/theme/tokens.css`; no inline `<style>` (strict CSP). Respect `prefers-reduced-motion` and `forced-colors`.
 - Tests: engine logic gets Vitest unit tests next to its feature (`tests/unit/*.test.ts`); user flows get Playwright e2e (`tests/e2e`).
-- Commit after each PLAN.md sub-step once it runs and its tests pass.
+- Commit after each PLAN.md sub-step once it runs and its tests pass. That commit also ticks the sub-step's box in PLAN.md.
