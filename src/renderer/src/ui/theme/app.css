@@ -143,7 +143,7 @@
 }
 .icon-btn[aria-pressed='true'] {
   background: var(--bg-selected);
-  color: var(--accent);
+  color: var(--accent-fg);
 }
 
 /* ---------- Ribbon ---------- */
@@ -259,7 +259,7 @@
 .rb[aria-pressed='true'],
 .rb.active {
   background: var(--bg-selected);
-  color: var(--accent);
+  color: var(--accent-fg);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 .rb-large {
@@ -816,7 +816,7 @@
 }
 .history-list button.current {
   background: var(--bg-selected);
-  color: var(--accent);
+  color: var(--accent-fg);
   font-weight: 600;
 }
 .history-list button.future {
@@ -968,7 +968,7 @@
   color: var(--text-muted);
 }
 .menu-item[aria-checked='true'] .mi-icon {
-  color: var(--accent);
+  color: var(--accent-fg);
 }
 .menu-sep {
   height: 1px;
@@ -1301,7 +1301,7 @@ kbd {
   color: var(--danger);
 }
 .toast .toast-icon {
-  color: var(--accent);
+  color: var(--accent-fg);
   display: flex;
 }
 .toast .msg {
@@ -1327,7 +1327,7 @@ kbd {
   border-color: rgba(255, 255, 255, 0.25);
   color: #fff;
 }
-:root[data-theme='contrast'] .tooltip {
+:root[data-theme^='contrast'] .tooltip {
   background: #000;
   border: 1px solid #fff;
 }

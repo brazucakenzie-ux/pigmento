@@ -23,7 +23,7 @@
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   color-scheme: light;
 
-  /* Light theme */
+  /* Pigmento Light: used until the saved theme is applied at startup. */
   --bg-top: #f1f0f8;
   --bg-ribbon: #fbfbfe;
   --bg-panel: #ffffff;
@@ -37,10 +37,11 @@
   --border-strong: #c5c2d6;
   --text: #1d1b2b;
   --text-muted: #5f5b75;
-  --text-faint: #8d89a3;
+  --text-faint: #84809a;
   --accent: var(--brand-ultramarine);
   --accent-hover: #3d3dc9;
   --accent-text: #ffffff;
+  --accent-fg: #4b4be0;
   --accent-soft: rgba(75, 75, 224, 0.12);
   --accent-2: var(--brand-cadmium);
   --focus: #4b4be0;
@@ -56,89 +57,13 @@
   --pixel-grid: rgba(110, 108, 140, 0.5);
   --grid-line: rgba(75, 75, 224, 0.3);
   --ruler-bg: #f6f5fb;
-  --ruler-tick: #8d89a3;
+  --ruler-tick: #84809a;
   --scroll-thumb: rgba(60, 56, 90, 0.32);
   --scroll-thumb-hover: rgba(60, 56, 90, 0.5);
 }
 
-:root[data-theme='dark'] {
-  color-scheme: dark;
-  --bg-top: #17161e;
-  --bg-ribbon: #1e1d27;
-  --bg-panel: #23222d;
-  --bg-sunken: #1a1922;
-  --bg-workspace: #111017;
-  --bg-input: #2a2936;
-  --bg-hover: rgba(160, 160, 255, 0.09);
-  --bg-pressed: rgba(160, 160, 255, 0.18);
-  --bg-selected: rgba(140, 140, 255, 0.2);
-  --border: #33313f;
-  --border-strong: #4a4760;
-  --text: #ecebf5;
-  --text-muted: #aaa6c0;
-  --text-faint: #7c7893;
-  --accent: #8a8aff;
-  --accent-hover: #a1a1ff;
-  --accent-text: #0f0e1c;
-  --accent-soft: rgba(138, 138, 255, 0.16);
-  --accent-2: #ff9d5c;
-  --focus: #a3a3ff;
-  --danger: #ff6b84;
-  --danger-soft: rgba(255, 107, 132, 0.14);
-  --success: #4cd39a;
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-2: 0 4px 16px rgba(0, 0, 0, 0.45);
-  --shadow-3: 0 20px 52px rgba(0, 0, 0, 0.6);
-  --checker-a: #c9c8d2;
-  --checker-b: #a9a8b4;
-  --page-shadow: rgba(0, 0, 0, 0.6);
-  --pixel-grid: rgba(150, 150, 175, 0.45);
-  --grid-line: rgba(138, 138, 255, 0.35);
-  --ruler-bg: #1a1922;
-  --ruler-tick: #7c7893;
-  --scroll-thumb: rgba(220, 218, 240, 0.25);
-  --scroll-thumb-hover: rgba(220, 218, 240, 0.42);
-}
-
-/* Pigmento's own high-contrast theme (used when chosen in View → Theme). */
-:root[data-theme='contrast'] {
-  color-scheme: dark;
-  --bg-top: #000000;
-  --bg-ribbon: #000000;
-  --bg-panel: #000000;
-  --bg-sunken: #000000;
-  --bg-workspace: #000000;
-  --bg-input: #000000;
-  --bg-hover: #1a1a00;
-  --bg-pressed: #333300;
-  --bg-selected: #333300;
-  --border: #ffffff;
-  --border-strong: #ffffff;
-  --text: #ffffff;
-  --text-muted: #ffffff;
-  --text-faint: #e0e0e0;
-  --accent: #ffe500;
-  --accent-hover: #fff27a;
-  --accent-text: #000000;
-  --accent-soft: #333300;
-  --accent-2: #00e5ff;
-  --focus: #00e5ff;
-  --danger: #ff7a7a;
-  --danger-soft: #330000;
-  --success: #7dff9a;
-  --shadow-1: none;
-  --shadow-2: none;
-  --shadow-3: none;
-  --checker-a: #ffffff;
-  --checker-b: #bdbdbd;
-  --page-shadow: rgba(255, 255, 255, 0);
-  --pixel-grid: rgba(255, 229, 0, 0.5);
-  --grid-line: rgba(0, 229, 255, 0.55);
-  --ruler-bg: #000000;
-  --ruler-tick: #ffffff;
-  --scroll-thumb: #ffffff;
-  --scroll-thumb-hover: #ffe500;
-}
+/* Other themes (GitHub, VS Code, Claude, Pierre, high contrast, Pigmento dark) are applied at
+   runtime from ui/theme/themes.ts as custom properties on :root. */
 
 @media (prefers-reduced-motion: reduce) {
   :root {
@@ -168,6 +93,7 @@
     --accent: Highlight;
     --accent-hover: Highlight;
     --accent-text: HighlightText;
+    --accent-fg: Highlight;
     --accent-soft: Canvas;
     --focus: Highlight;
     --danger: CanvasText;

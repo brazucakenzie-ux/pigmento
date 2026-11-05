@@ -1,10 +1,11 @@
-import type { ThemeChoice } from '@shared/settings';
+import type { ThemeMode } from '@shared/settings';
 import { toolRegistry } from '@engine/tools/ToolRegistry';
 import { reportEngineError } from '@engine/input/InputController';
 import type { I18nKey } from '../../i18n';
 import { engine } from '../state/engine';
 import { openDialog, updateSettings, useUi, type UiState } from '../state/store';
 import * as files from '../services/files';
+import { THEME_FAMILIES } from '../theme/themes';
 
 export type ActionGroup = 'file' | 'edit' | 'view' | 'tools' | 'image' | 'colors';
 
@@ -32,8 +33,8 @@ function safe(fn: () => void): () => void {
   };
 }
 
-function setTheme(theme: ThemeChoice): void {
-  updateSettings({ theme });
+function setThemeMode(themeMode: ThemeMode): void {
+  updateSettings({ themeMode });
 }
 
 function toggleView(key: 'rulers' | 'gridlines' | 'pixelGrid' | 'statusBar'): void {
@@ -150,10 +151,9 @@ const base: Action[] = [
   },
   { id: 'historyPanel', labelKey: 'action.historyPanel', icon: 'history', group: 'view', run: () => togglePanel('history'), checked: (s) => s.settings.panels.open && s.settings.panels.visible.history !== false },
   { id: 'navigatorPanel', labelKey: 'action.navigatorPanel', icon: 'navigator', group: 'view', run: () => togglePanel('navigator'), checked: (s) => s.settings.panels.open && s.settings.panels.visible.navigator !== false },
-  { id: 'themeSystem', labelKey: 'action.themeSystem', icon: 'system', group: 'view', run: () => setTheme('system'), checked: (s) => s.settings.theme === 'system' },
-  { id: 'themeLight', labelKey: 'action.themeLight', icon: 'sun', group: 'view', run: () => setTheme('light'), checked: (s) => s.settings.theme === 'light' },
-  { id: 'themeDark', labelKey: 'action.themeDark', icon: 'moon', group: 'view', run: () => setTheme('dark'), checked: (s) => s.settings.theme === 'dark' },
-  { id: 'themeContrast', labelKey: 'action.themeContrast', icon: 'contrast', group: 'view', run: () => setTheme('contrast'), checked: (s) => s.settings.theme === 'contrast' },
+  { id: 'themeSystem', labelKey: 'action.themeSystem', icon: 'system', group: 'view', run: () => setThemeMode('system'), checked: (s) => s.settings.themeMode === 'system' },
+  { id: 'themeLight', labelKey: 'action.themeLight', icon: 'sun', group: 'view', run: () => setThemeMode('light'), checked: (s) => s.settings.themeMode === 'light' },
+  { id: 'themeDark', labelKey: 'action.themeDark', icon: 'moon', group: 'view', run: () => setThemeMode('dark'), checked: (s) => s.settings.themeMode === 'dark' },
   {
     id: 'windowsAccent',
     labelKey: 'action.windowsAccent',
@@ -173,6 +173,18 @@ const base: Action[] = [
   { id: 'about', labelKey: 'action.about', icon: 'info', group: 'view', run: () => openDialog({ kind: 'about' }) },
 ];
 
+/** One action per theme family (the variant follows the Light/Dark/Match Windows mode). */
+function themeActions(): Action[] {
+  return THEME_FAMILIES.map((f) => ({
+    id: `theme.${f.id}`,
+    labelKey: f.labelKey,
+    icon: f.id === 'contrast' ? 'contrast' : 'palette',
+    group: 'view' as const,
+    run: () => updateSettings({ theme: f.id }),
+    checked: (s: UiState) => s.settings.theme === f.id,
+  }));
+}
+
 /** One action per registered tool, with its letter shortcut. */
 function toolActions(): Action[] {
   return toolRegistry.all().map((tool) => ({
@@ -189,7 +201,7 @@ function toolActions(): Action[] {
 let cache: Map<string, Action> | null = null;
 
 export function actions(): Map<string, Action> {
-  if (!cache) cache = new Map([...base, ...toolActions()].map((a) => [a.id, a]));
+  if (!cache) cache = new Map([...base, ...themeActions(), ...toolActions()].map((a) => [a.id, a]));
   return cache;
 }
 

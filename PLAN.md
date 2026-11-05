@@ -167,6 +167,12 @@ Pointer Events with `getCoalescedEvents()`, pressure and tilt, and the pen erase
 
 **Carried into Milestone 2:** saved palette files (.json/.gpl/.ase) and SVG export, as planned in the Assumptions.
 
+### Milestone 1.5 — More themes (requested before Milestone 2)
+Theme families, each with a light and a dark variant: Pigmento, GitHub, VS Code, Claude, Pierre and High contrast. The mode is Light, Dark or Match Windows.
+- [x] 1.15a Theme registry: palettes from GitHub Primer, VS Code Dark/Light Modern, Pierre and Anthropic's brand colours; derived tokens with guaranteed text and accent contrast; settings stored as family + mode, with old values migrated
+- [ ] 1.15b Theme picker in the View tab (family menu with previews; Light/Dark/Match Windows); the window opens in the saved theme's colours, so there's no flash
+- [ ] 1.15c Tests: contrast checks for every theme (unit), switching and persistence (e2e); palette credits in LICENSES.md
+
 ### Milestone 2 — Layers, selections, shapes system
 Layers and the Layers panel (blend modes, groups, thumbnails); advanced selection (ellipse, lasso variants, magic wand, colour range, boolean modes, feather, grow/shrink, save/load); transform handles with numeric input (including distort); gradient and pattern fill; guides and snapping; `.pigm` project format, autosave and crash recovery; export dialog; `ShapeRegistry` with 150+ shapes, parametric sliders, vector shape objects, fills and outline styles; Shape Editor, custom shape library, selection-to-shape, SVG import, shape packs (`docs/shape-format.md`); palette files; SVG export. Tests per the brief.
 

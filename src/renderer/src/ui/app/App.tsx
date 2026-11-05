@@ -6,7 +6,8 @@ import { AboutDialog, EditColorsDialog, PasteLargerDialog, QualityDialog, Shortc
 import { CanvasSizeDialog, NewImageDialog, PropertiesDialog, ResizeDialog, RotateDialog } from '../dialogs/ImageDialogs';
 import { confirmDiscard, openPath } from '../services/files';
 import { bindEngine, engine } from '../state/engine';
-import { useUi } from '../state/store';
+import { updateSettings, useUi } from '../state/store';
+import { applyTheme, resolveTheme, schemeFor } from '../theme/themes';
 import { CanvasArea } from './CanvasArea';
 import { OptionsBar } from './OptionsBar';
 import { Ribbon } from './Ribbon';
@@ -34,27 +35,22 @@ function resolveColor(varName: string): string {
 }
 
 function useTheme(): void {
-  const theme = useUi((s) => s.settings.theme);
+  const family = useUi((s) => s.settings.theme);
+  const mode = useUi((s) => s.settings.themeMode);
   const useAccent = useUi((s) => s.settings.useWindowsAccent);
   const system = useUi((s) => s.system);
 
   useLayoutEffect(() => {
     const root = document.documentElement;
-    const effective = theme === 'system' ? (system.dark ? 'dark' : 'light') : theme;
-    root.dataset.theme = effective;
-    if (useAccent && system.accent && effective !== 'contrast') {
-      root.style.setProperty('--accent', system.accent);
-      root.style.setProperty('--accent-hover', system.accent);
-      root.style.setProperty('--focus', system.accent);
-    } else {
-      root.style.removeProperty('--accent');
-      root.style.removeProperty('--accent-hover');
-      root.style.removeProperty('--focus');
-    }
+    const forced = window.matchMedia('(forced-colors: active)').matches;
+    const resolved = resolveTheme(family, schemeFor(mode, system.dark), useAccent ? system.accent : null);
+    applyTheme(root, resolved, forced);
     // Canvas colours and the native caption buttons follow the theme.
     const top = rgbToHex(resolveColor('--bg-top'));
     const text = rgbToHex(resolveColor('--text'));
     void window.pigmento.window.setTitleBarOverlay(top, text, 40);
+    const saved = useUi.getState().settings.chrome;
+    if (!forced && (saved?.bg !== top || saved?.fg !== text)) updateSettings({ chrome: { bg: top, fg: text } });
     engine.setTheme(
       {
         workspace: resolveColor('--bg-workspace'),
@@ -70,7 +66,7 @@ function useTheme(): void {
         grid: resolveColor('--grid-line'),
       },
     );
-  }, [theme, useAccent, system]);
+  }, [family, mode, useAccent, system]);
 
   useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');

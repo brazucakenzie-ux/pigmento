@@ -260,7 +260,7 @@ function ViewTab() {
           <ActionButton id="themeDark" variant="small" />
         </div>
         <div className="rb-stack">
-          <ActionButton id="themeContrast" variant="small" />
+          <ActionButton id="theme.contrast" variant="small" />
           <ActionButton id="windowsAccent" variant="small" />
         </div>
       </RibbonGroup>

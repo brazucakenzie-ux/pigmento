@@ -55,7 +55,8 @@ describe('launch arguments', () => {
 describe('settings', () => {
   it('falls back to defaults per section for invalid data', () => {
     const s = parseSettings({ theme: 'neon', view: { rulers: true }, colors: { primary: 'red' } });
-    expect(s.theme).toBe('system');
+    expect(s.theme).toBe('pigmento');
+    expect(s.themeMode).toBe('system');
     expect(s.view.rulers).toBe(true);
     expect(s.colors).toEqual(defaultSettings().colors);
     expect(parseSettings(null)).toEqual(defaultSettings());

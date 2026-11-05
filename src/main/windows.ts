@@ -39,10 +39,13 @@ export function systemTheme(): SystemTheme {
   };
 }
 
+/** Colours for the window before the renderer applies its theme (avoids a colour flash). */
 function chromeColors(): { bg: string; fg: string } {
+  const saved = getSettings().chrome;
+  if (saved) return saved;
   return nativeTheme.shouldUseDarkColors
-    ? { bg: '#1a1922', fg: '#ecebf5' }
-    : { bg: '#f3f2f9', fg: '#1d1b2b' };
+    ? { bg: '#17161e', fg: '#ecebf5' }
+    : { bg: '#f1f0f8', fg: '#1d1b2b' };
 }
 
 function iconPath(): string {

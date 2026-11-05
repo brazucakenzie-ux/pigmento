@@ -2,12 +2,22 @@ import { z } from 'zod';
 
 const hex = z.string().regex(/^#[0-9a-f]{8}$/i);
 
-export const ThemeChoice = z.enum(['system', 'light', 'dark', 'contrast']);
-export type ThemeChoice = z.infer<typeof ThemeChoice>;
+/** Theme families; each has a light and a dark variant. */
+export const ThemeFamilyId = z.enum(['pigmento', 'github', 'vscode', 'claude', 'pierre', 'contrast']);
+export type ThemeFamilyId = z.infer<typeof ThemeFamilyId>;
+
+/** Light, dark, or follow the Windows app mode. */
+export const ThemeMode = z.enum(['system', 'light', 'dark']);
+export type ThemeMode = z.infer<typeof ThemeMode>;
+
+const hex6 = z.string().regex(/^#[0-9a-f]{6}$/i);
 
 export const SettingsSchema = z.object({
   version: z.literal(1).default(1),
-  theme: ThemeChoice.default('system'),
+  theme: ThemeFamilyId.default('pigmento'),
+  themeMode: ThemeMode.default('system'),
+  /** Title-bar colours of the last applied theme, so new windows open without a colour flash. */
+  chrome: z.object({ bg: hex6, fg: hex6 }).optional(),
   useWindowsAccent: z.boolean().default(false),
   panels: z
     .object({
@@ -76,8 +86,24 @@ export function defaultSettings(): Settings {
   return SettingsSchema.parse({});
 }
 
+/** Earlier builds stored one `theme` value: system | light | dark | contrast. */
+const LEGACY_THEME: Record<string, { theme: ThemeFamilyId; themeMode: ThemeMode }> = {
+  system: { theme: 'pigmento', themeMode: 'system' },
+  light: { theme: 'pigmento', themeMode: 'light' },
+  dark: { theme: 'pigmento', themeMode: 'dark' },
+  contrast: { theme: 'contrast', themeMode: 'dark' },
+};
+
+function migrate(raw: unknown): unknown {
+  if (typeof raw !== 'object' || raw === null) return raw;
+  const r = raw as Record<string, unknown>;
+  const legacy = typeof r.theme === 'string' && !('themeMode' in r) ? LEGACY_THEME[r.theme] : undefined;
+  return legacy ? { ...r, ...legacy } : r;
+}
+
 /** Parse untrusted settings JSON, falling back to defaults section-by-section. */
-export function parseSettings(raw: unknown): Settings {
+export function parseSettings(input: unknown): Settings {
+  const raw = migrate(input);
   const full = SettingsSchema.safeParse(raw);
   if (full.success) return full.data;
   const base = defaultSettings();

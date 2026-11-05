@@ -121,7 +121,6 @@ export const en = {
   'action.themeSystem': 'Match Windows',
   'action.themeLight': 'Light',
   'action.themeDark': 'Dark',
-  'action.themeContrast': 'High contrast',
   'action.windowsAccent': 'Use Windows accent colour',
 
   // Tools
@@ -364,6 +363,17 @@ export const en = {
 
   // Theme
   'theme.label': 'Theme',
+  'theme.mode': 'Light or dark',
+  'theme.current': 'Theme: {name}',
+  'theme.menuHint': 'Pick a family; Light, Dark or Match Windows chooses the variant.',
+  'theme.variant.light': '{name} Light',
+  'theme.variant.dark': '{name} Dark',
+  'theme.family.pigmento': 'Pigmento',
+  'theme.family.github': 'GitHub',
+  'theme.family.vscode': 'VS Code',
+  'theme.family.claude': 'Claude',
+  'theme.family.pierre': 'Pierre',
+  'theme.family.contrast': 'High contrast',
 
   // Accessibility labels
   'a11y.canvas': 'Drawing canvas. Use the tools above to draw.',
