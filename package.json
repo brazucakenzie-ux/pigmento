@@ -13,13 +13,14 @@
     "start": "electron-vite preview",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
-    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web && npm run typecheck:e2e",
     "lint": "eslint --max-warnings 0 .",
     "format": "prettier --write .",
     "test": "vitest run",
     "e2e": "npm run build && playwright test",
     "check": "npm run lint && npm run typecheck && npm run test && npm run e2e",
-    "icons": "node scripts/build-icons.mjs"
+    "icons": "node scripts/build-icons.mjs",
+    "typecheck:e2e": "tsc --noEmit -p tsconfig.e2e.json"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",

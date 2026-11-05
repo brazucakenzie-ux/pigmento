@@ -2,10 +2,14 @@
   "compilerOptions": {
     "composite": true,
     "target": "ES2023",
-    "lib": ["ES2023"],
+    "lib": [
+      "ES2023"
+    ],
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "strict": true,
     "noUncheckedIndexedAccess": false,
     "noImplicitOverride": true,
@@ -18,7 +22,9 @@
     "rootDir": ".",
     "outDir": "out/.tsc-node",
     "paths": {
-      "@shared/*": ["./src/shared/*"]
+      "@shared/*": [
+        "./src/shared/*"
+      ]
     }
   },
   "include": [
@@ -28,7 +34,6 @@
     "electron.vite.config.ts",
     "playwright.config.ts",
     "vitest.config.ts",
-    "tests/e2e/**/*",
     "tests/main/**/*"
   ]
 }
