@@ -14,6 +14,19 @@ The components below are bundled into the app. Their full licence texts ship ins
 | Inter (via @fontsource-variable/inter) | 5.3.0 | SIL Open Font License 1.1 | The Inter Project Authors | Interface font |
 | gifenc | 1.0.3 | MIT | Matt DesLauriers | GIF encoding |
 
+## Theme palettes
+
+The optional themes in View → Theme reproduce the colours of these projects. Only the colour values are used (no code, icons or other assets), and the names are trademarks of their owners, used here only to describe each palette.
+
+| Theme | Colours taken from | Licence |
+|---|---|---|
+| GitHub Light/Dark | Primer primitives, `@primer/primitives` functional themes "light" and "dark" (GitHub, Inc.) | MIT |
+| VS Code Light/Dark | Visual Studio Code `extensions/theme-defaults` "Light Modern" / "Dark Modern" (Microsoft Corporation) | MIT |
+| Pierre Light/Dark | Pierre theme, `pierrecomputer/theme` (The Pierre Computer Company) | MIT |
+| Claude Light/Dark | Anthropic's published brand colours (#141413, #faf9f5, #e8e6dc, #d97757, #6a9bcc, #788c5d) and the Claude app's surfaces | Colour values; Claude is a trademark of Anthropic |
+
+Where a brand accent is too light or too dark to read as text, Pigmento derives a darker or lighter variant for text and picks black or white for text on accent buttons, so every theme meets WCAG AA. This is checked by `tests/unit/themes.test.ts`.
+
 Build- and test-only tools (Vite, electron-vite, TypeScript, ESLint, Prettier, Vitest, Playwright, resvg-js) are not shipped in the app; see each package's licence in `node_modules`.
 
 ## Licence summaries

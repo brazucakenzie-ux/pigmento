@@ -35,6 +35,7 @@ Opt-in e2e switches: `PIGMENTO_E2E_CLIPBOARD=1` (overwrites the real clipboard),
 - Colours: engine uses `RGBA = { r, g, b, a }` with 0–255 channels; straight (non-premultiplied) alpha everywhere in surfaces.
 - Paths: use `path.join` in main; never build Windows paths by string concatenation.
 - Writes from main go through `atomicWrite()` (`src/main/files.ts`).
-- Styling: plain CSS with tokens from `ui/theme/tokens.css`; no inline `<style>` (strict CSP). Respect `prefers-reduced-motion` and `forced-colors`.
+- Styling: plain CSS reading colour tokens (`var(--bg-panel)` etc.); no inline `<style>` (strict CSP). Respect `prefers-reduced-motion` and `forced-colors`.
+- Themes are data in `ui/theme/themes.ts`: a family has a light and a dark `Palette`, derived tokens are applied as CSS custom properties on `:root`, and `tokens.css` only holds the pre-JS fallback plus the Windows contrast override. To add a theme, add a family there plus its i18n name; `tests/unit/themes.test.ts` enforces WCAG contrast. Use `--accent-fg` (not `--accent`) for accent-coloured text.
 - Tests: engine logic gets Vitest unit tests next to its feature (`tests/unit/*.test.ts`); user flows get Playwright e2e (`tests/e2e`).
 - Commit after each PLAN.md sub-step once it runs and its tests pass. That commit also ticks the sub-step's box in PLAN.md.
