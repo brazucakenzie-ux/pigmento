@@ -11,9 +11,9 @@ async function stubSaveDialog(h: AppHandle, file: string): Promise<void> {
 
 async function stubMessageBox(h: AppHandle, response: number): Promise<void> {
   await h.app.evaluate(({ dialog }, r) => {
-    (globalThis as Record<string, unknown>).__pigmentoPrompts = 0;
+    (globalThis as unknown as Record<string, unknown>).__pigmentoPrompts = 0;
     dialog.showMessageBox = (async () => {
-      (globalThis as Record<string, number>).__pigmentoPrompts++;
+      (globalThis as unknown as Record<string, number>).__pigmentoPrompts++;
       return { response: r, checkboxChecked: false };
     }) as typeof dialog.showMessageBox;
   }, response);
@@ -127,7 +127,7 @@ test('asks to save unsaved changes before closing', async () => {
     // "Cancel" keeps the window open.
     await stubMessageBox(h, 2);
     await clickX();
-    await expect.poll(() => h.app.evaluate(() => (globalThis as Record<string, number>).__pigmentoPrompts)).toBe(1);
+    await expect.poll(() => h.app.evaluate(() => (globalThis as unknown as Record<string, number>).__pigmentoPrompts)).toBe(1);
     expect(await h.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1);
     // A stray window.close() from the page must not discard the work either.
     await h.page.evaluate(() => window.close());
@@ -139,7 +139,7 @@ test('asks to save unsaved changes before closing', async () => {
     await h.page.getByRole('button', { name: 'File' }).click();
     await h.page.getByRole('menuitem', { name: 'Close window' }).click();
     await closed;
-    expect(await h.app.evaluate(() => (globalThis as Record<string, number>).__pigmentoPrompts).catch(() => 1)).toBe(1);
+    expect(await h.app.evaluate(() => (globalThis as unknown as Record<string, number>).__pigmentoPrompts).catch(() => 1)).toBe(1);
   } finally {
     await h.close();
   }
