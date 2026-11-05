@@ -1,0 +1,29 @@
+/** Strings used by the main process (dialogs, jump list). English only for now. */
+const en = {
+  'jump.recent': 'Recent images',
+  'jump.new': 'New image',
+  'jump.newDesc': 'Open a new Pigmento window',
+  'dialog.open.title': 'Open image',
+  'dialog.save.title': 'Save image as',
+  'dialog.filter.images': 'Images',
+  'dialog.filter.all': 'All files',
+  'dialog.unsaved.message': 'Do you want to save changes to {name}?',
+  'dialog.unsaved.detail': 'Your changes will be lost if you don’t save them.',
+  'dialog.unsaved.save': 'Save',
+  'dialog.unsaved.discard': 'Don’t save',
+  'dialog.unsaved.cancel': 'Cancel',
+  'dialog.ok': 'OK',
+  'format.png': 'PNG image',
+  'format.jpeg': 'JPEG image',
+  'format.webp': 'WebP image',
+  'format.bmp': 'Bitmap image',
+  'format.gif': 'GIF image',
+} as const;
+
+export type MainStringKey = keyof typeof en;
+
+export function tm(key: MainStringKey, params?: Record<string, string>): string {
+  let s: string = en[key];
+  if (params) for (const [k, v] of Object.entries(params)) s = s.replaceAll(`{${k}}`, v);
+  return s;
+}
