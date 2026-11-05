@@ -2,6 +2,7 @@ import { _electron as electron, type ElectronApplication, type Page } from '@pla
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import './globals.d';
 
 export interface AppHandle {
   app: ElectronApplication;
@@ -32,12 +33,50 @@ export async function launchApp(extraArgs: string[] = []): Promise<AppHandle> {
     userData,
     errors,
     async close() {
-      await app.evaluate(({ BrowserWindow }) => {
-        // Skip the unsaved-changes prompt in tests.
-        for (const w of BrowserWindow.getAllWindows()) w.destroy();
-      });
+      await app
+        .evaluate(({ BrowserWindow }) => {
+          // Skip the unsaved-changes prompt in tests.
+          for (const w of BrowserWindow.getAllWindows()) w.destroy();
+        })
+        .catch(() => undefined);
       await app.close().catch(() => undefined);
       rmSync(userData, { recursive: true, force: true });
     },
   };
+}
+
+/** Wait until the UI and test hook are ready. */
+export async function ready(page: Page): Promise<void> {
+  await page.waitForSelector('.ribbon');
+  await page.waitForFunction(() => window.__pigmentoTest !== undefined);
+}
+
+export async function docToScreen(page: Page, x: number, y: number): Promise<{ x: number; y: number }> {
+  return page.evaluate(([dx, dy]) => window.__pigmentoTest!.docToScreen(dx, dy), [x, y] as const);
+}
+
+export async function pixel(page: Page, x: number, y: number): Promise<{ r: number; g: number; b: number; a: number }> {
+  return page.evaluate(([dx, dy]) => window.__pigmentoTest!.pixel(dx, dy), [x, y] as const);
+}
+
+/** Drag through doc-space points with the given button. */
+export async function drag(page: Page, points: [number, number][], button: 'left' | 'right' = 'left'): Promise<void> {
+  const first = await docToScreen(page, points[0][0], points[0][1]);
+  await page.mouse.move(first.x, first.y);
+  await page.mouse.down({ button });
+  for (const [x, y] of points.slice(1)) {
+    const s = await docToScreen(page, x, y);
+    await page.mouse.move(s.x, s.y, { steps: 6 });
+  }
+  await page.mouse.up({ button });
+}
+
+export async function clickDoc(page: Page, x: number, y: number, button: 'left' | 'right' = 'left'): Promise<void> {
+  const s = await docToScreen(page, x, y);
+  await page.mouse.click(s.x, s.y, { button });
+}
+
+export function tempFile(name: string): string {
+  const dir = mkdtempSync(path.join(tmpdir(), 'pigmento-files-'));
+  return path.join(dir, name);
 }

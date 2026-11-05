@@ -1,7 +1,8 @@
+import '@fontsource-variable/inter';
+import './ui/theme/tokens.css';
+import './ui/theme/base.css';
+import './ui/theme/app.css';
 import { createRoot } from 'react-dom/client';
+import { App } from './ui/app/App';
 
-function Boot() {
-  return <div style={{ padding: 24, fontFamily: 'sans-serif' }}>Pigmento is starting…</div>;
-}
-
-createRoot(document.getElementById('root')!).render(<Boot />);
+createRoot(document.getElementById('root')!).render(<App />);

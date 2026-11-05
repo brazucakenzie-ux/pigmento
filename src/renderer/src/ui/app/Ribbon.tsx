@@ -1,0 +1,309 @@
+import { useCallback, useRef, useState, type KeyboardEvent } from 'react';
+import { FORMATS, type ImageFormat } from '@shared/formats';
+import type { WallpaperStyle } from '@shared/ipc';
+import { toolRegistry } from '@engine/tools/ToolRegistry';
+import { t, type I18nKey } from '../../i18n';
+import { Menu, MenuHeading, MenuItem, MenuSeparator, SubMenu } from '../components/Menu';
+import { useUi, type RibbonTab } from '../state/store';
+import * as files from '../services/files';
+import { ActionMenuItem } from './ActionMenuItem';
+import { ActionButton, MenuButton, RibbonGroup, SplitButton } from './RibbonButton';
+import { ColorsGroup } from './ColorsGroup';
+
+const TABS: { id: RibbonTab; labelKey: I18nKey }[] = [
+  { id: 'home', labelKey: 'tab.home' },
+  { id: 'image', labelKey: 'tab.image' },
+  { id: 'view', labelKey: 'tab.view' },
+];
+
+const WALLPAPER: { style: WallpaperStyle; key: I18nKey }[] = [
+  { style: 'fill', key: 'file.wallpaper.fill' },
+  { style: 'fit', key: 'file.wallpaper.fit' },
+  { style: 'stretch', key: 'file.wallpaper.stretch' },
+  { style: 'tile', key: 'file.wallpaper.tile' },
+  { style: 'center', key: 'file.wallpaper.center' },
+];
+
+function FileMenu() {
+  const ref = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  const recent = useUi((s) => s.recent);
+  return (
+    <>
+      <button ref={ref} type="button" className="file-tab" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        {t('top.fileMenu')}
+      </button>
+      <Menu anchor={ref} open={open} onClose={close} label={t('top.fileMenu')}>
+        <ActionMenuItem id="new" close={close} label={t('file.new')} />
+        <ActionMenuItem id="newWindow" close={close} />
+        <ActionMenuItem id="open" close={close} label={t('file.open')} />
+        <SubMenu label={t('file.recent')} icon="history">
+          {(closeAll) => (
+            <>
+              {recent.length === 0 ? <div className="menu-note">{t('file.recentEmpty')}</div> : null}
+              {recent.map((r) => (
+                <MenuItem key={r.path} label={r.name} close={closeAll} onSelect={() => void files.openPath(r.path)} />
+              ))}
+              {recent.length > 0 ? (
+                <>
+                  <MenuSeparator />
+                  <MenuItem label={t('file.recentClear')} icon="delete" close={closeAll} onSelect={() => void window.pigmento.recent.clear()} />
+                </>
+              ) : null}
+            </>
+          )}
+        </SubMenu>
+        <MenuSeparator />
+        <ActionMenuItem id="save" close={close} />
+        <SubMenu label={t('file.saveAs')} icon="save">
+          {(closeAll) =>
+            (Object.keys(FORMATS) as ImageFormat[]).map((f) => (
+              <MenuItem
+                key={f}
+                label={t('file.saveAsFormat', { format: t(FORMATS[f].labelKey as I18nKey) })}
+                close={closeAll}
+                onSelect={() => void files.saveAs(f)}
+              />
+            ))
+          }
+        </SubMenu>
+        <MenuSeparator />
+        <ActionMenuItem id="print" close={close} label={t('file.print')} />
+        <SubMenu label={t('file.wallpaper')} icon="wallpaper">
+          {(closeAll) =>
+            WALLPAPER.map((w) => <MenuItem key={w.style} label={t(w.key)} close={closeAll} onSelect={() => void files.setWallpaper(w.style)} />)
+          }
+        </SubMenu>
+        <ActionMenuItem id="properties" close={close} />
+        <MenuSeparator />
+        <MenuItem label={t('file.close')} icon="close" close={close} onSelect={() => void window.pigmento.window.requestClose()} />
+      </Menu>
+    </>
+  );
+}
+
+function HelpMenu() {
+  const ref = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  return (
+    <>
+      <button ref={ref} type="button" className="ribbon-tab" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        {t('help.menu')}
+      </button>
+      <Menu anchor={ref} open={open} onClose={close} label={t('help.menu')}>
+        <ActionMenuItem id="shortcuts" close={close} />
+        <ActionMenuItem id="about" close={close} />
+      </Menu>
+    </>
+  );
+}
+
+function ToolButtons({ group, variant }: { group: 'tools' | 'shapes' | 'brushes'; variant: 'compact' | 'large' }) {
+  return (
+    <>
+      {toolRegistry.byGroup(group).map((tool) => (
+        <ActionButton key={tool.id} id={`tool.${tool.id}`} variant={variant} />
+      ))}
+    </>
+  );
+}
+
+function HomeTab() {
+  return (
+    <>
+      <RibbonGroup label={t('group.clipboard')}>
+        <SplitButton id="paste" menuLabel={t('a11y.more')}>
+          {(close) => (
+            <>
+              <ActionMenuItem id="paste" close={close} />
+              <ActionMenuItem id="pasteNew" close={close} />
+              <ActionMenuItem id="pasteFromFile" close={close} />
+            </>
+          )}
+        </SplitButton>
+        <div className="rb-stack">
+          <ActionButton id="cut" variant="small" />
+          <ActionButton id="copy" variant="small" />
+        </div>
+      </RibbonGroup>
+      <RibbonGroup label={t('group.selection')}>
+        <SplitButton id="tool.select" menuLabel={t('a11y.more')}>
+          {(close) => (
+            <>
+              <MenuHeading>{t('group.selection')}</MenuHeading>
+              {toolRegistry.byGroup('selection').map((tool) => (
+                <ActionMenuItem key={tool.id} id={`tool.${tool.id}`} close={close} />
+              ))}
+              <MenuSeparator />
+              <ActionMenuItem id="selectAll" close={close} />
+              <ActionMenuItem id="invertSelection" close={close} />
+              <ActionMenuItem id="deselect" close={close} />
+              <ActionMenuItem id="delete" close={close} />
+              <MenuSeparator />
+              <ActionMenuItem id="transparentSelection" close={close} />
+            </>
+          )}
+        </SplitButton>
+        <div className="rb-stack">
+          <ActionButton id="crop" variant="small" />
+          <ActionButton id="resize" variant="small" label={t('action.resize')} />
+          <MenuButton label={t('action.rotate')} icon="rotate-cw">
+            {(close) => (
+              <>
+                <ActionMenuItem id="rotateCw" close={close} />
+                <ActionMenuItem id="rotateCcw" close={close} />
+                <ActionMenuItem id="rotate180" close={close} />
+                <ActionMenuItem id="rotateFree" close={close} />
+                <MenuSeparator />
+                <ActionMenuItem id="flipH" close={close} />
+                <ActionMenuItem id="flipV" close={close} />
+              </>
+            )}
+          </MenuButton>
+        </div>
+      </RibbonGroup>
+      <RibbonGroup label={t('group.tools')}>
+        <div className="rb-grid">
+          <ToolButtons group="tools" variant="compact" />
+        </div>
+      </RibbonGroup>
+      <RibbonGroup label={t('group.brushes')}>
+        <ToolButtons group="brushes" variant="large" />
+      </RibbonGroup>
+      <RibbonGroup label={t('group.shapes')}>
+        <div className="rb-grid">
+          <ToolButtons group="shapes" variant="compact" />
+        </div>
+      </RibbonGroup>
+      <RibbonGroup label={t('group.colors')}>
+        <ColorsGroup />
+      </RibbonGroup>
+    </>
+  );
+}
+
+function ImageTab() {
+  return (
+    <>
+      <RibbonGroup label={t('group.selection')}>
+        <ActionButton id="selectAll" />
+        <div className="rb-stack">
+          <ActionButton id="invertSelection" variant="small" />
+          <ActionButton id="deselect" variant="small" />
+          <ActionButton id="transparentSelection" variant="small" />
+        </div>
+        <ActionButton id="crop" />
+      </RibbonGroup>
+      <RibbonGroup label={t('group.size')}>
+        <ActionButton id="resize" label={t('action.resize')} />
+        <ActionButton id="canvasSize" label={t('dialog.canvas.title')} />
+      </RibbonGroup>
+      <RibbonGroup label={t('group.transform')}>
+        <ActionButton id="rotateCw" label={t('action.rotateCw')} />
+        <ActionButton id="rotateCcw" label={t('action.rotateCcw')} />
+        <div className="rb-stack">
+          <ActionButton id="rotate180" variant="small" />
+          <ActionButton id="rotateFree" variant="small" />
+        </div>
+        <div className="rb-stack">
+          <ActionButton id="flipH" variant="small" />
+          <ActionButton id="flipV" variant="small" />
+        </div>
+      </RibbonGroup>
+      <RibbonGroup label={t('group.adjust')}>
+        <ActionButton id="invertColors" />
+      </RibbonGroup>
+      <RibbonGroup label={t('group.canvas')}>
+        <ActionButton id="properties" label={t('action.properties')} />
+      </RibbonGroup>
+    </>
+  );
+}
+
+function ViewTab() {
+  return (
+    <>
+      <RibbonGroup label={t('group.zoom')}>
+        <ActionButton id="zoomIn" />
+        <ActionButton id="zoomOut" />
+        <ActionButton id="zoom100" />
+        <ActionButton id="zoomFit" />
+      </RibbonGroup>
+      <RibbonGroup label={t('group.show')}>
+        <div className="rb-stack">
+          <ActionButton id="rulers" variant="small" />
+          <ActionButton id="gridlines" variant="small" />
+          <ActionButton id="pixelGrid" variant="small" />
+        </div>
+        <div className="rb-stack">
+          <ActionButton id="statusBar" variant="small" />
+        </div>
+      </RibbonGroup>
+      <RibbonGroup label={t('group.panels')}>
+        <ActionButton id="panels" />
+        <div className="rb-stack">
+          <ActionButton id="historyPanel" variant="small" />
+          <ActionButton id="navigatorPanel" variant="small" />
+          <ActionButton id="panelSide" variant="small" />
+        </div>
+      </RibbonGroup>
+      <RibbonGroup label={t('group.window')}>
+        <ActionButton id="fullscreen" />
+        <ActionButton id="newWindow" />
+      </RibbonGroup>
+      <RibbonGroup label={t('group.theme')}>
+        <div className="rb-stack">
+          <ActionButton id="themeSystem" variant="small" />
+          <ActionButton id="themeLight" variant="small" />
+          <ActionButton id="themeDark" variant="small" />
+        </div>
+        <div className="rb-stack">
+          <ActionButton id="themeContrast" variant="small" />
+          <ActionButton id="windowsAccent" variant="small" />
+        </div>
+      </RibbonGroup>
+    </>
+  );
+}
+
+export function Ribbon() {
+  const tab = useUi((s) => s.tab);
+  const onTabKey = (e: KeyboardEvent<HTMLButtonElement>, i: number) => {
+    const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+    if (!d) return;
+    e.preventDefault();
+    const next = TABS[(i + d + TABS.length) % TABS.length];
+    useUi.setState({ tab: next.id });
+    requestAnimationFrame(() => document.getElementById(`tab-${next.id}`)?.focus());
+  };
+  return (
+    <div className="ribbon" aria-label={t('a11y.ribbon')}>
+      <div className="ribbon-tabs" role="tablist" aria-label={t('a11y.ribbon')}>
+        <FileMenu />
+        {TABS.map((tb, i) => (
+          <button
+            key={tb.id}
+            id={`tab-${tb.id}`}
+            type="button"
+            role="tab"
+            className="ribbon-tab"
+            aria-selected={tab === tb.id}
+            aria-controls="ribbon-panel"
+            tabIndex={tab === tb.id ? 0 : -1}
+            onClick={() => useUi.setState({ tab: tb.id })}
+            onKeyDown={(e) => onTabKey(e, i)}
+          >
+            {t(tb.labelKey)}
+          </button>
+        ))}
+        <span className="spacer" />
+        <HelpMenu />
+      </div>
+      <div className="ribbon-panel" id="ribbon-panel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
+        {tab === 'home' ? <HomeTab /> : tab === 'image' ? <ImageTab /> : <ViewTab />}
+      </div>
+    </div>
+  );
+}

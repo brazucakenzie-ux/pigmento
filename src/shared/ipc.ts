@@ -20,6 +20,7 @@ export const IPC = {
   confirmSave: 'window:confirm-save',
   showError: 'window:show-error',
   closeWindow: 'window:close',
+  requestClose: 'window:request-close',
   setOverlay: 'window:set-title-bar-overlay',
   toggleFullscreen: 'window:toggle-fullscreen',
   newWindow: 'window:new',
@@ -117,7 +118,10 @@ export interface PigmentoApi {
   window: {
     confirmSave(docName: string): Promise<'save' | 'discard' | 'cancel'>;
     showError(title: string, message: string): Promise<void>;
+    /** Close for real (after the unsaved-changes check passed). */
     close(): Promise<void>;
+    /** Ask to close, as if the title-bar X was clicked (runs the unsaved-changes check). */
+    requestClose(): Promise<void>;
     setTitleBarOverlay(color: string, symbolColor: string, height: number): Promise<void>;
     toggleFullscreen(): Promise<boolean>;
     newWindow(): Promise<void>;

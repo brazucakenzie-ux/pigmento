@@ -9,8 +9,7 @@ export interface PigmentoTestHook {
   docToScreen(x: number, y: number): { x: number; y: number };
   liveKind(): string | null;
   selection(): { x: number; y: number; w: number; h: number } | null;
-  openPath(path: string): Promise<void>;
-  saveAs(path: string): Promise<void>;
+  openPath(path: string): Promise<boolean>;
   filePath(): string | null;
 }
 

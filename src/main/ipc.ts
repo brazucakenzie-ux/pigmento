@@ -198,6 +198,7 @@ export function registerIpc(): void {
   });
 
   ipcMain.handle(IPC.closeWindow, (e) => allowCloseAndClose(senderWindow(e)));
+  ipcMain.handle(IPC.requestClose, (e) => senderWindow(e).close());
 
   ipcMain.handle(IPC.setOverlay, (e, color: unknown, symbolColor: unknown, height: unknown) => {
     const win = senderWindow(e);

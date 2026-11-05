@@ -26,6 +26,7 @@ const alias = {
   '@shared': resolve('src/shared'),
   '@engine': resolve('src/renderer/src/engine'),
   '@ui': resolve('src/renderer/src/ui'),
+  '@resources': resolve('resources'),
 };
 
 export default defineConfig({
@@ -39,6 +40,6 @@ export default defineConfig({
     resolve: { alias },
     plugins: [react(), cspPlugin()],
     worker: { format: 'es' },
-    build: { target: 'chrome140', chunkSizeWarningLimit: 2000 },
+    build: { target: 'chrome140', chunkSizeWarningLimit: 2000, minify: true },
   },
 });

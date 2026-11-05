@@ -218,6 +218,7 @@ export const en = {
   'history.transform': 'Transform selection',
 
   // Panels
+  'panel.title': 'Panels',
   'panel.history': 'History',
   'panel.navigator': 'Navigator',
   'panel.collapse': 'Collapse {name}',

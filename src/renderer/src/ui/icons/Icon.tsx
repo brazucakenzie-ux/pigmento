@@ -1,0 +1,237 @@
+import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
+  AppWindow,
+  ArrowLeftRight,
+  Bold,
+  Brush,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Circle,
+  CircleAlert,
+  CircleHelp,
+  ClipboardPaste,
+  Compass,
+  Contrast,
+  Copy,
+  Crop,
+  Eraser,
+  FilePlus,
+  FlipHorizontal2,
+  FlipVertical2,
+  FolderOpen,
+  Frame,
+  Grid3x3,
+  History,
+  ImagePlus,
+  Info,
+  Italic,
+  Keyboard,
+  Lasso,
+  Maximize,
+  Minus,
+  Monitor,
+  Moon,
+  PaintBucket,
+  PanelLeft,
+  PanelRight,
+  Pencil,
+  Pentagon,
+  Pipette,
+  Plus,
+  Printer,
+  Redo2,
+  RotateCcw,
+  RotateCw,
+  Ruler,
+  Save,
+  Scaling,
+  Scissors,
+  Slash,
+  Spline,
+  Square,
+  SquareDashed,
+  Strikethrough,
+  Sun,
+  Trash2,
+  Type,
+  Underline,
+  Undo2,
+  Wallpaper,
+  X,
+  ZoomIn,
+  ZoomOut,
+  Scan,
+  Expand,
+  Palette,
+  type LucideIcon,
+} from 'lucide-react';
+import type { JSX } from 'react';
+
+const LUCIDE: Record<string, LucideIcon> = {
+  pencil: Pencil,
+  brush: Brush,
+  eraser: Eraser,
+  fill: PaintBucket,
+  picker: Pipette,
+  zoom: ZoomIn,
+  'zoom-in': ZoomIn,
+  'zoom-out': ZoomOut,
+  text: Type,
+  line: Slash,
+  curve: Spline,
+  rect: Square,
+  ellipse: Circle,
+  polygon: Pentagon,
+  select: SquareDashed,
+  lasso: Lasso,
+  paste: ClipboardPaste,
+  cut: Scissors,
+  copy: Copy,
+  crop: Crop,
+  resize: Scaling,
+  'canvas-size': Frame,
+  'rotate-cw': RotateCw,
+  'rotate-ccw': RotateCcw,
+  'flip-h': FlipHorizontal2,
+  'flip-v': FlipVertical2,
+  invert: Contrast,
+  new: FilePlus,
+  open: FolderOpen,
+  save: Save,
+  undo: Undo2,
+  redo: Redo2,
+  print: Printer,
+  wallpaper: Wallpaper,
+  grid: Grid3x3,
+  ruler: Ruler,
+  fullscreen: Maximize,
+  'panel-right': PanelRight,
+  'panel-left': PanelLeft,
+  history: History,
+  navigator: Compass,
+  bold: Bold,
+  italic: Italic,
+  underline: Underline,
+  strike: Strikethrough,
+  'align-left': AlignLeft,
+  'align-center': AlignCenter,
+  'align-right': AlignRight,
+  swap: ArrowLeftRight,
+  keyboard: Keyboard,
+  info: Info,
+  help: CircleHelp,
+  system: Monitor,
+  sun: Sun,
+  moon: Moon,
+  contrast: Contrast,
+  check: Check,
+  'chevron-down': ChevronDown,
+  'chevron-right': ChevronRight,
+  close: X,
+  minus: Minus,
+  plus: Plus,
+  delete: Trash2,
+  'new-window': AppWindow,
+  'paste-new': ImagePlus,
+  'select-all': Scan,
+  fit: Expand,
+  alert: CircleAlert,
+  properties: Info,
+  palette: Palette,
+};
+
+/** Hand-drawn icons for things Lucide doesn't cover (same 24px grid, 2px stroke). */
+const CUSTOM: Record<string, JSX.Element> = {
+  roundRect: <rect x="3.5" y="5.5" width="17" height="13" rx="4.5" />,
+  'fill-outline': <rect x="4" y="5" width="16" height="14" rx="2" />,
+  'fill-solid': <rect x="4" y="5" width="16" height="14" rx="2" fill="currentColor" stroke="none" />,
+  'fill-both': (
+    <>
+      <rect x="4" y="5" width="16" height="14" rx="2" fill="currentColor" fillOpacity="0.35" />
+    </>
+  ),
+  'pixel-grid': (
+    <>
+      <rect x="3.5" y="3.5" width="17" height="17" rx="1.5" />
+      <path d="M9.2 3.5v17M14.8 3.5v17M3.5 9.2h17M3.5 14.8h17" strokeWidth="1.2" />
+    </>
+  ),
+  'rotate-free': (
+    <>
+      <path d="M20 12a8 8 0 1 1-2.6-5.9" />
+      <path d="M20 4v4h-4" />
+      <path d="M12 12l3.5-3.5" />
+      <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+    </>
+  ),
+  'rotate-180': (
+    <>
+      <path d="M5 12a7 7 0 0 1 12.2-4.7" />
+      <path d="M19 12a7 7 0 0 1-12.2 4.7" />
+      <path d="M17.5 3.5v4h-4M6.5 20.5v-4h4" />
+    </>
+  ),
+  skew: <path d="M8 5h12l-4 14H4z" />,
+  'actual-size': (
+    <>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M8 10v5M15 10v5M11.5 10.5v.01M11.5 14.5v.01" strokeWidth="2.2" />
+    </>
+  ),
+  'status-bar': (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M3 16h18" />
+    </>
+  ),
+  deselect: (
+    <>
+      <path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3" />
+      <path d="M9 9l6 6M15 9l-6 6" />
+    </>
+  ),
+  'invert-selection': (
+    <>
+      <rect x="3.5" y="3.5" width="17" height="17" rx="2" strokeDasharray="3 2.5" />
+      <rect x="8" y="8" width="8" height="8" rx="1" fill="currentColor" fillOpacity="0.35" />
+    </>
+  ),
+  transparent: (
+    <>
+      <rect x="3.5" y="3.5" width="17" height="17" rx="2" strokeDasharray="3 2.5" />
+      <path d="M8 8h3v3H8zM13 13h3v3h-3z" fill="currentColor" stroke="none" />
+    </>
+  ),
+};
+
+export interface IconProps {
+  name: string;
+  size?: number;
+  strokeWidth?: number;
+  className?: string;
+}
+
+export function Icon({ name, size = 20, strokeWidth = 1.8, className }: IconProps) {
+  const L = LUCIDE[name];
+  if (L) return <L size={size} strokeWidth={strokeWidth} className={className} aria-hidden="true" />;
+  const custom = CUSTOM[name];
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      {custom ?? <circle cx="12" cy="12" r="8" />}
+    </svg>
+  );
+}

@@ -39,6 +39,7 @@ const api: PigmentoApi = {
     confirmSave: (name) => ipcRenderer.invoke(IPC.confirmSave, name),
     showError: (title, message) => ipcRenderer.invoke(IPC.showError, title, message),
     close: () => ipcRenderer.invoke(IPC.closeWindow),
+    requestClose: () => ipcRenderer.invoke(IPC.requestClose),
     setTitleBarOverlay: (color, symbolColor, height) =>
       ipcRenderer.invoke(IPC.setOverlay, color, symbolColor, height),
     toggleFullscreen: () => ipcRenderer.invoke(IPC.toggleFullscreen),
