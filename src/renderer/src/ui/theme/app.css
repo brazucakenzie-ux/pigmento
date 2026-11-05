@@ -1350,3 +1350,36 @@ kbd {
   width: 64px;
   height: 64px;
 }
+
+/* Theme picker previews: drawn in each theme's real colours, even in contrast modes. */
+.theme-item {
+  min-width: 260px;
+}
+.theme-preview {
+  display: flex;
+  gap: 5px;
+  margin-left: 12px;
+}
+.theme-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 34px;
+  height: 22px;
+  padding: 5px 5px 0;
+  border: 1px solid;
+  border-radius: 5px;
+  forced-color-adjust: none;
+}
+.theme-chip .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.theme-chip .bar {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  opacity: 0.8;
+}

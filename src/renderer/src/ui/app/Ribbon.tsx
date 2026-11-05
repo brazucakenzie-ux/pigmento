@@ -9,6 +9,7 @@ import * as files from '../services/files';
 import { ActionMenuItem } from './ActionMenuItem';
 import { ActionButton, MenuButton, RibbonGroup, SplitButton } from './RibbonButton';
 import { ColorsGroup } from './ColorsGroup';
+import { ThemePicker } from './ThemePicker';
 
 const TABS: { id: RibbonTab; labelKey: I18nKey }[] = [
   { id: 'home', labelKey: 'tab.home' },
@@ -254,13 +255,13 @@ function ViewTab() {
         <ActionButton id="newWindow" />
       </RibbonGroup>
       <RibbonGroup label={t('group.theme')}>
+        <ThemePicker />
         <div className="rb-stack">
-          <ActionButton id="themeSystem" variant="small" />
           <ActionButton id="themeLight" variant="small" />
           <ActionButton id="themeDark" variant="small" />
+          <ActionButton id="themeSystem" variant="small" />
         </div>
         <div className="rb-stack">
-          <ActionButton id="theme.contrast" variant="small" />
           <ActionButton id="windowsAccent" variant="small" />
         </div>
       </RibbonGroup>

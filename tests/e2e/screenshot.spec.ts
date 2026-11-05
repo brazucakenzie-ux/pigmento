@@ -72,10 +72,13 @@ test('capture UI states', async () => {
     await page.keyboard.press('Escape');
 
     await page.getByRole('tab', { name: 'View' }).click();
-    await page.getByRole('button', { name: 'High contrast' }).click();
+    await page.getByRole('button', { name: 'Theme' }).click();
+    await page.getByRole('menuitemradio', { name: 'High contrast' }).click();
+    await page.getByRole('button', { name: 'Dark', exact: true }).click();
     await page.waitForTimeout(150);
     await shot('contrast-view-tab');
-    await page.getByRole('button', { name: 'Dark' }).click();
+    await page.getByRole('button', { name: 'Theme' }).click();
+    await page.getByRole('menuitemradio', { name: 'Pigmento' }).click();
     await page.getByRole('tab', { name: 'Home' }).click();
     await page.keyboard.press('Control+=');
     await page.keyboard.press('Control+=');

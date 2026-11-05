@@ -16,6 +16,7 @@ import {
   Compass,
   Contrast,
   Copy,
+  Droplet,
   Crop,
   Eraser,
   FilePlus,
@@ -141,6 +142,7 @@ const LUCIDE: Record<string, LucideIcon> = {
   alert: CircleAlert,
   properties: Info,
   palette: Palette,
+  accent: Droplet,
 };
 
 /** Hand-drawn icons for things Lucide doesn't cover (same 24px grid, 2px stroke). */

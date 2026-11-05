@@ -170,7 +170,7 @@ Pointer Events with `getCoalescedEvents()`, pressure and tilt, and the pen erase
 ### Milestone 1.5 — More themes (requested before Milestone 2)
 Theme families, each with a light and a dark variant: Pigmento, GitHub, VS Code, Claude, Pierre and High contrast. The mode is Light, Dark or Match Windows.
 - [x] 1.15a Theme registry: palettes from GitHub Primer, VS Code Dark/Light Modern, Pierre and Anthropic's brand colours; derived tokens with guaranteed text and accent contrast; settings stored as family + mode, with old values migrated
-- [ ] 1.15b Theme picker in the View tab (family menu with previews; Light/Dark/Match Windows); the window opens in the saved theme's colours, so there's no flash
+- [x] 1.15b Theme picker in the View tab (family menu with previews; Light/Dark/Match Windows); the window opens in the saved theme's colours, so there's no flash
 - [ ] 1.15c Tests: contrast checks for every theme (unit), switching and persistence (e2e); palette credits in LICENSES.md
 
 ### Milestone 2 — Layers, selections, shapes system

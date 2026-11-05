@@ -157,7 +157,7 @@ const base: Action[] = [
   {
     id: 'windowsAccent',
     labelKey: 'action.windowsAccent',
-    icon: 'check',
+    icon: 'accent',
     group: 'view',
     run: () => updateSettings({ useWindowsAccent: !useUi.getState().settings.useWindowsAccent }),
     checked: (s) => s.settings.useWindowsAccent,
