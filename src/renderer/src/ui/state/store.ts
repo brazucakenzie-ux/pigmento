@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import type { ImageFormat } from '@shared/formats';
-import type { RecentFile, SystemTheme } from '@shared/ipc';
+import type { FileFormat, ImageFormat } from '@shared/formats';
+import type { AutosaveEntry, RecentFile, SystemTheme } from '@shared/ipc';
 import { defaultSettings, type Settings } from '@shared/settings';
 import type { RGBA } from '@engine/core/color';
 import type { Point } from '@engine/core/geometry';
@@ -20,7 +20,8 @@ export type DialogState =
   | { kind: 'rotate' }
   | { kind: 'properties' }
   | { kind: 'editColors'; target: 'primary' | 'secondary' }
-  | { kind: 'quality'; format: ImageFormat; transparent: boolean; resolve: (q: number | null) => void }
+  | { kind: 'quality'; format: ImageFormat; transparent: boolean; layers: boolean; resolve: (q: number | null) => void }
+  | { kind: 'recover'; items: AutosaveEntry[] }
   | { kind: 'pasteLarger'; w: number; h: number; resolve: (r: 'enlarge' | 'keep' | null) => void }
   | { kind: 'shortcuts' }
   | { kind: 'about' };
@@ -32,7 +33,7 @@ export interface Toast extends Notice {
 export interface FileState {
   path: string | null;
   name: string | null;
-  format: ImageFormat | null;
+  format: FileFormat | null;
 }
 
 export interface UiState {

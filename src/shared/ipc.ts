@@ -1,4 +1,4 @@
-import type { ImageFormat } from './formats';
+import type { FileFormat } from './formats';
 import type { Settings } from './settings';
 
 /** IPC channel names. Main registers handlers, preload invokes them. */
@@ -30,6 +30,11 @@ export const IPC = {
   print: 'system:print',
   wallpaper: 'system:wallpaper',
   appInfo: 'app:info',
+  autosaveRegister: 'autosave:register',
+  autosaveWrite: 'autosave:write',
+  autosaveClear: 'autosave:clear',
+  autosaveList: 'autosave:list',
+  autosaveRead: 'autosave:read',
   // main -> renderer events
   evCloseRequested: 'ev:close-requested',
   evOpenFile: 'ev:open-file',
@@ -69,12 +74,12 @@ export interface PrintRequest {
 
 export interface SaveDialogRequest {
   defaultName: string;
-  format: ImageFormat;
+  format: FileFormat;
 }
 
 export interface SaveDialogResult {
   path: string;
-  format: ImageFormat;
+  format: FileFormat;
 }
 
 export interface AppInfo {
@@ -85,6 +90,19 @@ export interface AppInfo {
   isE2E: boolean;
   isPackaged: boolean;
   userData: string;
+}
+
+export interface AutosaveMeta {
+  /** Document name shown in the recovery list. */
+  name: string;
+  /** File the document was last saved to, if any. */
+  path: string | null;
+}
+
+export interface AutosaveEntry extends AutosaveMeta {
+  id: string;
+  savedAt: number;
+  thumbnail: Uint8Array | null;
 }
 
 export type Unsubscribe = () => void;
@@ -131,6 +149,16 @@ export interface PigmentoApi {
     onCloseRequested(cb: () => void): Unsubscribe;
     onOpenFile(cb: (path: string) => void): Unsubscribe;
     onFullscreenChanged(cb: (full: boolean) => void): Unsubscribe;
+  };
+  autosave: {
+    /** Claim a session id for this window (its autosave is never offered for recovery). */
+    register(sessionId: string): Promise<void>;
+    write(sessionId: string, project: Uint8Array, thumbnail: Uint8Array | null, meta: AutosaveMeta): Promise<void>;
+    /** Remove this session's autosave (after a save or a clean close). */
+    clear(sessionId: string): Promise<void>;
+    /** Autosaves left by sessions that didn't close cleanly (offered once per app run). */
+    list(): Promise<AutosaveEntry[]>;
+    read(sessionId: string): Promise<Uint8Array>;
   };
   system: {
     getTheme(): Promise<SystemTheme>;

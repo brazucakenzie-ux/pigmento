@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { clickDoc, docToScreen, drag, launchApp, pixel, ready, type AppHandle } from './harness';
+import { clickDoc, docToScreen, drag, launchApp, pixel, ready, relaunch, type AppHandle } from './harness';
 
 let h: AppHandle;
 
@@ -115,19 +115,11 @@ test('remembers tool options and view settings across restarts', async () => {
   await h.page.getByRole('tab', { name: 'View' }).click();
   await h.page.getByRole('button', { name: 'Rulers' }).click();
   await h.page.waitForTimeout(900); // settings are saved with a short debounce
-  const userData = h.userData;
   await h.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().forEach((w) => w.close()));
   await h.app.waitForEvent('close').catch(() => undefined);
 
-  const { _electron } = await import('@playwright/test');
-  const path = await import('node:path');
-  const app = await _electron.launch({
-    args: ['.'],
-    cwd: path.resolve(__dirname, '../..'),
-    env: { ...process.env, PIGMENTO_USER_DATA: userData, PIGMENTO_E2E: '1' },
-  });
-  const page = await app.firstWindow();
-  h = { ...h, app, page, errors: [] };
+  h = await relaunch(h);
+  const { page } = h;
   await ready(page);
   expect(await page.evaluate(() => window.__pigmentoTest!.tool())).toBe('brush');
   await expect(page.getByRole('group', { name: 'Size' }).getByRole('button', { name: '32' })).toHaveAttribute('aria-pressed', 'true');

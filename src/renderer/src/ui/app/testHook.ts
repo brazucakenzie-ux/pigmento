@@ -1,6 +1,7 @@
 import { engine } from '../state/engine';
 import { useUi } from '../state/store';
 import { openPath } from '../services/files';
+import { autosaveNow } from '../services/autosave';
 
 /**
  * Exposes a small read-mostly API on window.__pigmentoTest when running end-to-end tests
@@ -24,6 +25,7 @@ export function installTestHook(): void {
     selection: () => useUi.getState().selection.bounds,
     openPath: (p: string) => openPath(p, true),
     filePath: () => useUi.getState().file.path,
+    autosaveNow: () => autosaveNow(),
     layers: () => engine.layers.info(),
     addLayer: () => engine.layers.add(),
     groupLayers: (ids: string[]) => engine.layers.group(ids),

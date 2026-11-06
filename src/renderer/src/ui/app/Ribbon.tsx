@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, type KeyboardEvent } from 'react';
-import { FORMATS, type ImageFormat } from '@shared/formats';
+import { FILE_FORMATS, type FileFormat } from '@shared/formats';
 import type { WallpaperStyle } from '@shared/ipc';
 import { toolRegistry } from '@engine/tools/ToolRegistry';
 import { t, type I18nKey } from '../../i18n';
@@ -59,10 +59,10 @@ function FileMenu() {
         <ActionMenuItem id="save" close={close} />
         <SubMenu label={t('file.saveAs')} icon="save">
           {(closeAll) =>
-            (Object.keys(FORMATS) as ImageFormat[]).map((f) => (
+            (Object.keys(FILE_FORMATS) as FileFormat[]).map((f) => (
               <MenuItem
                 key={f}
-                label={t('file.saveAsFormat', { format: t(FORMATS[f].labelKey as I18nKey) })}
+                label={t('file.saveAsFormat', { format: t(FILE_FORMATS[f].labelKey as I18nKey) })}
                 close={closeAll}
                 onSelect={() => void files.saveAs(f)}
               />

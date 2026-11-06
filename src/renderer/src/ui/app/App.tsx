@@ -2,7 +2,8 @@ import { useEffect, useLayoutEffect } from 'react';
 import { t } from '../../i18n';
 import { handleGlobalKey } from '../actions/keymap';
 import { TooltipLayer } from '../components/Tooltips';
-import { AboutDialog, EditColorsDialog, PasteLargerDialog, QualityDialog, ShortcutsDialog } from '../dialogs/OtherDialogs';
+import { AboutDialog, EditColorsDialog, PasteLargerDialog, QualityDialog, RecoverDialog, ShortcutsDialog } from '../dialogs/OtherDialogs';
+import { clearOwnAutosave, offerRecovery, startAutosave } from '../services/autosave';
 import { CanvasSizeDialog, NewImageDialog, PropertiesDialog, ResizeDialog, RotateDialog } from '../dialogs/ImageDialogs';
 import { confirmDiscard, openPath } from '../services/files';
 import { bindEngine, engine } from '../state/engine';
@@ -109,6 +110,8 @@ function DialogHost() {
       return <ShortcutsDialog />;
     case 'about':
       return <AboutDialog />;
+    case 'recover':
+      return <RecoverDialog items={d.items} />;
   }
 }
 
@@ -148,8 +151,10 @@ export function App() {
       if (info.isE2E) installTestHook();
       useUi.setState({ ready: true });
       void loadFonts();
+      startAutosave();
       const launch = await api.window.getLaunchFile();
       if (launch) await openPath(launch, true);
+      await offerRecovery();
     })();
     const offs = [
       api.system.onThemeChanged((system) => useUi.setState({ system })),
@@ -161,6 +166,7 @@ export function App() {
           engine.commitLive();
           if (await confirmDiscard()) {
             allowUnload = true;
+            await clearOwnAutosave();
             await api.window.close();
           }
         })();

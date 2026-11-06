@@ -659,6 +659,10 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.history.markSaved();
   }
 
+  markUnsaved(): void {
+    this.history.markUnsaved();
+  }
+
   // ---- documents ------------------------------------------------------------------------
 
   private replaceDocument(doc: PaintDocument, initial: I18nKey): void {
@@ -683,6 +687,12 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   newDocument(width: number, height: number, paper: RGBA | null, dpi = 96): void {
     checkSize(width, height);
     this.replaceDocument(new PaintDocument({ width, height, dpi, paper }), 'history.initial.new');
+  }
+
+  /** Replace the document with one read from a project file. */
+  loadDocument(doc: PaintDocument): void {
+    checkSize(doc.width, doc.height);
+    this.replaceDocument(doc, 'history.initial.open');
   }
 
   /** Open decoded pixels as a new document. Opaque images get white paper. */

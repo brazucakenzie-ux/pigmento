@@ -13,6 +13,7 @@ The components below are bundled into the app. Their full licence texts ship ins
 | Lucide (lucide-react) | 1.69.0 | ISC | Lucide contributors (parts © Cole Bemis, Feather, MIT) | Interface icons |
 | Inter (via @fontsource-variable/inter) | 5.3.0 | SIL Open Font License 1.1 | The Inter Project Authors | Interface font |
 | gifenc | 1.0.3 | MIT | Matt DesLauriers | GIF encoding |
+| fflate | 0.8.3 | MIT | Arjun Barrett | ZIP container for `.pigm` projects |
 
 ## Theme palettes
 

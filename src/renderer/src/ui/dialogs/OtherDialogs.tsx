@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FORMATS, type ImageFormat } from '@shared/formats';
-import type { AppInfo } from '@shared/ipc';
+import type { AppInfo, AutosaveEntry } from '@shared/ipc';
 import { colorEquals, parseHex, toCss, toHex8, type RGBA } from '@engine/core/color';
 import logoUrl from '@resources/logo.svg?url';
 import { t, type I18nKey } from '../../i18n';
@@ -12,6 +12,7 @@ import { displayCombo } from '../actions/keymap';
 import { engine } from '../state/engine';
 import { closeDialog, updateSettings, useUi, type DialogState } from '../state/store';
 import { rememberQuality } from '../services/files';
+import { discardAutosave, restoreAutosave } from '../services/autosave';
 
 function addRecent(c: RGBA): void {
   const colors = useUi.getState().settings.colors;
@@ -130,6 +131,7 @@ export function QualityDialog({ d }: { d: Extract<DialogState, { kind: 'quality'
         </>
       ) : null}
       {d.transparent && !FORMATS[d.format].alpha ? <p className="dialog-note">{t('dialog.quality.flatten', { format: name })}</p> : null}
+      {d.layers ? <p className="dialog-note warn">{t('dialog.quality.layers', { format: name })}</p> : null}
     </Dialog>
   );
 }
@@ -271,6 +273,63 @@ export function AboutDialog() {
         <p style={{ marginTop: 10 }}>{t('dialog.about.credits')}: Electron, React, Zustand, Zod, Lucide (ISC), Inter (OFL-1.1), gifenc (MIT).</p>
         <p>{t('dialog.about.licenses')}</p>
       </div>
+    </Dialog>
+  );
+}
+
+function RecoverItem({ entry, onDone }: { entry: AutosaveEntry; onDone: (restored: boolean) => void }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!entry.thumbnail) return;
+    const u = URL.createObjectURL(new Blob([entry.thumbnail as Uint8Array<ArrayBuffer>], { type: 'image/png' }));
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [entry.thumbnail]);
+  const time = new Date(entry.savedAt).toLocaleString();
+  return (
+    <li className="recover-item">
+      <span className="recover-thumb">{url ? <img src={url} alt="" /> : null}</span>
+      <span className="recover-text">
+        <strong>{entry.name}</strong>
+        <span className="dialog-note">{t('dialog.recover.savedAt', { time })}</span>
+      </span>
+      <button type="button" className="btn small" onClick={() => void discardAutosave(entry).then(() => onDone(false))}>
+        {t('dialog.recover.discard')}
+      </button>
+      <button type="button" className="btn small primary" onClick={() => void restoreAutosave(entry).then((ok) => ok && onDone(true))}>
+        {t('dialog.recover.restore')}
+      </button>
+    </li>
+  );
+}
+
+/** Offered at startup when a previous session left autosaved work behind. */
+export function RecoverDialog({ items }: { items: AutosaveEntry[] }) {
+  const [left, setLeft] = useState(items);
+  const done = (id: string, restored: boolean) => {
+    const rest = left.filter((e) => e.id !== id);
+    setLeft(rest);
+    // Restoring loads into this window, so one restore ends the dialog.
+    if (restored || rest.length === 0) closeDialog();
+  };
+  return (
+    <Dialog
+      title={t('dialog.recover.title')}
+      onCancel={closeDialog}
+      footer={
+        <button type="button" className="btn" onClick={closeDialog}>
+          {t('dialog.recover.later')}
+        </button>
+      }
+    >
+      <p className="dialog-note" style={{ fontSize: 'var(--fs-sm)' }}>
+        {t('dialog.recover.body')}
+      </p>
+      <ul className="recover-list">
+        {left.map((e) => (
+          <RecoverItem key={e.id} entry={e} onDone={(r) => done(e.id, r)} />
+        ))}
+      </ul>
     </Dialog>
   );
 }

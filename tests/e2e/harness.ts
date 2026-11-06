@@ -15,12 +15,41 @@ export interface AppHandle {
 /** Launch the built app (out/) with an isolated user-data folder and console error capture. */
 export async function launchApp(extraArgs: string[] = []): Promise<AppHandle> {
   const userData = mkdtempSync(path.join(tmpdir(), 'pigmento-e2e-'));
+  return start(userData, extraArgs);
+}
+
+/**
+ * Start the app again on the same user-data folder (settings, autosaves) after `h.app` has
+ * exited or been killed. Retries while a dying instance still holds the single-instance lock.
+ */
+export async function relaunch(h: AppHandle, attempts = 1): Promise<AppHandle> {
+  // Release Playwright's handle on the old app, or the test worker can't exit.
+  await h.app.close().catch(() => undefined);
+  let lastError: unknown = null;
+  for (let i = 0; i < attempts; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 800));
+    try {
+      return await start(h.userData, [], attempts > 1 ? 8000 : undefined);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('App did not restart');
+}
+
+async function start(userData: string, extraArgs: string[], windowTimeout?: number): Promise<AppHandle> {
   const app = await electron.launch({
     args: ['.', ...extraArgs],
     cwd: path.resolve(__dirname, '../..'),
     env: { ...process.env, PIGMENTO_USER_DATA: userData, PIGMENTO_E2E: '1' },
   });
-  const page = await app.firstWindow();
+  let page: Page;
+  try {
+    page = await app.firstWindow(windowTimeout === undefined ? undefined : { timeout: windowTimeout });
+  } catch (err) {
+    await app.close().catch(() => undefined);
+    throw err;
+  }
   const errors: string[] = [];
   page.on('console', (msg) => {
     if (msg.type() === 'error') errors.push(msg.text());

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { launchApp, ready, type AppHandle } from './harness';
+import { launchApp, ready, relaunch, type AppHandle } from './harness';
 
 let h: AppHandle;
 
@@ -66,18 +66,10 @@ test('remembers the theme and opens new windows in its colours', async () => {
   expect(settings.themeMode).toBe('dark');
   expect(settings.chrome).toEqual({ bg: '#171717', fg: '#fafafa' });
 
-  const userData = h.userData;
   await h.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().forEach((w) => w.destroy()));
   await h.app.close().catch(() => undefined);
-  const { _electron } = await import('@playwright/test');
-  const path = await import('node:path');
-  const app = await _electron.launch({
-    args: ['.'],
-    cwd: path.resolve(__dirname, '../..'),
-    env: { ...process.env, PIGMENTO_USER_DATA: userData, PIGMENTO_E2E: '1' },
-  });
-  const page = await app.firstWindow();
-  h = { ...h, app, page, errors: [] };
+  h = await relaunch(h);
+  const { app, page } = h;
   await ready(page);
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'pierre-dark');
   const winBg = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getBackgroundColor());

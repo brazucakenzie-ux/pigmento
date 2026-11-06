@@ -370,7 +370,7 @@ export class Renderer {
   }
 
   /** Scaled snapshot of the composite for the navigator. */
-  drawThumbnail(target: CanvasRenderingContext2D, w: number, h: number): void {
+  drawThumbnail(target: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, w: number, h: number): void {
     this.flushComposite();
     target.clearRect(0, 0, w, h);
     target.imageSmoothingEnabled = true;

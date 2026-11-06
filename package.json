@@ -35,6 +35,7 @@
     "electron-vite": "^6.0.0",
     "eslint": "^10.14.0",
     "eslint-plugin-react-hooks": "^7.1.1",
+    "fflate": "^0.8.3",
     "gifenc": "^1.0.3",
     "globals": "^17.14.0",
     "lucide-react": "^1.69.0",

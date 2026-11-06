@@ -11,6 +11,8 @@ export const engine = new Engine();
 // The engine stores user-visible names but never English text: the UI provides them.
 engine.layers.namer = (kind, arg) =>
   kind === 'copy' ? t('layer.copy', { name: String(arg) }) : t(kind === 'group' ? 'layer.group' : 'layer.default', { n: arg });
+// The start-up document was created before the namer existed.
+for (const l of engine.doc.layers) if (!l.name) l.name = engine.layers.namer('layer', 1);
 
 let bound = false;
 

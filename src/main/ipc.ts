@@ -8,7 +8,7 @@ import {
   type IpcMainInvokeEvent,
 } from 'electron';
 import path from 'node:path';
-import { FORMATS, OPENABLE_EXTENSIONS, isOpenablePath, type ImageFormat } from '@shared/formats';
+import { FILE_FORMATS, OPENABLE_EXTENSIONS, isOpenablePath, type FileFormat } from '@shared/formats';
 import {
   IPC,
   type AppInfo,
@@ -25,6 +25,7 @@ import { printImage } from './print';
 import { addRecent, clearRecent, getRecent, removeRecent } from './recent';
 import { getSettings, updateSettings } from './settings';
 import { setWallpaper } from './wallpaper';
+import { clearAutosave, listRecoverable, readAutosave, registerSession, releaseSession, writeAutosave } from './autosave';
 import {
   TOP_BAR_HEIGHT,
   allowCloseAndClose,
@@ -49,8 +50,8 @@ function bytesArg(v: unknown, max: number): Uint8Array {
   return v;
 }
 
-function isFormat(v: unknown): v is ImageFormat {
-  return typeof v === 'string' && v in FORMATS;
+function isFormat(v: unknown): v is FileFormat {
+  return typeof v === 'string' && v in FILE_FORMATS;
 }
 
 export function registerIpc(): void {
@@ -62,7 +63,7 @@ export function registerIpc(): void {
       defaultPath: getSettings().export.lastFolder,
       filters: [
         { name: tm('dialog.filter.images'), extensions: OPENABLE_EXTENSIONS },
-        ...Object.values(FORMATS).map((f) => ({
+        ...Object.values(FILE_FORMATS).map((f) => ({
           name: tm(f.labelKey as MainStringKey),
           extensions: f.extensions,
         })),
@@ -81,15 +82,15 @@ export function registerIpc(): void {
     if (!req || typeof req.defaultName !== 'string' || !isFormat(req.format)) {
       throw new Error('Invalid save request');
     }
-    const order: ImageFormat[] = [req.format, ...(Object.keys(FORMATS) as ImageFormat[]).filter((f) => f !== req.format)];
+    const order: FileFormat[] = [req.format, ...(Object.keys(FILE_FORMATS) as FileFormat[]).filter((f) => f !== req.format)];
     const base = path.basename(req.defaultName).replace(/[<>:"/\\|?*]/g, '_') || 'Untitled';
     const folder = getSettings().export.lastFolder ?? app.getPath('pictures');
     const res = await dialog.showSaveDialog(win, {
       title: tm('dialog.save.title'),
       defaultPath: path.join(folder, base),
       filters: order.map((f) => ({
-        name: tm(FORMATS[f].labelKey as MainStringKey),
-        extensions: FORMATS[f].extensions,
+        name: tm(FILE_FORMATS[f].labelKey as MainStringKey),
+        extensions: FILE_FORMATS[f].extensions,
       })),
       properties: ['showOverwriteConfirmation'],
     });
@@ -97,9 +98,9 @@ export function registerIpc(): void {
     let p = res.filePath;
     let format = order[0];
     const ext = path.extname(p).slice(1).toLowerCase();
-    const byExt = (Object.values(FORMATS).find((f) => f.extensions.includes(ext)) ?? null)?.id;
+    const byExt = (Object.values(FILE_FORMATS).find((f) => f.extensions.includes(ext)) ?? null)?.id;
     if (byExt) format = byExt;
-    else p = `${p}.${FORMATS[format].extensions[0]}`;
+    else p = `${p}.${FILE_FORMATS[format].extensions[0]}`;
     grantPath(p);
     updateSettings({ export: { ...getSettings().export, lastFolder: path.dirname(p) } });
     return { path: p, format };
@@ -256,6 +257,30 @@ export function registerIpc(): void {
       throw new Error('Invalid wallpaper style');
     }
     await setWallpaper(bytesArg(png, MAX_WRITE_BYTES), style as WallpaperStyle);
+  });
+
+  ipcMain.handle(IPC.autosaveRegister, (e, id: unknown) => {
+    if (typeof id !== 'string') throw new Error('Invalid session id');
+    registerSession(id);
+    // A window that goes away for any reason stops owning its session.
+    e.sender.once('destroyed', () => releaseSession(id));
+  });
+  ipcMain.handle(IPC.autosaveWrite, async (_e, id: unknown, project: unknown, thumb: unknown, meta: unknown) => {
+    if (typeof id !== 'string' || typeof meta !== 'object' || meta === null) throw new Error('Invalid autosave');
+    const m = meta as { name?: unknown; path?: unknown };
+    await writeAutosave(id, bytesArg(project, MAX_WRITE_BYTES), thumb === null ? null : bytesArg(thumb, 16 * 1024 * 1024), {
+      name: typeof m.name === 'string' ? m.name : '',
+      path: typeof m.path === 'string' ? m.path : null,
+    });
+  });
+  ipcMain.handle(IPC.autosaveClear, async (_e, id: unknown) => {
+    if (typeof id !== 'string') throw new Error('Invalid session id');
+    await clearAutosave(id);
+  });
+  ipcMain.handle(IPC.autosaveList, () => listRecoverable());
+  ipcMain.handle(IPC.autosaveRead, (_e, id: unknown) => {
+    if (typeof id !== 'string') throw new Error('Invalid session id');
+    return readAutosave(id);
   });
 
   ipcMain.handle(

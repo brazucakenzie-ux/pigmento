@@ -132,6 +132,12 @@ export class History extends Emitter<HistoryEvents> {
     this.changed();
   }
 
+  /** The current state isn't saved anywhere (e.g. a recovered autosave). */
+  markUnsaved(): void {
+    this.savedIndex = null;
+    this.changed();
+  }
+
   reset(initialLabel: I18nKey): void {
     for (const c of this.items) c.dispose?.();
     this.items = [];

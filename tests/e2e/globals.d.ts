@@ -11,6 +11,7 @@ export interface PigmentoTestHook {
   selection(): { x: number; y: number; w: number; h: number } | null;
   openPath(path: string): Promise<boolean>;
   filePath(): string | null;
+  autosaveNow(): Promise<boolean>;
   layers(): { tree: LayerNode[]; activeId: string; count: number };
   screenPixel(x: number, y: number): Promise<{ r: number; g: number; b: number; a: number }>;
   fillLayer(id: string, c: { r: number; g: number; b: number; a: number }): void;

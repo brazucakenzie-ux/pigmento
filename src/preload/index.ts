@@ -50,6 +50,13 @@ const api: PigmentoApi = {
     onOpenFile: (cb) => subscribe<[string]>(IPC.evOpenFile, cb),
     onFullscreenChanged: (cb) => subscribe<[boolean]>(IPC.evFullscreen, cb),
   },
+  autosave: {
+    register: (id) => ipcRenderer.invoke(IPC.autosaveRegister, id),
+    write: (id, project, thumbnail, meta) => ipcRenderer.invoke(IPC.autosaveWrite, id, project, thumbnail, meta),
+    clear: (id) => ipcRenderer.invoke(IPC.autosaveClear, id),
+    list: () => ipcRenderer.invoke(IPC.autosaveList),
+    read: (id) => ipcRenderer.invoke(IPC.autosaveRead, id),
+  },
   system: {
     getTheme: () => ipcRenderer.invoke(IPC.systemTheme),
     onThemeChanged: (cb) => subscribe<[SystemTheme]>(IPC.evThemeChanged, cb),

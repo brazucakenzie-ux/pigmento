@@ -1,6 +1,7 @@
-import { FORMATS, formatFromPath, type ImageFormat } from '@shared/formats';
+import { FILE_FORMATS, FORMATS, formatFromPath, type FileFormat, type ImageFormat } from '@shared/formats';
 import type { WallpaperStyle } from '@shared/ipc';
 import { CodecError } from '@engine/io/CodecClient';
+import { ProjectError, isZip, loadProject, saveProject, type PngCodec } from '@engine/io/project';
 import { hasTransparency } from '@engine/raster/pixels';
 import type { RGBA } from '@engine/core/color';
 import type { ImageBuf } from '@engine/raster/transform';
@@ -67,6 +68,56 @@ async function decode(bytes: Uint8Array, name: string) {
   }
 }
 
+/** PNG through the codec worker, for layer images inside projects. */
+export const pngCodec: PngCodec = {
+  encode: (data, w, h) => engine.codecs.encode('png', w, h, data, 100, engine.doc.dpi),
+  decode: async (bytes) => {
+    const r = await engine.codecs.decode(bytes);
+    return { w: r.w, h: r.h, data: r.data };
+  },
+};
+
+/** More than one layer (or a group): a flat image format can't hold it. */
+export function isLayered(): boolean {
+  const l = engine.doc.layers;
+  return l.length > 1 || l[0].kind !== 'raster';
+}
+
+/** Small PNG preview of the composite (projects, crash-recovery list). */
+export async function makeThumbnail(max = 256): Promise<Uint8Array> {
+  const { width, height } = engine.doc;
+  const k = Math.min(1, max / Math.max(width, height));
+  const w = Math.max(1, Math.round(width * k));
+  const h = Math.max(1, Math.round(height * k));
+  const c = new OffscreenCanvas(w, h);
+  const ctx = c.getContext('2d')!;
+  engine.renderer.drawThumbnail(ctx, w, h);
+  return new Uint8Array(await (await c.convertToBlob({ type: 'image/png' })).arrayBuffer());
+}
+
+/** Load file bytes as a project or an image. */
+async function loadBytes(path: string, bytes: Uint8Array, name: string): Promise<boolean> {
+  if (formatFromPath(path) === 'pigm' || isZip(bytes)) {
+    try {
+      engine.loadDocument(await loadProject(bytes, pngCodec));
+    } catch (err) {
+      if (err instanceof ProjectError && err.key !== 'error.tooLarge') showToast({ kind: 'error', key: err.key, params: { name } });
+      else reportError(err);
+      return false;
+    }
+    return true;
+  }
+  const img = await decode(bytes, name);
+  if (!img) return false;
+  try {
+    engine.loadImage(img);
+  } catch (err) {
+    reportError(err);
+    return false;
+  }
+  return true;
+}
+
 export async function openPath(path: string, skipConfirm = false): Promise<boolean> {
   if (!skipConfirm && !(await confirmDiscard())) return false;
   const name = path.split(/[\\/]/).pop() ?? path;
@@ -78,14 +129,7 @@ export async function openPath(path: string, skipConfirm = false): Promise<boole
     void window.pigmento.recent.remove(path).catch(() => undefined);
     return false;
   }
-  const img = await decode(bytes, name);
-  if (!img) return false;
-  try {
-    engine.loadImage(img);
-  } catch (err) {
-    reportError(err);
-    return false;
-  }
+  if (!(await loadBytes(path, bytes, name))) return false;
   useUi.setState({ file: { path, name, format: formatFromPath(path) } });
   window.pigmento.window.setDocState({ dirty: false, hasFile: true });
   void window.pigmento.recent.add(path).catch(() => undefined);
@@ -98,11 +142,14 @@ export async function open(): Promise<void> {
   if (path) await openPath(path, true);
 }
 
-/** Ask for JPEG/WebP quality (and warn about lost transparency). Null = cancelled. */
-async function askQuality(format: ImageFormat, transparent: boolean): Promise<number | null> {
-  const needsDialog = FORMATS[format].lossy || (transparent && !FORMATS[format].alpha);
+/**
+ * Ask for JPEG/WebP quality and warn about anything the format loses (transparency, layers).
+ * Resolves the quality, or null when cancelled.
+ */
+async function askQuality(format: ImageFormat, transparent: boolean, layers: boolean): Promise<number | null> {
+  const needsDialog = FORMATS[format].lossy || (transparent && !FORMATS[format].alpha) || layers;
   if (!needsDialog) return 100;
-  return new Promise((resolve) => openDialog({ kind: 'quality', format, transparent, resolve }));
+  return new Promise((resolve) => openDialog({ kind: 'quality', format, transparent, layers, resolve }));
 }
 
 async function encodeFlattened(format: ImageFormat, quality: number): Promise<Uint8Array> {
@@ -110,27 +157,36 @@ async function encodeFlattened(format: ImageFormat, quality: number): Promise<Ui
   return engine.codecs.encode(format, img.w, img.h, img.data, quality, engine.doc.dpi);
 }
 
-async function writeTo(path: string, format: ImageFormat, askForQuality: boolean): Promise<boolean> {
+async function writeTo(path: string, format: FileFormat, fromSaveAs: boolean): Promise<boolean> {
   engine.commitLive();
-  const flat = engine.flatten(false);
-  const transparent = hasTransparency(flat.data);
-  let quality = format === 'jpeg' ? useUi.getState().settings.export.jpegQuality : useUi.getState().settings.export.webpQuality;
-  if (askForQuality) {
-    const q = await askQuality(format, transparent);
-    if (q === null) return false;
-    quality = q;
-  }
   const name = path.split(/[\\/]/).pop() ?? path;
+  let bytes: Uint8Array;
+  // A flat file can't hold layers: the document stays "unsaved" so closing still asks.
+  let complete = true;
   try {
-    const bytes = await encodeFlattened(format, quality);
+    if (format === 'pigm') {
+      bytes = await saveProject(engine.doc, pngCodec, await makeThumbnail());
+    } else {
+      const layers = isLayered();
+      const transparent = hasTransparency(engine.flatten(false).data);
+      const settings = useUi.getState().settings.export;
+      let quality = format === 'jpeg' ? settings.jpegQuality : settings.webpQuality;
+      if (fromSaveAs || layers) {
+        const q = await askQuality(format, transparent, layers);
+        if (q === null) return false;
+        quality = q;
+      }
+      complete = !layers;
+      bytes = await encodeFlattened(format, quality);
+    }
     await window.pigmento.files.write(path, bytes);
   } catch {
     showToast({ kind: 'error', key: 'error.save', params: { name } });
     return false;
   }
-  engine.markSaved();
+  if (complete) engine.markSaved();
   useUi.setState({ file: { path, name, format } });
-  window.pigmento.window.setDocState({ dirty: false, hasFile: true });
+  window.pigmento.window.setDocState({ dirty: !complete, hasFile: true });
   void window.pigmento.recent.add(path).catch(() => undefined);
   showToast({ kind: 'info', key: 'notice.saved', params: { name } });
   return true;
@@ -142,11 +198,12 @@ export async function save(): Promise<boolean> {
   return writeTo(f.path, f.format, false);
 }
 
-export async function saveAs(preferred?: ImageFormat): Promise<boolean> {
+export async function saveAs(preferred?: FileFormat): Promise<boolean> {
   const f = useUi.getState().file;
-  const format = preferred ?? f.format ?? 'png';
+  // Layered work defaults to the project format so nothing is lost by accident.
+  const format = preferred ?? (isLayered() ? 'pigm' : (f.format ?? 'png'));
   const res = await window.pigmento.files.showSaveDialog({
-    defaultName: `${baseName()}.${FORMATS[format].extensions[0]}`,
+    defaultName: `${baseName()}.${FILE_FORMATS[format].extensions[0]}`,
     format,
   });
   if (!res) return false;
