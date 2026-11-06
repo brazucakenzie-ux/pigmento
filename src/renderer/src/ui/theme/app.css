@@ -1010,6 +1010,145 @@
   max-width: min(720px, 92vw);
   max-height: 88vh;
 }
+/* A checkerboard behind anything that can be transparent (gradients, patterns). */
+.checker-bg {
+  background-color: var(--checker-a);
+  background-image:
+    linear-gradient(45deg, var(--checker-b) 25%, transparent 25%, transparent 75%, var(--checker-b) 75%),
+    linear-gradient(45deg, var(--checker-b) 25%, transparent 25%, transparent 75%, var(--checker-b) 75%);
+  background-size: 10px 10px;
+  background-position:
+    0 0,
+    5px 5px;
+}
+
+/* Gradient tool: the colours button in the options bar. */
+.gradient-button,
+.pattern-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 6px 0 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text);
+}
+.gradient-button:hover,
+.pattern-button:hover {
+  border-color: var(--accent);
+}
+.gradient-strip {
+  display: block;
+  width: 96px;
+  height: 18px;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.gradient-strip > span,
+.gradient-preset > span,
+.gradient-bar > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.pattern-swatch {
+  display: block;
+  border-radius: 3px;
+}
+
+/* Fill tool: the pattern picker. */
+/* Only when open: a closed popover must stay display: none. */
+.menu.pattern-menu:popover-open {
+  display: grid;
+  grid-template-columns: repeat(5, auto);
+  gap: 4px;
+  padding: 6px;
+}
+.menu.pattern-menu > :not(.pattern-tile) {
+  grid-column: 1 / -1;
+}
+.menu-item.pattern-tile {
+  padding: 3px;
+  justify-content: center;
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+}
+.menu-item.pattern-tile[aria-checked='true'] {
+  border-color: var(--accent);
+}
+
+/* Gradient editor. */
+.dialog.gradient-dialog {
+  width: min(560px, 92vw);
+}
+.field-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.gradient-presets {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.gradient-preset {
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.gradient-preset:hover,
+.gradient-preset:focus-visible {
+  border-color: var(--accent);
+}
+.gradient-editor {
+  position: relative;
+  padding: 0 8px 18px;
+}
+.gradient-bar {
+  height: 34px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  cursor: copy;
+}
+.gradient-bar > span {
+  pointer-events: none;
+}
+.gradient-stops {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 0;
+  height: 18px;
+}
+.gradient-stop {
+  position: absolute;
+  top: 2px;
+  width: 14px;
+  height: 16px;
+  margin-left: -7px;
+  padding: 2px;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px 3px 4px 4px;
+  background: var(--bg-panel);
+  cursor: ew-resize;
+  touch-action: none;
+}
+.gradient-stop > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 2px;
+}
+.gradient-stop.current {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
 /* Select → Colour range: the colour being matched. */
 .range-swatch {
   width: 22px;

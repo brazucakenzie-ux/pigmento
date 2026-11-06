@@ -35,6 +35,9 @@ export const IPC = {
   autosaveClear: 'autosave:clear',
   autosaveList: 'autosave:list',
   autosaveRead: 'autosave:read',
+  patternsList: 'patterns:list',
+  patternsSave: 'patterns:save',
+  patternsRemove: 'patterns:remove',
   // main -> renderer events
   evCloseRequested: 'ev:close-requested',
   evOpenFile: 'ev:open-file',
@@ -107,6 +110,13 @@ export interface AutosaveEntry extends AutosaveMeta {
   thumbnail: Uint8Array | null;
 }
 
+/** A fill pattern made from a selection, as stored on disk. */
+export interface SavedPattern {
+  id: string;
+  name: string;
+  png: Uint8Array;
+}
+
 export type Unsubscribe = () => void;
 
 /** The API exposed on `window.pigmento` by the preload script. */
@@ -161,6 +171,12 @@ export interface PigmentoApi {
     /** Autosaves left by sessions that didn't close cleanly (offered once per app run). */
     list(): Promise<AutosaveEntry[]>;
     read(sessionId: string): Promise<Uint8Array>;
+  };
+  patterns: {
+    list(): Promise<SavedPattern[]>;
+    /** Store a PNG under a name; resolves the new id. */
+    save(png: Uint8Array, name: string): Promise<string>;
+    remove(id: string): Promise<void>;
   };
   system: {
     getTheme(): Promise<SystemTheme>;

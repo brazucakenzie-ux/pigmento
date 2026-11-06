@@ -24,6 +24,8 @@ import { MAX_DIMENSION, MAX_PIXELS } from './io/protocol';
 import { FloatObject, rectOutline } from './live/FloatObject';
 import { TransformObject, type TransformInfo } from './live/TransformObject';
 import { rectQuad, type TransformParams } from './raster/warp';
+import { BUILTIN_PATTERNS, patternById, renderPattern, tileInto } from './raster/patterns';
+import { MAX_STOPS } from './raster/gradient';
 import type { LiveKind, LiveObject } from './live/LiveObject';
 import type { TextObject } from './live/TextObject';
 import { alphaBounds, flattenOnto, hasTransparency, invertView, type MaskView } from './raster/pixels';
@@ -35,6 +37,7 @@ import { View, type ViewState } from './render/View';
 import { InputController } from './input/InputController';
 import {
   defaultOptions,
+  type FillPattern,
   type TextEditState,
   type Tool,
   type ToolContext,
@@ -90,6 +93,15 @@ const MODIFY_LABEL: Record<SelectionModify, I18nKey> = {
   border: 'history.border',
 };
 
+/** A fill pattern as the pattern picker lists it. */
+export interface PatternInfo {
+  id: string;
+  /** Built-in patterns have an i18n key; saved ones a user-given name. */
+  labelKey?: I18nKey;
+  name?: string;
+  builtin: boolean;
+}
+
 export interface Notice {
   kind: 'info' | 'error';
   key: I18nKey;
@@ -119,6 +131,8 @@ export interface EngineEvents {
   savedSelections: SavedSelectionInfo[];
   /** Free transform in progress (null when none). */
   transform: TransformInfo | null;
+  /** Built-in and saved fill patterns. */
+  patterns: PatternInfo[];
 }
 
 export type Anchor = 'nw' | 'n' | 'ne' | 'w' | 'c' | 'e' | 'sw' | 's' | 'se';
@@ -140,6 +154,25 @@ export class EngineError extends Error {
 
 export function sizeAllowed(w: number, h: number): boolean {
   return w >= 1 && h >= 1 && w <= MAX_DIMENSION && h <= MAX_DIMENSION && w * h <= MAX_PIXELS;
+}
+
+/** Gradient stops read back from settings: 2–16 of { pos 0…1, color #rrggbbaa }. */
+function isStopList(v: unknown): boolean {
+  return (
+    Array.isArray(v) &&
+    v.length >= 2 &&
+    v.length <= MAX_STOPS &&
+    v.every(
+      (s) =>
+        typeof s === 'object' &&
+        s !== null &&
+        typeof (s as { pos?: unknown }).pos === 'number' &&
+        (s as { pos: number }).pos >= 0 &&
+        (s as { pos: number }).pos <= 1 &&
+        typeof (s as { color?: unknown }).color === 'string' &&
+        /^#[0-9a-f]{8}$/i.test((s as { color: string }).color),
+    )
+  );
 }
 
 function checkSize(w: number, h: number): void {
@@ -511,6 +544,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
           else if (spec.type === 'segmented' && typeof v === 'string' && spec.choices.some((c) => c.value === v)) {
             merged[spec.key] = v;
           } else if (spec.type === 'font' && typeof v === 'string' && v.length < 200) merged[spec.key] = v;
+          else if (spec.type === 'pattern' && typeof v === 'string' && /^[a-z0-9-]{1,64}$/i.test(v)) merged[spec.key] = v;
+          else if (spec.type === 'gradient' && (v === null || isStopList(v))) merged[spec.key] = v;
         }
       }
       this.toolValues[tool.id] = merged;
@@ -880,7 +915,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     return { r: d[0], g: d[1], b: d[2], a: d[3] };
   }
 
-  async floodFill(x: number, y: number, color: RGBA, tolerance: number, contiguous: boolean): Promise<void> {
+  async floodFill(x: number, y: number, paint: RGBA | FillPattern, tolerance: number, contiguous: boolean): Promise<void> {
     if (this.fillBusy || !this.canPaint()) return;
     const px = Math.floor(x);
     const py = Math.floor(y);
@@ -900,9 +935,20 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       const { mask, bounds } = await this.codecs.fill(layer.surface.toRGBA(), w, h, px, py, tolerance, contiguous, clip);
       if (!bounds || layer !== this.doc.activeRaster) return;
       const s = layer.surface;
-      s.beginEdit();
-      s.compositeColor(bounds, color, { data: mask, stride: w, ox: 0, oy: 0, w, h }, 'over', 1);
-      this.pushPixels('history.fill', layer, s.endEdit());
+      const area = { data: mask, stride: w, ox: 0, oy: 0, w, h };
+      if ('pattern' in paint) {
+        const tile = this.patternTile(paint);
+        if (!tile) return;
+        // Tiles line up with the document origin, so separate fills join seamlessly.
+        const src = tileInto(tile, bounds);
+        s.beginEdit();
+        s.compositeImage(bounds, { data: src.data, stride: bounds.w, ox: bounds.x, oy: bounds.y }, 'over', 1, area);
+        this.pushPixels('history.patternFill', layer, s.endEdit());
+      } else {
+        s.beginEdit();
+        s.compositeColor(bounds, paint, area, 'over', 1);
+        this.pushPixels('history.fill', layer, s.endEdit());
+      }
       this.layerChanged(layer, bounds);
     } finally {
       this.fillBusy = false;
@@ -999,6 +1045,48 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     if (this._transparentSelection) f.setKeyColor(this._secondary);
     this.setLive(f);
     return f;
+  }
+
+  // ---- fill patterns ---------------------------------------------------------------------
+
+  private savedPatterns = new Map<string, { name: string; tile: ImageBuf }>();
+
+  patternsInfo(): PatternInfo[] {
+    return [
+      ...BUILTIN_PATTERNS.map((p) => ({ id: p.id, labelKey: p.labelKey, builtin: true })),
+      ...[...this.savedPatterns].map(([id, p]) => ({ id, name: p.name, builtin: false })),
+    ];
+  }
+
+  /** A pattern made from a selection (kept by the UI under %APPDATA%). */
+  addSavedPattern(id: string, name: string, tile: ImageBuf): void {
+    this.savedPatterns.set(id, { name, tile });
+    this.emit('patterns', this.patternsInfo());
+  }
+
+  removeSavedPattern(id: string): void {
+    if (this.savedPatterns.delete(id)) this.emit('patterns', this.patternsInfo());
+  }
+
+  /** One tile of a pattern: built-ins in the given colours, saved patterns as made. */
+  patternTile(p: FillPattern): ImageBuf | null {
+    const k = Math.max(1, Math.min(8, Math.round(p.scale)));
+    const def = patternById(p.pattern);
+    if (def) return renderPattern(def, p.fg, p.bg, k);
+    const saved = this.savedPatterns.get(p.pattern);
+    if (!saved) return null;
+    return k === 1 ? saved.tile : resample(saved.tile, saved.tile.w * k, saved.tile.h * k, 'nearest');
+  }
+
+  /** The visible image inside the selection (outside it transparent), for a new pattern. */
+  patternFromSelection(): ImageBuf | null {
+    this.commitLive(true);
+    const sel = this.doc.selection;
+    if (!sel) return null;
+    const b = sel.bounds;
+    const img = this.flatten(false, b);
+    for (let i = 0; i < sel.mask.length; i++) img.data[i * 4 + 3] = (img.data[i * 4 + 3] * sel.mask[i]) / 255;
+    return img;
   }
 
   get transforming(): TransformObject | null {

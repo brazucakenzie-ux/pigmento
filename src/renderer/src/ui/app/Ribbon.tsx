@@ -158,6 +158,7 @@ function HomeTab() {
               </SubMenu>
               <ActionMenuItem id="saveSelection" close={close} />
               <ActionMenuItem id="loadSelection" close={close} />
+              <ActionMenuItem id="definePattern" close={close} />
               <MenuSeparator />
               <ActionMenuItem id="transparentSelection" close={close} />
             </>

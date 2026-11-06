@@ -5,7 +5,7 @@ import type { PixelView } from '../raster/pixels';
 import type { Selection } from '../doc/Selection';
 import type { I18nKey } from '../../i18n';
 
-export type LiveKind = 'shape' | 'text' | 'float' | 'transform';
+export type LiveKind = 'shape' | 'text' | 'float' | 'transform' | 'gradient';
 
 /**
  * Something being edited above the active layer that hasn't been rasterised yet: a shape with

@@ -43,6 +43,7 @@ export function bindEngine(settings: Settings): void {
     layers: engine.layers.info(),
     savedSelections: engine.savedSelectionsInfo(),
     transform: engine.transformInfo(),
+    patterns: engine.patternsInfo(),
   });
 
   engine.on('doc', (doc) => useUi.setState({ doc }));
@@ -58,6 +59,7 @@ export function bindEngine(settings: Settings): void {
   engine.on('layers', (layers) => useUi.setState({ layers }));
   engine.on('savedSelections', (savedSelections) => useUi.setState({ savedSelections }));
   engine.on('transform', (transform) => useUi.setState({ transform }));
+  engine.on('patterns', (patterns) => useUi.setState({ patterns }));
 
   engine.on('tool', ({ id }) => {
     useUi.setState({ tool: id });

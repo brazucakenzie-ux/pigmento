@@ -26,7 +26,7 @@ export type OptionSpec =
       min: number;
       max: number;
       step?: number;
-      unit?: 'px' | '%' | 'pt';
+      unit?: 'px' | '%' | 'pt' | '×';
       default: number;
       /** Quick-pick values shown as chips (Paint-style size picker). */
       presets?: number[];
@@ -41,9 +41,29 @@ export type OptionSpec =
       iconsOnly?: boolean;
     })
   | (OptionBase & { type: 'font'; default: string })
+  /** Gradient colours: a list of stops, or null for primary → secondary colour. */
+  | (OptionBase & { type: 'gradient'; default: GradientStopValue[] | null })
+  /** A fill pattern id (built-in or saved). */
+  | (OptionBase & { type: 'pattern'; default: string })
   | (OptionBase & { type: 'hint' });
 
 export type ToolOptions = Record<string, unknown>;
+
+/** How gradient stops are kept in tool options (and settings): colour as #rrggbbaa. */
+export interface GradientStopValue {
+  pos: number;
+  color: string;
+}
+
+/** Pattern paint for the Fill tool. */
+export interface FillPattern {
+  pattern: string;
+  /** Pattern colours for built-in patterns (saved patterns keep their own). */
+  fg: RGBA;
+  bg: RGBA | null;
+  /** Whole-number zoom of the tile, 1–8. */
+  scale: number;
+}
 
 export interface ToolPointerEvent {
   /** Document coordinates (fractional). */
@@ -112,7 +132,8 @@ export interface ToolContext {
   restorePreviousTool(): void;
   /** Colour of the composited image (paper included) at a document pixel. */
   sampleColor(x: number, y: number): RGBA;
-  floodFill(x: number, y: number, color: RGBA, tolerance: number, contiguous: boolean): Promise<void>;
+  /** Fill the area of similar colour with a colour or a pattern. */
+  floodFill(x: number, y: number, paint: RGBA | FillPattern, tolerance: number, contiguous: boolean): Promise<void>;
   zoomAt(zoom: number, sx: number, sy: number): void;
   zoomToRect(r: Rect): void;
   setCursor(css: string): void;

@@ -211,6 +211,37 @@ const LUCIDE: Record<string, LucideIcon> = {
 
 /** Hand-drawn icons for things Lucide doesn't cover (same 24px grid, 2px stroke). */
 const CUSTOM: Record<string, JSX.Element> = {
+  gradient: (
+    <>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+      <path d="M7 4.5v15M11 4.5v15" strokeOpacity="0.85" />
+      <path d="M15 4.5v15" strokeOpacity="0.45" />
+    </>
+  ),
+  'grad-linear': (
+    <>
+      <rect x="3.5" y="5.5" width="17" height="13" rx="2" />
+      <path d="M8 5.5v13M12.5 5.5v13" strokeOpacity="0.6" />
+    </>
+  ),
+  'grad-radial': (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <circle cx="12" cy="12" r="4.5" strokeOpacity="0.6" />
+    </>
+  ),
+  'grad-angular': (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 12V3.5M12 12l6 6" strokeOpacity="0.6" />
+    </>
+  ),
+  'grad-diamond': (
+    <>
+      <path d="M12 3 21 12 12 21 3 12Z" strokeLinejoin="round" />
+      <path d="M12 7.5 16.5 12 12 16.5 7.5 12Z" strokeLinejoin="round" strokeOpacity="0.6" />
+    </>
+  ),
   'tf-skew': <path d="M8 5h12l-4 14H4Z" strokeLinejoin="round" />,
   'tf-distort': <path d="M5 4.5 19.5 7 17 19.5 3.5 16Z" strokeLinejoin="round" />,
   'tf-perspective': <path d="M8 5h8l4.5 14h-17Z" strokeLinejoin="round" />,

@@ -4,7 +4,7 @@ import type { AutosaveEntry, RecentFile, SystemTheme } from '@shared/ipc';
 import { defaultSettings, type Settings } from '@shared/settings';
 import type { RGBA } from '@engine/core/color';
 import type { Point } from '@engine/core/geometry';
-import type { DocInfo, HistoryInfo, Notice, SavedSelectionInfo, SelectionInfo } from '@engine/Engine';
+import type { DocInfo, HistoryInfo, Notice, PatternInfo, SavedSelectionInfo, SelectionInfo } from '@engine/Engine';
 import type { TransformInfo } from '@engine/live/TransformObject';
 import type { SelectionModify } from '@engine/doc/Selection';
 import type { LayersInfo } from '@engine/doc/LayerController';
@@ -29,6 +29,7 @@ export type DialogState =
   | { kind: 'colorRange' }
   | { kind: 'saveSelection' }
   | { kind: 'loadSelection' }
+  | { kind: 'gradient' }
   | { kind: 'pasteLarger'; w: number; h: number; resolve: (r: 'enlarge' | 'keep' | null) => void }
   | { kind: 'shortcuts' }
   | { kind: 'about' };
@@ -71,6 +72,7 @@ export interface UiState {
   layers: LayersInfo;
   savedSelections: SavedSelectionInfo[];
   transform: TransformInfo | null;
+  patterns: PatternInfo[];
 }
 
 export const useUi = create<UiState>(() => ({
@@ -100,6 +102,7 @@ export const useUi = create<UiState>(() => ({
   layers: { tree: [], activeId: '', count: 0 },
   savedSelections: [],
   transform: null,
+  patterns: [],
 }));
 
 let pendingPatch: Partial<Settings> = {};

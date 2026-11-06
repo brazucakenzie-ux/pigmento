@@ -30,7 +30,9 @@ export function NumberField({
   useEffect(() => setText(value.toFixed(decimals)), [value, decimals]);
   const commit = () => {
     const v = Number(text.replace(',', '.'));
-    if (Number.isFinite(v)) onChange(Math.min(max, Math.max(min, v)));
+    const next = Math.min(max, Math.max(min, v));
+    // Leaving the field without changing it reports nothing (no spurious edits on blur).
+    if (Number.isFinite(v) && next !== value) onChange(next);
     else setText(value.toFixed(decimals));
   };
   return (

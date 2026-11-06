@@ -110,6 +110,30 @@ test('capture UI states', async () => {
     await shot('free-transform');
     await page.keyboard.press('Escape');
 
+    // Gradient: a live radial gradient with its options, then the editor.
+    await page.keyboard.press('g');
+    await page.getByRole('radio', { name: 'Radial' }).click();
+    await drag(page, [
+      [900, 600],
+      [1150, 760],
+    ]);
+    await page.mouse.move(700, 700);
+    await page.waitForTimeout(150);
+    await shot('gradient-live');
+    await page.getByRole('button', { name: /^Colours:/ }).click();
+    await page.getByRole('dialog', { name: 'Edit gradient' }).getByRole('button', { name: 'Dusk' }).click();
+    await page.waitForTimeout(200);
+    await shot('gradient-dialog');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('f');
+    await page.getByRole('radio', { name: 'Pattern', exact: true }).click();
+    await page.getByRole('button', { name: /^Pattern: / }).click();
+    await page.waitForTimeout(200);
+    await shot('pattern-picker');
+    await page.keyboard.press('Escape');
+    await page.getByRole('radio', { name: 'Colour', exact: true }).click();
+
     await page.getByRole('button', { name: 'File' }).click();
     await page.waitForTimeout(250);
     await shot('file-menu');

@@ -5,6 +5,7 @@ import type { I18nKey } from '../../i18n';
 import { engine } from '../state/engine';
 import { openDialog, updateSettings, useUi, type UiState } from '../state/store';
 import * as files from '../services/files';
+import { makePatternFromSelection } from '../services/patterns';
 import { THEME_FAMILIES } from '../theme/themes';
 
 export type ActionGroup = 'file' | 'edit' | 'view' | 'tools' | 'image' | 'colors';
@@ -104,6 +105,7 @@ const base: Action[] = [
   { id: 'grow', labelKey: 'action.grow', icon: 'fit-canvas', group: 'edit', run: () => selectionDialog({ kind: 'modifySelection', op: 'grow' }), enabled: hasSelection },
   { id: 'shrink', labelKey: 'action.shrink', icon: 'trim', group: 'edit', run: () => selectionDialog({ kind: 'modifySelection', op: 'shrink' }), enabled: hasSelection },
   { id: 'border', labelKey: 'action.border', icon: 'select', group: 'edit', run: () => selectionDialog({ kind: 'modifySelection', op: 'border' }), enabled: hasSelection },
+  { id: 'definePattern', labelKey: 'action.definePattern', icon: 'fill', group: 'edit', run: async () => void (await makePatternFromSelection()), enabled: hasSelection },
   { id: 'saveSelection', labelKey: 'action.saveSelection', icon: 'save-selection', group: 'edit', run: () => selectionDialog({ kind: 'saveSelection' }), enabled: hasSelection },
   { id: 'loadSelection', labelKey: 'action.loadSelection', icon: 'load-selection', group: 'edit', run: () => selectionDialog({ kind: 'loadSelection' }), enabled: (s) => s.savedSelections.length > 0 },
   { id: 'delete', labelKey: 'action.delete', icon: 'delete', group: 'edit', shortcut: ['Delete'], run: () => engine.deleteSelection(), enabled: hasSelection },

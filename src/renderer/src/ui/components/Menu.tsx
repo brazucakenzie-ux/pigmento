@@ -19,6 +19,8 @@ interface MenuProps {
   /** Open beside the anchor (submenus) instead of below it. */
   side?: 'below' | 'right';
   label: string;
+  /** Extra class (e.g. a grid of pattern tiles). */
+  className?: string;
 }
 
 function focusItem(menu: HTMLElement, dir: 1 | -1 | 'first' | 'last'): void {
@@ -33,7 +35,7 @@ function focusItem(menu: HTMLElement, dir: 1 | -1 | 'first' | 'last'): void {
 }
 
 /** Popover menu anchored to an element; arrow keys move, Esc and outside clicks close. */
-export function Menu({ anchor, open, onClose, children, side = 'below', label }: MenuProps) {
+export function Menu({ anchor, open, onClose, children, side = 'below', label, className }: MenuProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
@@ -84,7 +86,7 @@ export function Menu({ anchor, open, onClose, children, side = 'below', label }:
   };
 
   return (
-    <div ref={ref} popover="auto" className="menu" role="menu" aria-label={label} onKeyDown={onKeyDown}>
+    <div ref={ref} popover="auto" className={`menu ${className ?? ''}`} role="menu" aria-label={label} onKeyDown={onKeyDown}>
       {open ? children : null}
     </div>
   );

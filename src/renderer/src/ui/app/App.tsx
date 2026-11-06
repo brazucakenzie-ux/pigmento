@@ -6,6 +6,8 @@ import { AboutDialog, EditColorsDialog, PasteLargerDialog, QualityDialog, Recove
 import { clearOwnAutosave, offerRecovery, startAutosave } from '../services/autosave';
 import { CanvasSizeDialog, NewImageDialog, PropertiesDialog, ResizeDialog, RotateDialog } from '../dialogs/ImageDialogs';
 import { ExportDialog } from '../dialogs/ExportDialog';
+import { GradientDialog } from '../dialogs/GradientDialog';
+import { loadSavedPatterns } from '../services/patterns';
 import { ColorRangeDialog, LoadSelectionDialog, ModifySelectionDialog, SaveSelectionDialog } from '../dialogs/SelectionDialogs';
 import { confirmDiscard, openPath } from '../services/files';
 import { bindEngine, engine } from '../state/engine';
@@ -124,6 +126,8 @@ function DialogHost() {
       return <SaveSelectionDialog />;
     case 'loadSelection':
       return <LoadSelectionDialog />;
+    case 'gradient':
+      return <GradientDialog />;
   }
 }
 
@@ -163,6 +167,7 @@ export function App() {
       if (info.isE2E) installTestHook();
       useUi.setState({ ready: true });
       void loadFonts();
+      void loadSavedPatterns();
       startAutosave();
       const launch = await api.window.getLaunchFile();
       if (launch) await openPath(launch, true);

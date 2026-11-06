@@ -26,6 +26,7 @@ import { addRecent, clearRecent, getRecent, removeRecent } from './recent';
 import { getSettings, updateSettings } from './settings';
 import { setWallpaper } from './wallpaper';
 import { clearAutosave, listRecoverable, readAutosave, registerSession, releaseSession, writeAutosave } from './autosave';
+import { listPatterns, MAX_PATTERN_BYTES, removePattern, savePattern } from './patterns';
 import {
   TOP_BAR_HEIGHT,
   allowCloseAndClose,
@@ -287,6 +288,15 @@ export function registerIpc(): void {
     await clearAutosave(id);
   });
   ipcMain.handle(IPC.autosaveList, () => listRecoverable());
+  ipcMain.handle(IPC.patternsList, () => listPatterns());
+  ipcMain.handle(IPC.patternsSave, (_e, png: unknown, name: unknown) => {
+    if (typeof name !== 'string') throw new Error('Invalid pattern name');
+    return savePattern(bytesArg(png, MAX_PATTERN_BYTES), name);
+  });
+  ipcMain.handle(IPC.patternsRemove, (_e, id: unknown) => {
+    if (typeof id !== 'string') throw new Error('Invalid pattern id');
+    return removePattern(id);
+  });
   ipcMain.handle(IPC.autosaveRead, (_e, id: unknown) => {
     if (typeof id !== 'string') throw new Error('Invalid session id');
     return readAutosave(id);

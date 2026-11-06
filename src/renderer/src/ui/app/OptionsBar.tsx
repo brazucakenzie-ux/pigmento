@@ -6,6 +6,7 @@ import { NumberField, Segmented, Slider } from '../components/Controls';
 import { engine } from '../state/engine';
 import { useUi } from '../state/store';
 import { runAction } from '../actions/actions';
+import { GradientButton, PatternPicker } from './PaintOptions';
 
 const FALLBACK_FONTS = ['Segoe UI', 'Arial', 'Calibri', 'Cambria', 'Comic Sans MS', 'Consolas', 'Georgia', 'Impact', 'Segoe Print', 'Times New Roman', 'Trebuchet MS', 'Verdana'];
 
@@ -81,6 +82,10 @@ function OptionControl({ toolId, spec, values }: { toolId: string; spec: OptionS
           <FontPicker value={String(values[spec.key] ?? spec.default)} onChange={set} label={label} />
         </span>
       );
+    case 'gradient':
+      return <GradientButton value={values[spec.key] ?? spec.default} label={label} />;
+    case 'pattern':
+      return <PatternPicker value={String(values[spec.key] ?? spec.default)} onChange={set} label={label} />;
     case 'hint':
       return (
         <span className="opt-hint" data-tip={label}>
