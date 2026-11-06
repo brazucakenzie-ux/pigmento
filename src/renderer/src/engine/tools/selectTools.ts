@@ -82,6 +82,8 @@ const CLOSE_PX = 8;
 export function createSelectTool(cfg: SelectToolConfig): Tool {
   let creating: Creating | null = null;
   let draggingFloat = false;
+  /** Where a float drag started and the float's area then (for snapping its edges). */
+  let floatDrag: { at: Point; bounds: { x: number; y: number; w: number; h: number }; body: boolean } | null = null;
   /** Polygon being clicked out, with the rubber-band end following the pointer. */
   let hoverPoint: Point | null = null;
 
@@ -135,7 +137,8 @@ export function createSelectTool(cfg: SelectToolConfig): Tool {
     const before = ctx.doc.selection;
     // A new selection hides the old one while it's drawn; combining keeps it visible.
     if (mode === 'replace') ctx.setSelection(null);
-    creating = { start: p, current: p, points: [p], sp: { x: e.sx, y: e.sy }, shift: e.shift, alt: e.alt, moved: false, mode, modeKeys, before };
+    const s = cfg.kind === 'lasso' ? p : ctx.snapPoint(p);
+    creating = { start: s, current: s, points: [s], sp: { x: e.sx, y: e.sy }, shift: e.shift, alt: e.alt, moved: false, mode, modeKeys, before };
   };
 
   return {
@@ -161,7 +164,7 @@ export function createSelectTool(cfg: SelectToolConfig): Tool {
         // The second click of a double-click finishes (the first one already placed the corner).
         if (e.detail >= 2) return closePolygon(ctx);
         const last = c.points[c.points.length - 1];
-        c.points.push(e.shift ? constrain(last, p) : p);
+        c.points.push(e.shift ? constrain(last, p) : ctx.snapPoint(p));
         ctx.invalidateOverlay();
         return;
       }
@@ -179,6 +182,7 @@ export function createSelectTool(cfg: SelectToolConfig): Tool {
           }
           f.beginDrag(hit, p);
           draggingFloat = true;
+          floatDrag = { at: p, bounds: f.extent(), body: hit.type === 'body' };
           return;
         }
         // Put the floating pixels down; combining modes keep their selection to build on.
@@ -192,6 +196,7 @@ export function createSelectTool(cfg: SelectToolConfig): Tool {
           if (f) {
             f.beginDrag(h ? { type: 'handle', handle: h } : { type: 'body' }, p);
             draggingFloat = true;
+            floatDrag = { at: p, bounds: f.extent(), body: !h };
           }
           return;
         }
@@ -204,7 +209,13 @@ export function createSelectTool(cfg: SelectToolConfig): Tool {
       const f = floatOf(ctx);
       if (draggingFloat && f) {
         const before = f.bounds();
-        f.drag(p, { shift: e.shift, alt: e.alt });
+        let q = p;
+        if (floatDrag?.body) {
+          const b = floatDrag.bounds;
+          const c = ctx.snapMove({ ...b, x: b.x + p.x - floatDrag.at.x, y: b.y + p.y - floatDrag.at.y });
+          q = { x: p.x + c.x, y: p.y + c.y };
+        }
+        f.drag(q, { shift: e.shift, alt: e.alt });
         ctx.invalidate(rectUnion(before, f.bounds()));
         ctx.emitSelectionInfo();
         return;
@@ -216,7 +227,7 @@ export function createSelectTool(cfg: SelectToolConfig): Tool {
         ctx.invalidateOverlay();
         return;
       }
-      c.current = p;
+      c.current = cfg.kind === 'lasso' ? p : ctx.snapPoint(p);
       // A lasso ends where it began, so "was it a click?" must look at the whole gesture.
       if (Math.hypot(e.sx - c.sp.x, e.sy - c.sp.y) >= 3) c.moved = true;
       // A modifier that picked the mode constrains the shape once it's released and pressed again.
@@ -231,11 +242,12 @@ export function createSelectTool(cfg: SelectToolConfig): Tool {
       ctx.invalidateOverlay();
     },
 
-    pointerUp(ctx, e) {
+    pointerUp(ctx) {
       const f = floatOf(ctx);
       if (draggingFloat) {
         f?.endDrag();
         draggingFloat = false;
+        floatDrag = null;
         return;
       }
       if (cfg.kind === 'polygon') return;
@@ -249,7 +261,7 @@ export function createSelectTool(cfg: SelectToolConfig): Tool {
         ctx.invalidateOverlay();
         return;
       }
-      finish(ctx, c, shapeOf(c, { x: e.x, y: e.y }, ctx.doc));
+      finish(ctx, c, shapeOf(c, c.current, ctx.doc));
     },
 
     hover(ctx, e) {
@@ -341,6 +353,7 @@ export function createSelectTool(cfg: SelectToolConfig): Tool {
       creating = null;
       hoverPoint = null;
       draggingFloat = false;
+      floatDrag = null;
     },
   };
 }

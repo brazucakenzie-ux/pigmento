@@ -21,8 +21,8 @@ let swapped = false;
 let firstDrag: Point | null = null;
 let editing = false;
 
-function next(e: ToolPointerEvent, last: Point | undefined): Point {
-  const p = snapCenter(e);
+function next(ctx: ToolContext, e: ToolPointerEvent, last: Point | undefined): Point {
+  const p = ctx.snapPoint(snapCenter(e));
   return e.shift && last ? snapAngle45(last, p) : p;
 }
 
@@ -72,7 +72,7 @@ export default registerTool({
         close(ctx);
         return;
       }
-      refresh(ctx, s, () => s.points.push(next(e, pts[pts.length - 1])));
+      refresh(ctx, s, () => s.points.push(next(ctx, e, pts[pts.length - 1])));
       return;
     }
     if (s && beginShapeEdit(ctx, e)) {
@@ -82,7 +82,7 @@ export default registerTool({
     ctx.commitLive();
     if (!ctx.canPaint()) return;
     swapped = e.button === 2;
-    const p = snapCenter(e);
+    const p = ctx.snapPoint(snapCenter(e));
     const shape = new ShapeObject('polygon', shapeStyle(ctx, 'polygon', swapped), ctx.doc.width, ctx.doc.height, { points: [p] });
     shape.open = true;
     shape.rubber = p;
@@ -96,7 +96,7 @@ export default registerTool({
       return;
     }
     const s = liveShape(ctx);
-    if (s?.open) refresh(ctx, s, () => (s.rubber = next(e, s.points[s.points.length - 1])));
+    if (s?.open) refresh(ctx, s, () => (s.rubber = next(ctx, e, s.points[s.points.length - 1])));
   },
 
   pointerUp(ctx, e) {
@@ -107,7 +107,7 @@ export default registerTool({
     }
     const s = liveShape(ctx);
     if (s?.open && firstDrag && s.points.length === 1) {
-      const p = next(e, firstDrag);
+      const p = next(ctx, e, firstDrag);
       if (Math.hypot(p.x - firstDrag.x, p.y - firstDrag.y) >= 2) refresh(ctx, s, () => s.points.push(p));
     }
     firstDrag = null;
@@ -116,7 +116,7 @@ export default registerTool({
   hover(ctx, e) {
     const s = liveShape(ctx);
     if (s?.open) {
-      refresh(ctx, s, () => (s.rubber = next(e, s.points[s.points.length - 1])));
+      refresh(ctx, s, () => (s.rubber = next(ctx, e, s.points[s.points.length - 1])));
       ctx.setCursor('crosshair');
       return;
     }

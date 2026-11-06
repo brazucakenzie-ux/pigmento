@@ -328,6 +328,14 @@ export class ShapeObject implements LiveObject {
     return this.dragStart !== null;
   }
 
+  /** What the current drag moves, and the shape's bounds when it started (for snapping). */
+  get dragInfo(): { body: boolean; rotate: boolean; at: Point; bounds: Rect | null } | null {
+    const d = this.dragStart;
+    if (!d) return null;
+    const bounds = d.box ? boxBounds(d.box) : boundsOfPoints(d.points);
+    return { body: d.hit.type === 'body', rotate: d.hit.type === 'box' && d.hit.handle === 'rotate', at: d.at, bounds };
+  }
+
   drawOverlay(ov: Overlay): void {
     const screen = (q: Point) => ov.toScreen(q);
     const zoom = ov.view.zoom;

@@ -132,6 +132,10 @@ export interface ToolContext {
   restorePreviousTool(): void;
   /** Colour of the composited image (paper included) at a document pixel. */
   sampleColor(x: number, y: number): RGBA;
+  /** Snap a document point to the grid, guides, canvas and objects (when snapping is on). */
+  snapPoint(p: Point): Point;
+  /** Shift that lines a moving box up with the snap targets (shows alignment lines). */
+  snapMove(r: Rect): Point;
   /** Fill the area of similar colour with a colour or a pattern. */
   floodFill(x: number, y: number, paint: RGBA | FillPattern, tolerance: number, contiguous: boolean): Promise<void>;
   zoomAt(zoom: number, sx: number, sy: number): void;

@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { t } from '../../i18n';
 import { engine } from '../state/engine';
-import { useUi } from '../state/store';
+import { updateSettings, useUi } from '../state/store';
+import { viewOptionsOf } from '../state/engine';
 import { openDroppedFile } from '../services/files';
 
 function niceStep(zoom: number): number {
@@ -15,6 +16,41 @@ function cssVar(name: string): string {
 
 function Ruler({ axis }: { axis: 'x' | 'y' }) {
   const ref = useRef<HTMLCanvasElement>(null);
+  // The top ruler makes horizontal guides (constant y), the left one vertical guides.
+  const guideAxis = axis === 'x' ? 'y' : 'x';
+  const dragging = useRef(false);
+
+  /** Where a guide dragged out of the ruler would go, and whether the pointer is over the canvas. */
+  const guideAt = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    const host = document.querySelector('.canvas-host')!.getBoundingClientRect();
+    const sx = e.clientX - host.left;
+    const sy = e.clientY - host.top;
+    const p = engine.view.toDoc(sx, sy);
+    const inside = sx >= 0 && sy >= 0 && sx <= host.width && sy <= host.height;
+    return { inside, pos: engine.snapGuidePos(guideAxis, guideAxis === 'x' ? p.x : p.y) };
+  };
+  const onDown = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (e.button !== 0) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragging.current = true;
+    const v = useUi.getState().settings.view;
+    if (!v.showGuides) {
+      const next = { ...v, showGuides: true };
+      updateSettings({ view: next });
+      engine.setViewOptions(viewOptionsOf(next));
+    }
+    engine.setGuidePreview({ axis: guideAxis, pos: guideAt(e).pos, id: null });
+  };
+  const onMove = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (dragging.current) engine.setGuidePreview({ axis: guideAxis, pos: guideAt(e).pos, id: null });
+  };
+  const onUp = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (!dragging.current) return;
+    dragging.current = false;
+    const { inside, pos } = guideAt(e);
+    engine.setGuidePreview(null);
+    if (inside) engine.addGuide(guideAxis, pos);
+  };
   const view = useUi((s) => s.view);
   const cursor = useUi((s) => s.cursor);
   const theme = useUi((s) => s.settings.theme);
@@ -86,7 +122,20 @@ function Ruler({ axis }: { axis: 'x' | 'y' }) {
     }
   }, [axis, view, cursor, theme]);
 
-  return <canvas ref={ref} className={`ruler ${axis === 'x' ? 'top' : 'left'}`} aria-hidden="true" />;
+  return (
+    <canvas
+      ref={ref}
+      className={`ruler ${axis === 'x' ? 'top' : 'left'}`}
+      aria-hidden="true"
+      onPointerDown={onDown}
+      onPointerMove={onMove}
+      onPointerUp={onUp}
+      onPointerCancel={() => {
+        dragging.current = false;
+        engine.setGuidePreview(null);
+      }}
+    />
+  );
 }
 
 function Scrollbar({ axis }: { axis: 'x' | 'y' }) {

@@ -281,6 +281,23 @@ function ViewTab() {
         </div>
         <div className="rb-stack">
           <ActionButton id="statusBar" variant="small" />
+          <ActionButton id="guides" variant="small" />
+          {/* Snapping and guide options share one menu, so the View tab stays one screen wide. */}
+          <MenuButton label={t('group.snap')} icon="magnet">
+            {(close) => (
+              <>
+                <ActionMenuItem id="snap" close={close} />
+                <MenuSeparator />
+                <ActionMenuItem id="snapGrid" close={close} />
+                <ActionMenuItem id="snapGuides" close={close} />
+                <ActionMenuItem id="snapCanvas" close={close} />
+                <ActionMenuItem id="snapObjects" close={close} />
+                <MenuSeparator />
+                <ActionMenuItem id="lockGuides" close={close} />
+                <ActionMenuItem id="clearGuides" close={close} />
+              </>
+            )}
+          </MenuButton>
         </div>
       </RibbonGroup>
       <RibbonGroup label={t('group.panels')}>

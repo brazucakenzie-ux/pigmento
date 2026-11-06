@@ -8,6 +8,9 @@ export interface OverlayTheme {
   antsA: string;
   antsB: string;
   grid: string;
+  guide: string;
+  /** Smart alignment guides while dragging. */
+  smart: string;
 }
 
 export type HandleShape = 'square' | 'circle';
@@ -25,6 +28,8 @@ export class Overlay {
     antsA: '#000000',
     antsB: '#ffffff',
     grid: 'rgba(75, 75, 224, 0.28)',
+    guide: '#00a2d6',
+    smart: '#e5337f',
   };
 
   constructor(readonly view: View) {
@@ -106,6 +111,51 @@ export class Overlay {
     c.setLineDash([4, 4]);
     c.lineDashOffset = -this.antsOffset;
     c.strokeStyle = this.theme.antsA;
+    c.stroke();
+    c.restore();
+  }
+
+  /** A guide across the whole viewport at document position `pos`. */
+  guide(axis: 'x' | 'y', pos: number, active = false): void {
+    const c = this.ctx;
+    const w = this.canvas.width / this.dpr;
+    const h = this.canvas.height / this.dpr;
+    const s = this.view.toScreen(pos, pos);
+    c.save();
+    c.beginPath();
+    if (axis === 'x') {
+      const x = Math.round(s.x) + 0.5;
+      c.moveTo(x, 0);
+      c.lineTo(x, h);
+    } else {
+      const y = Math.round(s.y) + 0.5;
+      c.moveTo(0, y);
+      c.lineTo(w, y);
+    }
+    c.lineWidth = active ? 1.5 : 1;
+    c.strokeStyle = this.theme.guide;
+    c.stroke();
+    c.restore();
+  }
+
+  /** A smart alignment line from `from` to `to` (document units) at `pos`. */
+  smartLine(axis: 'x' | 'y', pos: number, from: number, to: number): void {
+    const c = this.ctx;
+    const a = axis === 'x' ? this.view.toScreen(pos, from) : this.view.toScreen(from, pos);
+    const b = axis === 'x' ? this.view.toScreen(pos, to) : this.view.toScreen(to, pos);
+    c.save();
+    c.beginPath();
+    if (axis === 'x') {
+      const x = Math.round(a.x) + 0.5;
+      c.moveTo(x, a.y - 6);
+      c.lineTo(x, b.y + 6);
+    } else {
+      const y = Math.round(a.y) + 0.5;
+      c.moveTo(a.x - 6, y);
+      c.lineTo(b.x + 6, y);
+    }
+    c.lineWidth = 1;
+    c.strokeStyle = this.theme.smart;
     c.stroke();
     c.restore();
   }

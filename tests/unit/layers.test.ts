@@ -111,6 +111,7 @@ function setup() {
     layerChanged() {},
     structureChanged() {},
     savedSelectionsChanged() {},
+    guidesChanged() {},
     layersChanged() {
       changes++;
     },

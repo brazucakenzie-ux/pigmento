@@ -95,6 +95,7 @@ describe('selection history', () => {
     structureChanged() {},
     layersChanged() {},
     savedSelectionsChanged() {},
+    guidesChanged() {},
     setSelection(s) {
       this.sel = s;
     },

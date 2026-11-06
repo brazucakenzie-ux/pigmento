@@ -66,7 +66,7 @@ export default registerTool({
     ctx.commitLive();
     if (!ctx.canPaint()) return;
     swapped = e.button === 2;
-    start = snapCenter(e);
+    start = ctx.snapPoint(snapCenter(e));
     stage = 'line';
     dragging = true;
   },
@@ -74,7 +74,7 @@ export default registerTool({
   pointerMove(ctx, e) {
     if (!dragging) return;
     const live = liveShape(ctx);
-    const p = snapCenter(e);
+    const p = ctx.snapPoint(snapCenter(e));
     if (stage === 'edit') {
       dragShapeEdit(ctx, e);
       return;

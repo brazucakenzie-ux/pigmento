@@ -1,6 +1,7 @@
 import type { RGBA } from '../core/color';
 import type { Rect } from '../core/geometry';
 import type { PaintDocument, RasterLayer, SavedSelection } from '../doc/Document';
+import type { Guide } from '../doc/guides';
 import type { Selection } from '../doc/Selection';
 import type { Surface, TileDelta } from '../raster/Surface';
 import type { I18nKey } from '../../i18n';
@@ -18,6 +19,8 @@ export interface CommandHost {
   setSelection(sel: Selection | null): void;
   /** The list of saved selections changed. */
   savedSelectionsChanged(): void;
+  /** Guides were added, moved or removed. */
+  guidesChanged(): void;
 }
 
 /** Pixel edit of one layer, stored as a tile delta (swap on undo/redo). */
@@ -60,6 +63,7 @@ export interface DocState {
   surfaces: Map<RasterLayer, Surface>;
   selection: Selection | null;
   saved: SavedSelection[];
+  guides: Guide[];
 }
 
 export function captureDocState(doc: PaintDocument): DocState {
@@ -71,6 +75,7 @@ export function captureDocState(doc: PaintDocument): DocState {
     surfaces: new Map(doc.rasterLayers().map((l) => [l, l.surface])),
     selection: doc.selection,
     saved: doc.savedSelections,
+    guides: doc.guides,
   };
 }
 
@@ -82,6 +87,7 @@ export function applyDocState(doc: PaintDocument, s: DocState): void {
   for (const [layer, surface] of s.surfaces) layer.surface = surface;
   doc.selection = s.selection;
   doc.savedSelections = s.saved;
+  doc.guides = s.guides;
 }
 
 /**
@@ -131,6 +137,28 @@ export class SavedSelectionsCommand implements Command {
   redo(): void {
     this.host.doc.savedSelections = this.after;
     this.host.savedSelectionsChanged();
+  }
+}
+
+/** Adding, moving or removing guides (they're saved with the project). */
+export class GuidesCommand implements Command {
+  readonly bytes = 64;
+
+  constructor(
+    readonly label: I18nKey,
+    private readonly host: CommandHost,
+    private readonly before: Guide[],
+    private readonly after: Guide[],
+  ) {}
+
+  undo(): void {
+    this.host.doc.guides = this.before;
+    this.host.guidesChanged();
+  }
+
+  redo(): void {
+    this.host.doc.guides = this.after;
+    this.host.guidesChanged();
   }
 }
 

@@ -11,6 +11,7 @@ import { Selection, type SelectionMode, type SelectionModify } from './doc/Selec
 import { History, type HistoryEntry } from './history/History';
 import {
   DocStateCommand,
+  GuidesCommand,
   PixelCommand,
   SavedSelectionsCommand,
   SelectionCommand,
@@ -25,6 +26,8 @@ import { FloatObject, rectOutline } from './live/FloatObject';
 import { TransformObject, type TransformInfo } from './live/TransformObject';
 import { rectQuad, type TransformParams } from './raster/warp';
 import { BUILTIN_PATTERNS, patternById, renderPattern, tileInto } from './raster/patterns';
+import { guide, reframeGuides, scaleGuides, type Guide } from './doc/guides';
+import { boxLines, snapBox, snapPoint, type SnapLine, type SnapMatch, type SnapTargets } from './snap';
 import { MAX_STOPS } from './raster/gradient';
 import type { LiveKind, LiveObject } from './live/LiveObject';
 import type { TextObject } from './live/TextObject';
@@ -133,6 +136,8 @@ export interface EngineEvents {
   transform: TransformInfo | null;
   /** Built-in and saved fill patterns. */
   patterns: PatternInfo[];
+  /** Number of guides (for enabling "Clear guides"). */
+  guides: number;
 }
 
 export type Anchor = 'nw' | 'n' | 'ne' | 'w' | 'c' | 'e' | 'sw' | 's' | 'se';
@@ -141,7 +146,18 @@ export interface ViewOptions {
   pixelGrid: boolean;
   gridlines: boolean;
   gridSize: number;
+  showGuides: boolean;
+  lockGuides: boolean;
+  /** Master switch, then what to snap to. */
+  snap: boolean;
+  snapGrid: boolean;
+  snapGuides: boolean;
+  snapCanvas: boolean;
+  snapObjects: boolean;
 }
+
+/** How close (screen px) a point or edge must be to snap. */
+const SNAP_PX = 6;
 
 export class EngineError extends Error {
   constructor(
@@ -218,7 +234,22 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   private _secondary: RGBA = { ...WHITE };
   private _live: LiveObject | null = null;
   private _transparentSelection = false;
-  private viewOptions: ViewOptions = { pixelGrid: true, gridlines: false, gridSize: 16 };
+  private viewOptions: ViewOptions = {
+    pixelGrid: true,
+    gridlines: false,
+    gridSize: 16,
+    showGuides: true,
+    lockGuides: false,
+    snap: true,
+    snapGrid: false,
+    snapGuides: true,
+    snapCanvas: true,
+    snapObjects: true,
+  };
+
+  get viewSettings(): Readonly<ViewOptions> {
+    return this.viewOptions;
+  }
   private frame = 0;
   private antsTimer = 0;
   private pixelsTimer = 0;
@@ -324,10 +355,14 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     const ov = this.overlay;
     ov.begin();
     if (this.viewOptions.gridlines) ov.gridlines(this.viewOptions.gridSize);
+    const gp = this.guidePreview;
+    if (this.viewOptions.showGuides) for (const g of this.doc.guides) if (g.id !== gp?.id) ov.guide(g.axis, g.pos);
+    if (gp) ov.guide(gp.axis, gp.pos, true);
     const sel = this.doc.selection;
     if (sel && !this._live?.lifted) ov.antsMany(sel.outlines);
     this._live?.drawOverlay(ov);
     this.activeTool.drawOverlay?.(this, ov, this.hover);
+    for (const m of this.snapLines) if (m.kind === 'object' || m.kind === 'canvas') ov.smartLine(m.axis, m.pos, m.from, m.to);
     this.input?.drawOverlay(ov);
     this.updateAntsTimer();
   }
@@ -412,8 +447,14 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.emitSelectionInfo();
     this.emit('layers', this.layers.info());
     this.savedSelectionsChanged();
+    this.emit('guides', this.doc.guides.length);
     this.requestRender();
     this.notifyPixels();
+  }
+
+  guidesChanged(): void {
+    this.emit('guides', this.doc.guides.length);
+    this.requestRender();
   }
 
   savedSelectionsChanged(): void {
@@ -1047,6 +1088,141 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     return f;
   }
 
+  // ---- guides and snapping ----------------------------------------------------------------
+
+  /** A guide being dragged (from a ruler, or an existing one): drawn instead of the original. */
+  guidePreview: { axis: 'x' | 'y'; pos: number; id: string | null } | null = null;
+
+  setGuidePreview(p: { axis: 'x' | 'y'; pos: number; id: string | null } | null): void {
+    this.guidePreview = p;
+    this.requestRender();
+  }
+
+  private pushGuides(label: I18nKey, after: Guide[]): void {
+    const before = this.doc.guides;
+    this.doc.guides = after;
+    this.history.push(new GuidesCommand(label, this, before, after));
+    this.guidesChanged();
+  }
+
+  addGuide(axis: 'x' | 'y', pos: number): void {
+    this.pushGuides('history.addGuide', [...this.doc.guides, guide(axis, pos)]);
+  }
+
+  moveGuide(id: string, pos: number): void {
+    const g = this.doc.guides.find((x) => x.id === id);
+    if (!g || g.pos === pos) return;
+    this.pushGuides('history.moveGuide', this.doc.guides.map((x) => (x.id === id ? guide(x.axis, pos, x.id) : x)));
+  }
+
+  removeGuide(id: string): void {
+    if (!this.doc.guides.some((g) => g.id === id)) return;
+    this.pushGuides('history.removeGuide', this.doc.guides.filter((g) => g.id !== id));
+  }
+
+  clearGuides(): void {
+    if (this.doc.guides.length) this.pushGuides('history.clearGuides', []);
+  }
+
+  /** The guide under a screen point (within a few pixels), if guides are shown. */
+  hitGuide(sp: Point, tolerance = 4): Guide | null {
+    if (!this.viewOptions.showGuides) return null;
+    let best: Guide | null = null;
+    let bestD = tolerance + 1;
+    for (const g of this.doc.guides) {
+      const s = this.view.toScreen(g.pos, g.pos);
+      const d = Math.abs(g.axis === 'x' ? s.x - sp.x : s.y - sp.y);
+      if (d < bestD) {
+        best = g;
+        bestD = d;
+      }
+    }
+    return bestD <= tolerance ? best : null;
+  }
+
+  /** Alignments found by the last snap (drawn as smart guides until the drag ends). */
+  private snapLines: SnapMatch[] = [];
+  private snapCache: { key: string; objects: { xs: SnapLine[]; ys: SnapLine[] } } | null = null;
+
+  /** Edges and centres of the other visible layers (cached until the image changes). */
+  private objectLines(): { xs: SnapLine[]; ys: SnapLine[] } {
+    const key = `${this.history.index}/${this.history.length}/${this.doc.activeId}/${this.doc.width}x${this.doc.height}`;
+    if (this.snapCache?.key === key) return this.snapCache.objects;
+    const xs: SnapLine[] = [];
+    const ys: SnapLine[] = [];
+    for (const l of this.doc.rasterLayers()) {
+      if (l.id === this.doc.activeId || !this.doc.isEffectivelyVisible(l.id)) continue;
+      const b = l.surface.contentBounds();
+      if (!b) continue;
+      const lines = boxLines(b, 'object');
+      xs.push(...lines.xs);
+      ys.push(...lines.ys);
+    }
+    this.snapCache = { key, objects: { xs, ys } };
+    return this.snapCache.objects;
+  }
+
+  private snapTargets(withGuides = true): SnapTargets | null {
+    const o = this.viewOptions;
+    if (!o.snap) return null;
+    const xs: SnapLine[] = [];
+    const ys: SnapLine[] = [];
+    const { width: w, height: h } = this.doc;
+    if (withGuides && o.snapGuides && o.showGuides) {
+      for (const g of this.doc.guides) (g.axis === 'x' ? xs : ys).push({ pos: g.pos, kind: 'guide', from: 0, to: g.axis === 'x' ? h : w });
+    }
+    if (o.snapCanvas) {
+      const c = boxLines({ x: 0, y: 0, w, h }, 'canvas');
+      xs.push(...c.xs);
+      ys.push(...c.ys);
+    }
+    if (o.snapObjects) {
+      const obj = this.objectLines();
+      xs.push(...obj.xs);
+      ys.push(...obj.ys);
+    }
+    return { xs, ys, grid: o.snapGrid ? o.gridSize : null };
+  }
+
+  /** Snap a document point (drawing, handles). Unchanged when snapping is off. */
+  snapPoint(p: Point): Point {
+    const t = this.snapTargets();
+    if (!t) return p;
+    const r = snapPoint(p, t, SNAP_PX / this.view.zoom);
+    this.snapLines = r.matches;
+    return r.point;
+  }
+
+  /** Shift that lines up a moving box (document units) with the snap targets. */
+  snapMove(r: Rect): Point {
+    const t = this.snapTargets();
+    if (!t) return { x: 0, y: 0 };
+    const s = snapBox(r, t, SNAP_PX / this.view.zoom);
+    this.snapLines = s.matches;
+    return { x: s.dx, y: s.dy };
+  }
+
+  /** Where a guide being dragged lands: whole pixels, pulled onto the grid, canvas and objects. */
+  snapGuidePos(axis: 'x' | 'y', raw: number): number {
+    const v = Math.round(raw);
+    const t = this.snapTargets(false);
+    if (!t) return v;
+    const r = snapPoint({ x: v, y: v }, t, SNAP_PX / this.view.zoom);
+    return axis === 'x' ? r.point.x : r.point.y;
+  }
+
+  /** The drag ended: stop showing alignment lines. */
+  endSnap(): void {
+    if (this.snapLines.length === 0) return;
+    this.snapLines = [];
+    this.requestRender();
+  }
+
+  /** For tests: the alignment lines being shown. */
+  get activeSnapLines(): readonly SnapMatch[] {
+    return this.snapLines;
+  }
+
   // ---- fill patterns ---------------------------------------------------------------------
 
   private savedPatterns = new Map<string, { name: string; tile: ImageBuf }>();
@@ -1460,6 +1636,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       layer.surface = Surface.fromRGBA(nw, nh, results[i].data);
     });
     this.doc.savedSelections = transformSaved(this.doc.savedSelections, w, h, (img) => affineTransform(img, centered, true));
+    // Guides can't rotate with the image; they keep their place on the larger canvas.
+    this.doc.guides = reframeGuides(this.doc.guides, { x: (w - nw) / 2, y: (h - nh) / 2, w: nw, h: nh });
     this.doc.width = nw;
     this.doc.height = nh;
     this.doc.selection = null;
@@ -1487,6 +1665,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       layer.surface = Surface.fromRGBA(w, h, out.data);
     }
     this.doc.savedSelections = transformSaved(this.doc.savedSelections, this.doc.width, this.doc.height, (img) => resample(img, w, h, method));
+    this.doc.guides = scaleGuides(this.doc.guides, this.doc.width, this.doc.height, w, h);
     this.doc.width = w;
     this.doc.height = h;
     this.doc.selection = null;
@@ -1522,6 +1701,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.doc.savedSelections = transformSaved(this.doc.savedSelections, this.doc.width, this.doc.height, (img) =>
       placeImage(img, r.w, r.h, -r.x, -r.y),
     );
+    this.doc.guides = reframeGuides(this.doc.guides, r);
     this.doc.width = r.w;
     this.doc.height = r.h;
     this.doc.selection = null;
@@ -1594,6 +1774,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.doc.savedSelections = transformSaved(this.doc.savedSelections, this.doc.width, this.doc.height, (img) =>
       placeImage(img, b.w, b.h, -b.x, -b.y),
     );
+    this.doc.guides = reframeGuides(this.doc.guides, b);
     this.doc.width = b.w;
     this.doc.height = b.h;
     this.doc.selection = null;

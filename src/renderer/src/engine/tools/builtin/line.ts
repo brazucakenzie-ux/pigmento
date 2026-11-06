@@ -35,13 +35,13 @@ export default registerTool({
     ctx.commitLive();
     if (!ctx.canPaint()) return;
     swapped = e.button === 2;
-    start = snapCenter(e);
+    start = ctx.snapPoint(snapCenter(e));
   },
 
   pointerMove(ctx, e) {
     if (dragShapeEdit(ctx, e)) return;
     if (!start) return;
-    let end = snapCenter(e);
+    let end = ctx.snapPoint(snapCenter(e));
     if (e.shift) end = snapAngle45(start, end);
     if (Math.hypot(end.x - start.x, end.y - start.y) < 1) return;
     const live = liveShape(ctx);

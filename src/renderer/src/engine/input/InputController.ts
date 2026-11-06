@@ -19,6 +19,12 @@ export class InputController {
   private toolButton: 0 | 2 = 0;
   private eraserOverride: string | null = null;
   private panning: { id: number; last: Point } | null = null;
+  /** A guide being dragged on the canvas (dropping it outside the view deletes it). */
+  private guideDrag: { id: number; guideId: string; axis: 'x' | 'y' } | null = null;
+  /** Ctrl was held at the last pointer event (Ctrl+drag moves guides). */
+  private ctrlHeld = false;
+  /** The status bar is showing the "Ctrl+drag a guide" hint. */
+  private guideHint = false;
   private spaceDown = false;
   private touches = new Map<number, Point>();
   private pinch: { dist: number; mid: Point; zoom: number } | null = null;
@@ -62,7 +68,7 @@ export class InputController {
 
   /** Any drag in progress (drawing, panning, pinching, resizing the canvas). */
   get isBusy(): boolean {
-    return this.toolPointer !== null || this.panning !== null || this.pinch !== null || this.canvasDrag !== null;
+    return this.toolPointer !== null || this.panning !== null || this.pinch !== null || this.canvasDrag !== null || this.guideDrag !== null;
   }
 
   private local(e: PointerEvent | WheelEvent): Point {
@@ -192,7 +198,7 @@ export class InputController {
       }
       if (this.touches.size > 2) return;
     }
-    if (this.toolPointer !== null || this.panning || this.canvasDrag) return;
+    if (this.toolPointer !== null || this.panning || this.canvasDrag || this.guideDrag) return;
     const sp = this.local(e);
 
     if (e.button === 1 || (this.spaceDown && e.button === 0)) {
@@ -206,6 +212,15 @@ export class InputController {
     const ch = e.button === 0 ? this.hitCanvasHandle(sp) : null;
     if (ch) {
       this.canvasDrag = { id: e.pointerId, handle: ch, w: engine.doc.width, h: engine.doc.height };
+      this.capture(e.pointerId);
+      return;
+    }
+
+    // Ctrl+drag moves a guide with any tool; without Ctrl, tools work right up to the guide (and snap to it).
+    const g = e.button === 0 && (e.ctrlKey || e.metaKey) && this.canGrabGuide() ? engine.hitGuide(sp) : null;
+    if (g) {
+      this.guideDrag = { id: e.pointerId, guideId: g.id, axis: g.axis };
+      engine.setGuidePreview({ axis: g.axis, pos: g.pos, id: g.id });
       this.capture(e.pointerId);
       return;
     }
@@ -256,6 +271,13 @@ export class InputController {
       return;
     }
 
+    if (this.guideDrag && e.pointerId === this.guideDrag.id) {
+      const p = engine.view.toDoc(sp.x, sp.y);
+      const { axis, guideId } = this.guideDrag;
+      engine.setGuidePreview({ axis, pos: engine.snapGuidePos(axis, axis === 'x' ? p.x : p.y), id: guideId });
+      return;
+    }
+
     const docP = engine.view.toDoc(sp.x, sp.y);
     engine.hover = docP;
     this.emitCursor(docP);
@@ -268,7 +290,13 @@ export class InputController {
       return;
     }
     if (this.toolPointer === null) {
+      this.ctrlHeld = e.ctrlKey || e.metaKey;
       engine.activeTool.hover?.(engine, this.toToolEvent(e, 0));
+      const overGuide = this.canGrabGuide() && engine.hitGuide(sp) !== null;
+      if (overGuide !== this.guideHint) {
+        this.guideHint = overGuide;
+        engine.setHint(overGuide ? 'hint.guide' : null);
+      }
       this.refreshCursor(sp);
       engine.requestRender();
     }
@@ -305,14 +333,33 @@ export class InputController {
       this.engine.requestRender();
       return;
     }
+    if (this.guideDrag && e.pointerId === this.guideDrag.id) {
+      const { guideId } = this.guideDrag;
+      this.guideDrag = null;
+      const sp = this.local(e);
+      const pos = this.engine.guidePreview?.pos;
+      this.engine.setGuidePreview(null);
+      // Dragged back onto a ruler (or anywhere off the canvas view): the guide goes away.
+      const inside = sp.x >= 0 && sp.y >= 0 && sp.x <= this.el.clientWidth && sp.y <= this.el.clientHeight;
+      if (!inside) this.engine.removeGuide(guideId);
+      else if (pos !== undefined) this.engine.moveGuide(guideId, pos);
+      this.refreshCursor(sp);
+      return;
+    }
     if (this.toolPointer === e.pointerId) this.endTool(e);
   };
+
+  /** Guides can be dragged with any tool, unless locked or something is being edited. */
+  private canGrabGuide(): boolean {
+    return !this.engine.viewSettings.lockGuides && this.engine.live === null;
+  }
 
   private endTool(e: PointerEvent): void {
     const engine = this.engine;
     engine.activeTool.pointerUp(engine, this.toToolEvent(e, this.toolButton));
     this.toolPointer = null;
     this.toolPointerType = null;
+    engine.endSnap();
     if (this.el.hasPointerCapture(e.pointerId)) this.el.releasePointerCapture(e.pointerId);
     if (this.eraserOverride) {
       const back = this.eraserOverride;
@@ -330,6 +377,10 @@ export class InputController {
     if (this.canvasDrag?.id === e.pointerId) {
       this.canvasDrag = null;
       this.engine.emit('canvasDrag', null);
+    }
+    if (this.guideDrag?.id === e.pointerId) {
+      this.guideDrag = null;
+      this.engine.setGuidePreview(null);
     }
     if (this.toolPointer === e.pointerId) this.endTool(e);
   };
@@ -415,6 +466,8 @@ export class InputController {
     if (sp) {
       const h = this.hitCanvasHandle(sp);
       if (h) return engine.setCursor(h === 'e' ? 'ew-resize' : h === 's' ? 'ns-resize' : 'nwse-resize');
+      const g = this.ctrlHeld && this.canGrabGuide() ? engine.hitGuide(sp) : null;
+      if (g) return engine.setCursor(g.axis === 'x' ? 'ew-resize' : 'ns-resize');
     }
     engine.setCursor(engine.activeTool.cursor(engine, engine.hover));
   }

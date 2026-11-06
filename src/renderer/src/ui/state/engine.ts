@@ -14,6 +14,22 @@ engine.layers.namer = (kind, arg) =>
 // The start-up document was created before the namer existed.
 for (const l of engine.doc.layers) if (!l.name) l.name = engine.layers.namer('layer', 1);
 
+/** The engine's view options from the saved View settings. */
+export function viewOptionsOf(v: Settings['view']): Parameters<typeof engine.setViewOptions>[0] {
+  return {
+    pixelGrid: v.pixelGrid,
+    gridlines: v.gridlines,
+    gridSize: v.gridSize,
+    showGuides: v.showGuides,
+    lockGuides: v.lockGuides,
+    snap: v.snap,
+    snapGrid: v.snapGrid,
+    snapGuides: v.snapGuides,
+    snapCanvas: v.snapCanvas,
+    snapObjects: v.snapObjects,
+  };
+}
+
 let bound = false;
 
 /** Mirror engine events into the UI store and persist tool/colour preferences. */
@@ -27,11 +43,7 @@ export function bindEngine(settings: Settings): void {
   if (p) engine.setPrimary(p);
   if (s) engine.setSecondary(s);
   if (engine.tools.has(settings.activeTool)) engine.setTool(settings.activeTool);
-  engine.setViewOptions({
-    pixelGrid: settings.view.pixelGrid,
-    gridlines: settings.view.gridlines,
-    gridSize: settings.view.gridSize,
-  });
+  engine.setViewOptions(viewOptionsOf(settings.view));
 
   useUi.setState({
     doc: engine.docInfo(),
@@ -44,6 +56,7 @@ export function bindEngine(settings: Settings): void {
     savedSelections: engine.savedSelectionsInfo(),
     transform: engine.transformInfo(),
     patterns: engine.patternsInfo(),
+    guides: engine.doc.guides.length,
   });
 
   engine.on('doc', (doc) => useUi.setState({ doc }));
@@ -60,6 +73,7 @@ export function bindEngine(settings: Settings): void {
   engine.on('savedSelections', (savedSelections) => useUi.setState({ savedSelections }));
   engine.on('transform', (transform) => useUi.setState({ transform }));
   engine.on('patterns', (patterns) => useUi.setState({ patterns }));
+  engine.on('guides', (guides) => useUi.setState({ guides }));
 
   engine.on('tool', ({ id }) => {
     useUi.setState({ tool: id });

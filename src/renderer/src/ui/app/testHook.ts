@@ -35,6 +35,9 @@ export function installTestHook(): void {
     selectionArea: () => engine.doc.selection?.area() ?? 0,
     savedSelections: () => engine.savedSelectionsInfo(),
     transformInfo: () => engine.transformInfo(),
+    guides: () => engine.doc.guides.map((g) => ({ axis: g.axis, pos: g.pos })),
+    addGuide: (axis: 'x' | 'y', pos: number) => engine.addGuide(axis, pos),
+    snapLines: () => engine.activeSnapLines.map((m) => ({ ...m })),
     /** Destination corners of the free transform in progress (TL, TR, BR, BL). */
     transformCorners: () => engine.transforming?.corners.map((p) => ({ x: p.x, y: p.y })) ?? null,
     openPath: (p: string) => openPath(p, true),

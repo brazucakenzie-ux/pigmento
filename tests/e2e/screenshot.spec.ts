@@ -134,6 +134,26 @@ test('capture UI states', async () => {
     await page.keyboard.press('Escape');
     await page.getByRole('radio', { name: 'Colour', exact: true }).click();
 
+    // Guides, and a smart alignment line while moving a selection onto the canvas centre.
+    await page.evaluate(() => {
+      const k = window.__pigmentoTest!;
+      k.addGuide('x', 200);
+      k.addGuide('y', 150);
+      k.selectRect(120, 360, 160, 120);
+    });
+    await page.keyboard.press('s');
+    await page.getByRole('tab', { name: 'View' }).click();
+    const from = await page.evaluate(() => window.__pigmentoTest!.docToScreen(200, 420));
+    const to = await page.evaluate(() => window.__pigmentoTest!.docToScreen(636, 420));
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(to.x, to.y, { steps: 8 });
+    await page.waitForTimeout(150);
+    await shot('guides-smart');
+    await page.mouse.up();
+    await page.keyboard.press('Escape');
+    await page.getByRole('tab', { name: 'Home' }).click();
+
     await page.getByRole('button', { name: 'File' }).click();
     await page.waitForTimeout(250);
     await shot('file-menu');

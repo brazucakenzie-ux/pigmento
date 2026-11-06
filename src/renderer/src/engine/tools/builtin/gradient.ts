@@ -93,7 +93,7 @@ export default registerTool({
   cursor: () => 'crosshair',
 
   pointerDown(ctx, e) {
-    const p = { x: e.x, y: e.y };
+    const p = ctx.snapPoint({ x: e.x, y: e.y });
     const g = gradientOf(ctx);
     if (g) {
       const hit = g.hit({ x: e.sx, y: e.sy }, (q) => ctx.view.toScreen(q.x, q.y));
@@ -117,7 +117,7 @@ export default registerTool({
     const g = gradientOf(ctx);
     if (!g || !dragging) return;
     const other = dragging === 'end' ? g.start : g.end;
-    const p = e.shift ? snapAngle(other, { x: e.x, y: e.y }) : { x: e.x, y: e.y };
+    const p = e.shift ? snapAngle(other, { x: e.x, y: e.y }) : ctx.snapPoint({ x: e.x, y: e.y });
     g.setPoint(dragging, p);
     ctx.invalidate(g.bounds());
   },

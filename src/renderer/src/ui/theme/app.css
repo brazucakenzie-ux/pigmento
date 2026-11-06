@@ -656,6 +656,13 @@
   background: var(--ruler-bg);
   display: block;
 }
+/* Drag a guide out of a ruler. */
+.ruler.top {
+  cursor: row-resize;
+}
+.ruler.left {
+  cursor: col-resize;
+}
 .ruler.top {
   grid-column: 2;
   grid-row: 1;

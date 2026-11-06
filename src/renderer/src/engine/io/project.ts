@@ -11,6 +11,7 @@ import {
   type SavedSelection,
 } from '../doc/Document';
 import { Selection } from '../doc/Selection';
+import { guide } from '../doc/guides';
 import { Surface } from '../raster/Surface';
 import { MAX_DIMENSION, MAX_PIXELS } from './protocol';
 
@@ -103,6 +104,11 @@ export const DocumentJsonSchema = z.object({
   layers: z.array(LayerJsonSchema).min(1).max(MAX_LAYERS),
   /** Optional: files without saved selections leave it out. */
   selections: z.array(SavedSelectionJson).max(MAX_SAVED_SELECTIONS).optional(),
+  /** Ruler guides; optional. */
+  guides: z
+    .array(z.object({ axis: z.enum(['x', 'y']), pos: z.number().min(-MAX_DIMENSION).max(2 * MAX_DIMENSION) }))
+    .max(1000)
+    .optional(),
 });
 
 export type DocumentJson = z.infer<typeof DocumentJsonSchema>;
@@ -166,6 +172,7 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
     activeId: doc.activeId,
     layers,
     ...(selections.length ? { selections } : {}),
+    ...(doc.guides.length ? { guides: doc.guides.map((g) => ({ axis: g.axis, pos: g.pos })) } : {}),
   };
   files['document.json'] = [strToU8(JSON.stringify(json, null, 1)), { level: 6 }];
   if (thumbnail) files['thumbnail.png'] = [thumbnail, { level: 0 }];
@@ -273,6 +280,7 @@ export async function loadProject(bytes: Uint8Array, codec: PngCodec): Promise<P
     saved.push({ id: s.id, name: s.name, selection: sel });
   }
   doc.savedSelections = saved;
+  doc.guides = (json.guides ?? []).map((g) => guide(g.axis, g.pos));
   return doc;
 }
 

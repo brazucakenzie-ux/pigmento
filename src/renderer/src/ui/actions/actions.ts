@@ -2,7 +2,7 @@ import type { ThemeMode } from '@shared/settings';
 import { toolRegistry } from '@engine/tools/ToolRegistry';
 import { reportEngineError } from '@engine/input/InputController';
 import type { I18nKey } from '../../i18n';
-import { engine } from '../state/engine';
+import { engine, viewOptionsOf } from '../state/engine';
 import { openDialog, updateSettings, useUi, type UiState } from '../state/store';
 import * as files from '../services/files';
 import { makePatternFromSelection } from '../services/patterns';
@@ -44,12 +44,26 @@ function setThemeMode(themeMode: ThemeMode): void {
   updateSettings({ themeMode });
 }
 
-function toggleView(key: 'rulers' | 'gridlines' | 'pixelGrid' | 'statusBar'): void {
+type ViewToggle = 'rulers' | 'gridlines' | 'pixelGrid' | 'statusBar' | 'showGuides' | 'lockGuides' | 'snap' | 'snapGrid' | 'snapGuides' | 'snapCanvas' | 'snapObjects';
+
+function toggleView(key: ViewToggle): void {
   const v = useUi.getState().settings.view;
   const next = { ...v, [key]: !v[key] };
+  // Picking something to snap to turns snapping on.
+  if (key.startsWith('snap') && key !== 'snap' && next[key]) next.snap = true;
   updateSettings({ view: next });
-  engine.setViewOptions({ pixelGrid: next.pixelGrid, gridlines: next.gridlines, gridSize: next.gridSize });
+  engine.setViewOptions(viewOptionsOf(next));
 }
+
+const viewToggle = (id: string, labelKey: I18nKey, key: ViewToggle, icon?: string, shortcut?: string[]): Action => ({
+  id,
+  labelKey,
+  icon,
+  group: 'view',
+  shortcut,
+  run: () => toggleView(key),
+  checked: (s) => s.settings.view[key],
+});
 
 function togglePanel(id: 'history' | 'navigator' | 'layers'): void {
   const p = useUi.getState().settings.panels;
@@ -143,6 +157,14 @@ const base: Action[] = [
   { id: 'rulers', labelKey: 'action.rulers', icon: 'ruler', group: 'view', shortcut: ['Ctrl+R'], run: () => toggleView('rulers'), checked: (s) => s.settings.view.rulers },
   { id: 'gridlines', labelKey: 'action.gridlines', icon: 'grid', group: 'view', shortcut: ['Ctrl+G'], run: () => toggleView('gridlines'), checked: (s) => s.settings.view.gridlines },
   { id: 'pixelGrid', labelKey: 'action.pixelGrid', icon: 'pixel-grid', group: 'view', run: () => toggleView('pixelGrid'), checked: (s) => s.settings.view.pixelGrid },
+  viewToggle('guides', 'action.guides', 'showGuides', 'guides', ['Ctrl+;']),
+  viewToggle('lockGuides', 'action.lockGuides', 'lockGuides', 'lock'),
+  { id: 'clearGuides', labelKey: 'action.clearGuides', icon: 'delete', group: 'view', run: () => engine.clearGuides(), enabled: (s) => s.guides > 0 },
+  viewToggle('snap', 'action.snap', 'snap', 'magnet'),
+  viewToggle('snapGrid', 'action.snapGrid', 'snapGrid', 'grid'),
+  viewToggle('snapGuides', 'action.snapGuides', 'snapGuides', 'guides'),
+  viewToggle('snapCanvas', 'action.snapCanvas', 'snapCanvas', 'canvas-size'),
+  viewToggle('snapObjects', 'action.snapObjects', 'snapObjects', 'layers'),
   { id: 'statusBar', labelKey: 'action.statusBar', icon: 'status-bar', group: 'view', run: () => toggleView('statusBar'), checked: (s) => s.settings.view.statusBar },
   {
     id: 'fullscreen',

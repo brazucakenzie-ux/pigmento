@@ -14,6 +14,9 @@ export interface PigmentoTestHook {
   savedSelections(): { id: string; name: string; w: number; h: number }[];
   transformInfo(): { x: number; y: number; w: number; h: number; angle: number; skew: number; distorted: boolean } | null;
   transformCorners(): { x: number; y: number }[] | null;
+  guides(): { axis: 'x' | 'y'; pos: number }[];
+  addGuide(axis: 'x' | 'y', pos: number): void;
+  snapLines(): { axis: 'x' | 'y'; pos: number; kind: string; from: number; to: number }[];
   openPath(path: string): Promise<boolean>;
   filePath(): string | null;
   autosaveNow(): Promise<boolean>;

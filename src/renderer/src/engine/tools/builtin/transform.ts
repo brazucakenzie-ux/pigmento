@@ -1,4 +1,5 @@
 import { TransformObject, type TransformHit } from '../../live/TransformObject';
+import { quadBounds } from '../../raster/warp';
 import type { TransformMode } from '../../live/quadEdit';
 import { registerTool } from '../ToolRegistry';
 import type { ToolContext } from '../Tool';
@@ -8,6 +9,9 @@ const MODES: TransformMode[] = ['free', 'skew', 'distort', 'perspective'];
 function transformOf(ctx: ToolContext): TransformObject | null {
   return ctx.live instanceof TransformObject ? ctx.live : null;
 }
+
+/** The drag in progress: what was grabbed, where, and the transform's bounds then. */
+let drag: { hit: TransformHit; at: { x: number; y: number }; bounds: { x: number; y: number; w: number; h: number } } | null = null;
 
 const screenOf = (ctx: ToolContext) => (q: { x: number; y: number }) => ctx.view.toScreen(q.x, q.y);
 
@@ -49,13 +53,23 @@ export default registerTool({
     const opt = String(ctx.options('transform').mode ?? 'free');
     const mode = (MODES as string[]).includes(opt) ? (opt as TransformMode) : 'free';
     t.beginDrag(hit, { x: e.x, y: e.y }, mode);
+    drag = { hit, at: { x: e.x, y: e.y }, bounds: quadBounds(t.corners) };
   },
 
   pointerMove(ctx, e) {
-    transformOf(ctx)?.dragTo({ x: e.x, y: e.y }, { shift: e.shift, alt: e.alt, ctrl: e.ctrl });
+    const t = transformOf(ctx);
+    if (!t) return;
+    let p = { x: e.x, y: e.y };
+    if (drag?.hit.type === 'body') {
+      const b = drag.bounds;
+      const c = ctx.snapMove({ ...b, x: b.x + p.x - drag.at.x, y: b.y + p.y - drag.at.y });
+      p = { x: p.x + c.x, y: p.y + c.y };
+    } else if (drag?.hit.type === 'handle') p = ctx.snapPoint(p);
+    t.dragTo(p, { shift: e.shift, alt: e.alt, ctrl: e.ctrl });
   },
 
   pointerUp(ctx) {
+    drag = null;
     transformOf(ctx)?.endDrag();
     ctx.invalidateOverlay();
   },

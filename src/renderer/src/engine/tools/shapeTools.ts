@@ -81,7 +81,14 @@ export function dragShapeEdit(ctx: ToolContext, e: ToolPointerEvent): boolean {
   const live = liveShape(ctx);
   if (!live || !live.dragging) return false;
   const before = live.bounds();
-  live.drag({ x: e.x, y: e.y }, { shift: e.shift, alt: e.alt });
+  const info = live.dragInfo;
+  let p = { x: e.x, y: e.y };
+  if (info?.body && info.bounds) {
+    // Moving: line the shape's edges or centre up with the snap targets.
+    const c = ctx.snapMove({ ...info.bounds, x: info.bounds.x + p.x - info.at.x, y: info.bounds.y + p.y - info.at.y });
+    p = { x: p.x + c.x, y: p.y + c.y };
+  } else if (info && !info.rotate) p = ctx.snapPoint(p);
+  live.drag(p, { shift: e.shift, alt: e.alt });
   ctx.invalidate(rectUnion(before, live.bounds()));
   return true;
 }
@@ -153,13 +160,13 @@ export function createBoxShapeTool(cfg: BoxShapeConfig): Tool {
       ctx.commitLive();
       if (!ctx.canPaint()) return;
       swapped = e.button === 2;
-      creating = { start: snapCorner(e) };
+      creating = { start: ctx.snapPoint(snapCorner(e)) };
     },
 
     pointerMove(ctx, e) {
       if (dragShapeEdit(ctx, e)) return;
       if (!creating) return;
-      const r = dragBox(creating.start, snapCorner(e), e.shift, e.alt);
+      const r = dragBox(creating.start, ctx.snapPoint(snapCorner(e)), e.shift, e.alt);
       if (r.w < 1 && r.h < 1) return;
       const live = liveShape(ctx);
       if (!live) {

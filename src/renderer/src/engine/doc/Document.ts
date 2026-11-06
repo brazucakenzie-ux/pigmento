@@ -1,6 +1,7 @@
 import type { RGBA } from '../core/color';
 import { Surface } from '../raster/Surface';
 import type { Selection } from './Selection';
+import type { Guide } from './guides';
 
 /** Canvas 2D composite operation names; also implemented in JS (raster/blend.ts). */
 export type BlendMode =
@@ -137,6 +138,8 @@ export class PaintDocument {
   selection: Selection | null = null;
   /** Named selections saved in the project file. */
   savedSelections: SavedSelection[] = [];
+  /** Ruler guides (saved in projects). */
+  guides: Guide[] = [];
 
   constructor(init: DocumentInit, layers?: Layer[]) {
     this.width = init.width;

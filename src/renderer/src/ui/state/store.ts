@@ -73,6 +73,8 @@ export interface UiState {
   savedSelections: SavedSelectionInfo[];
   transform: TransformInfo | null;
   patterns: PatternInfo[];
+  /** How many guides the image has. */
+  guides: number;
 }
 
 export const useUi = create<UiState>(() => ({
@@ -103,6 +105,7 @@ export const useUi = create<UiState>(() => ({
   savedSelections: [],
   transform: null,
   patterns: [],
+  guides: 0,
 }));
 
 let pendingPatch: Partial<Settings> = {};

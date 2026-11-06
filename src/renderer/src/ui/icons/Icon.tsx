@@ -211,6 +211,12 @@ const LUCIDE: Record<string, LucideIcon> = {
 
 /** Hand-drawn icons for things Lucide doesn't cover (same 24px grid, 2px stroke). */
 const CUSTOM: Record<string, JSX.Element> = {
+  guides: (
+    <>
+      <path d="M8 2.5v19M2.5 15h19" strokeDasharray="2.5 2" />
+      <rect x="3.5" y="3.5" width="17" height="17" rx="2" strokeOpacity="0.5" />
+    </>
+  ),
   gradient: (
     <>
       <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
