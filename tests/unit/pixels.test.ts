@@ -1,9 +1,48 @@
 import { describe, expect, it } from 'vitest';
-import { applyColorMask, applyImage, flattenOnto, invertView } from '@engine/raster/pixels';
+import { alphaBounds, applyColorMask, applyImage, flattenOnto, invertView } from '@engine/raster/pixels';
 import { DabSpacer, StrokeBuffer } from '@engine/raster/stroke';
 import { colorDistance, hsvToRgb, parseHex, rgbToHsv, toHex8 } from '@engine/core/color';
 import { encodeBmp, jpegWithDpi, pngWithDpi, readDpi, crc32 } from '@engine/io/codecs';
 import { px, solid } from './helpers';
+
+describe('alphaBounds (trim)', () => {
+  const img = (w: number, h: number, on: [number, number, number?][]) => {
+    const d = new Uint8ClampedArray(w * h * 4);
+    for (const [x, y, a = 255] of on) d[(y * w + x) * 4 + 3] = a;
+    return d;
+  };
+
+  it('is null for a fully transparent image', () => {
+    expect(alphaBounds(img(5, 4, []), 5, 4)).toBeNull();
+  });
+
+  it('finds a single pixel anywhere, including corners', () => {
+    expect(alphaBounds(img(5, 4, [[0, 0]]), 5, 4)).toEqual({ x: 0, y: 0, w: 1, h: 1 });
+    expect(alphaBounds(img(5, 4, [[4, 3]]), 5, 4)).toEqual({ x: 4, y: 3, w: 1, h: 1 });
+    expect(alphaBounds(img(5, 4, [[2, 1]]), 5, 4)).toEqual({ x: 2, y: 1, w: 1, h: 1 });
+  });
+
+  it('spans scattered pixels and counts faint alpha as content', () => {
+    const d = img(10, 8, [
+      [3, 1, 1],
+      [7, 2],
+      [1, 5],
+      [5, 6, 1],
+    ]);
+    expect(alphaBounds(d, 10, 8)).toEqual({ x: 1, y: 1, w: 7, h: 6 });
+  });
+
+  it('covers the whole image when the edges are opaque', () => {
+    const d = new Uint8ClampedArray(3 * 2 * 4).fill(255);
+    expect(alphaBounds(d, 3, 2)).toEqual({ x: 0, y: 0, w: 3, h: 2 });
+  });
+
+  it('ignores colour in fully transparent pixels', () => {
+    const d = img(4, 4, [[1, 2]]);
+    d[0] = 255; // red but alpha 0 at (0,0)
+    expect(alphaBounds(d, 4, 4)).toEqual({ x: 1, y: 2, w: 1, h: 1 });
+  });
+});
 
 describe('compositing', () => {
   it('source-over with straight alpha', () => {

@@ -162,10 +162,20 @@ export function Segmented({
   );
 }
 
-export function Checkbox({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+export function Checkbox({
+  checked,
+  onChange,
+  label,
+  disabled = false,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+  disabled?: boolean;
+}) {
   return (
-    <label className="check">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+    <label className={`check ${disabled ? 'disabled' : ''}`}>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
       {label}
     </label>
   );

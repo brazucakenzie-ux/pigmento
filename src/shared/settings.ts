@@ -66,8 +66,12 @@ export const SettingsSchema = z.object({
       jpegQuality: z.number().min(1).max(100).default(90),
       webpQuality: z.number().min(1).max(100).default(90),
       lastFolder: z.string().optional(),
+      /** Last choices in the Export dialog. */
+      format: z.enum(['png', 'jpeg', 'webp', 'bmp', 'gif']).default('png'),
+      scale: z.number().int().min(1).max(3).default(1),
+      resample: z.enum(['nearest', 'bilinear', 'bicubic']).default('bicubic'),
     })
-    .default({ jpegQuality: 90, webpQuality: 90 }),
+    .default({ jpegQuality: 90, webpQuality: 90, format: 'png', scale: 1, resample: 'bicubic' }),
   resample: z.enum(['nearest', 'bilinear', 'bicubic']).default('bicubic'),
   window: z
     .object({

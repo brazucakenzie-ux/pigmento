@@ -1,6 +1,7 @@
 import { FILE_FORMATS, FORMATS, formatFromPath, type FileFormat, type ImageFormat } from '@shared/formats';
 import type { WallpaperStyle } from '@shared/ipc';
 import { CodecError } from '@engine/io/CodecClient';
+import type { ExportOptions } from '@engine/Engine';
 import { ProjectError, isZip, loadProject, saveProject, type PngCodec } from '@engine/io/project';
 import { hasTransparency } from '@engine/raster/pixels';
 import type { RGBA } from '@engine/core/color';
@@ -210,6 +211,62 @@ export async function saveAs(preferred?: FileFormat): Promise<boolean> {
   return writeTo(res.path, res.format, true);
 }
 
+/** Everything the Export dialog decides. */
+export interface ExportChoice extends ExportOptions {
+  format: ImageFormat;
+  quality: number;
+}
+
+/** Suggested export file name: the image name, plus the layer name and "@2x" when they apply. */
+export function exportFileName(c: ExportChoice): string {
+  let n = baseName();
+  const layer = c.layerId ? engine.doc.layerById(c.layerId) : null;
+  if (layer) n += ` - ${layer.name}`;
+  if (c.scale !== 1) n += `@${c.scale}x`;
+  return `${n}.${FORMATS[c.format].extensions[0]}`;
+}
+
+/** Render and encode an export; formats without alpha always get a solid background. */
+async function encodeExport(c: ExportChoice): Promise<Uint8Array> {
+  engine.commitLive();
+  const img = engine.exportPixels({ ...c, transparent: c.transparent && FORMATS[c.format].alpha });
+  // The DPI scales with the pixels, so a 2× export prints at the same physical size.
+  return engine.codecs.encode(c.format, img.w, img.h, img.data, c.quality, Math.round(engine.doc.dpi * c.scale));
+}
+
+/** Export a copy of the image. The open document, its file and its saved state don't change. */
+export async function exportImage(c: ExportChoice): Promise<boolean> {
+  const res = await window.pigmento.files.showSaveDialog({ defaultName: exportFileName(c), format: c.format, exportOnly: true });
+  if (!res) return false;
+  const name = res.path.split(/[\\/]/).pop() ?? res.path;
+  try {
+    await window.pigmento.files.write(res.path, await encodeExport(c));
+  } catch (err) {
+    const e = err as { key?: unknown };
+    if (typeof e?.key === 'string') reportError(err);
+    else showToast({ kind: 'error', key: 'error.export', params: { name } });
+    return false;
+  }
+  showToast({ kind: 'info', key: 'notice.exported', params: { name } });
+  return true;
+}
+
+/**
+ * Copy the whole image to the clipboard as PNG (whatever is selected). Transparent images
+ * stay transparent; the Export dialog can pass its own choices.
+ */
+export async function copyImage(c?: Partial<ExportOptions>): Promise<void> {
+  engine.commitLive();
+  let img: ImageBuf;
+  try {
+    img = engine.exportPixels({ layerId: null, transparent: engine.doc.paper === null, scale: 1, method: 'bicubic', ...c });
+  } catch (err) {
+    reportError(err);
+    return;
+  }
+  if (await writeClipboard(img)) showToast({ kind: 'info', key: 'notice.copiedImage' });
+}
+
 export async function printImage(): Promise<void> {
   engine.commitLive();
   try {
@@ -238,17 +295,21 @@ export async function setWallpaper(style: WallpaperStyle): Promise<void> {
 /** Copy finishes asynchronously; a paste right after a copy must see the new content. */
 let pendingCopy: Promise<void> = Promise.resolve();
 
-function writeClipboard(img: ImageBuf): Promise<void> {
+/** Resolves true once the PNG is on the clipboard. */
+function writeClipboard(img: ImageBuf): Promise<boolean> {
   const data = img.data.slice();
-  pendingCopy = pendingCopy.then(async () => {
+  const done = pendingCopy.then(async () => {
     try {
       const png = await engine.codecs.encode('png', img.w, img.h, data, 100, engine.doc.dpi);
       await window.pigmento.clipboard.writeImage(png);
+      return true;
     } catch {
       showToast({ kind: 'error', key: 'error.clipboard' });
+      return false;
     }
   });
-  return pendingCopy;
+  pendingCopy = done.then(() => undefined);
+  return done;
 }
 
 export async function copy(): Promise<void> {
@@ -342,6 +403,19 @@ export async function openDroppedFile(file: File): Promise<void> {
     return;
   }
   await openPath(path);
+}
+
+export function rememberExport(c: ExportChoice): void {
+  const cur = useUi.getState().settings.export;
+  updateSettings({
+    export: {
+      ...cur,
+      format: c.format,
+      scale: c.scale,
+      resample: c.method,
+      ...(c.format === 'jpeg' ? { jpegQuality: c.quality } : c.format === 'webp' ? { webpQuality: c.quality } : {}),
+    },
+  });
 }
 
 export async function rememberQuality(format: ImageFormat, q: number): Promise<void> {

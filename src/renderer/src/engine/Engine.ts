@@ -1,8 +1,8 @@
 import { BLACK, WHITE, colorEquals, type RGBA } from './core/color';
 import { Emitter } from './core/emitter';
-import { rectCorners, rectIntersect, rectUnion, type Point, type Rect } from './core/geometry';
+import { rectCorners, rectEquals, rectIntersect, rectUnion, type Point, type Rect } from './core/geometry';
 import { matApplyPoints, matAround, matRotate, matSkew, matTranslate, matChain } from './core/matrix';
-import { PaintDocument, RasterLayer } from './doc/Document';
+import { PaintDocument, RasterLayer, type Layer } from './doc/Document';
 import { LayerController, type LayersInfo } from './doc/LayerController';
 import { compositeLayers } from './raster/blend';
 import { Selection } from './doc/Selection';
@@ -14,7 +14,7 @@ import { MAX_DIMENSION, MAX_PIXELS } from './io/protocol';
 import { FloatObject, rectOutline } from './live/FloatObject';
 import type { LiveKind, LiveObject } from './live/LiveObject';
 import type { TextObject } from './live/TextObject';
-import { flattenOnto, hasTransparency, invertView, type MaskView } from './raster/pixels';
+import { alphaBounds, flattenOnto, hasTransparency, invertView, type MaskView } from './raster/pixels';
 import { Surface } from './raster/Surface';
 import { affineTransform, placeImage, resample, type ImageBuf, type Resample } from './raster/transform';
 import { Overlay } from './render/Overlay';
@@ -99,10 +99,25 @@ export class EngineError extends Error {
   }
 }
 
+export function sizeAllowed(w: number, h: number): boolean {
+  return w >= 1 && h >= 1 && w <= MAX_DIMENSION && h <= MAX_DIMENSION && w * h <= MAX_PIXELS;
+}
+
 function checkSize(w: number, h: number): void {
-  if (w < 1 || h < 1 || w > MAX_DIMENSION || h > MAX_DIMENSION || w * h > MAX_PIXELS) {
+  if (!sizeAllowed(w, h)) {
     throw new EngineError('error.tooLarge', { w, h, max: Math.round(MAX_PIXELS / 1e6) });
   }
+}
+
+/** What to render for an export or "copy image". */
+export interface ExportOptions {
+  /** Export one layer (or group) on its own instead of the whole image. */
+  layerId: string | null;
+  /** Leave the paper out. When false the result is opaque (paper, or white without paper). */
+  transparent: boolean;
+  /** Output scale (1 = actual size). */
+  scale: number;
+  method: Resample;
 }
 
 /**
@@ -724,6 +739,41 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     return { w: r.w, h: r.h, data: out };
   }
 
+  /** One layer (or group) composited on its own, shown even if it's hidden. */
+  private renderLayerAlone(layer: Layer): ImageBuf {
+    const r = this.doc.bounds;
+    const out = new Uint8ClampedArray(r.w * r.h * 4);
+    const wasVisible = layer.visible;
+    layer.visible = true;
+    try {
+      compositeLayers([layer], r, { data: out, stride: r.w, ox: 0, oy: 0 });
+    } finally {
+      layer.visible = wasVisible;
+    }
+    return { w: r.w, h: r.h, data: out };
+  }
+
+  /** Output size of an export at `scale`. */
+  exportSize(scale: number): { w: number; h: number } {
+    return { w: Math.max(1, Math.round(this.doc.width * scale)), h: Math.max(1, Math.round(this.doc.height * scale)) };
+  }
+
+  /** Pixels for an export or "copy image" (live objects are included once committed by the caller). */
+  exportPixels(o: ExportOptions): ImageBuf {
+    const layer = o.layerId ? this.doc.layerById(o.layerId) : null;
+    let img = layer ? this.renderLayerAlone(layer) : this.flatten(false, this.doc.bounds, !o.transparent);
+    if (!o.transparent) {
+      const p = this.doc.paper;
+      flattenOnto(img.data, p && p.a === 255 ? p : WHITE);
+    }
+    if (o.scale !== 1) {
+      const { w, h } = this.exportSize(o.scale);
+      checkSize(w, h);
+      img = resample(img, w, h, o.method);
+    }
+    return img;
+  }
+
   sampleColor(x: number, y: number): RGBA {
     const px = Math.floor(x);
     const py = Math.floor(y);
@@ -1076,20 +1126,77 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     if (w === this.doc.width && h === this.doc.height) return;
     checkSize(w, h);
     this.commitLive();
-    const before = captureDocState(this.doc);
     const dx = w - this.doc.width;
     const dy = h - this.doc.height;
     const ax = anchor.includes('w') ? 0 : anchor.includes('e') ? dx : Math.round(dx / 2);
     const ay = anchor.startsWith('n') ? 0 : anchor.startsWith('s') ? dy : Math.round(dy / 2);
+    this.reframe({ x: -ax, y: -ay, w, h }, 'history.canvasSize');
+  }
+
+  /**
+   * Make `r` (in current document coordinates, may reach outside) the new canvas: every
+   * raster layer is cut or padded to it. One undoable step.
+   */
+  private reframe(r: Rect, label: I18nKey): void {
+    checkSize(r.w, r.h);
+    const before = captureDocState(this.doc);
     for (const layer of this.doc.rasterLayers()) {
       const s = layer.surface;
-      const out = placeImage({ w: s.width, h: s.height, data: s.toRGBA() }, w, h, ax, ay);
-      layer.surface = Surface.fromRGBA(w, h, out.data);
+      const out = placeImage({ w: s.width, h: s.height, data: s.toRGBA() }, r.w, r.h, -r.x, -r.y);
+      layer.surface = Surface.fromRGBA(r.w, r.h, out.data);
     }
-    this.doc.width = w;
-    this.doc.height = h;
+    this.doc.width = r.w;
+    this.doc.height = r.h;
     this.doc.selection = null;
-    this.pushDocState('history.canvasSize', before);
+    this.pushDocState(label, before);
+  }
+
+  /** Crop away edges where no visible layer has pixels (the paper doesn't count). */
+  trimTransparentEdges(): void {
+    this.commitLive();
+    const img = this.flatten(false, this.doc.bounds, false);
+    const b = alphaBounds(img.data, img.w, img.h);
+    if (!b) {
+      this.notify('info', 'notice.trimEmpty');
+      return;
+    }
+    if (rectEquals(b, this.doc.bounds)) {
+      this.notify('info', 'notice.trimNothing');
+      return;
+    }
+    this.reframe(b, 'history.trim');
+  }
+
+  /**
+   * Grow or shrink the canvas to exactly hold every layer's pixels (hidden layers too) and a
+   * floating selection that hangs off the edge. The floating selection stays editable.
+   */
+  fitCanvasToContents(): void {
+    if (this._live && this._live.kind !== 'float') this.commitLive(true);
+    const float = this.floating;
+    let u: Rect | null = null;
+    for (const l of this.doc.rasterLayers()) u = rectUnion(u, l.surface.contentBounds());
+    if (float) u = rectUnion(u, float.extent());
+    if (!u) {
+      this.notify('info', 'notice.trimEmpty');
+      return;
+    }
+    if (rectEquals(u, this.doc.bounds)) {
+      this.notify('info', 'notice.fitNothing');
+      return;
+    }
+    checkSize(u.w, u.h);
+    if (float) this.detachLive();
+    let done = false;
+    try {
+      this.reframe(u, 'history.fitCanvas');
+      done = true;
+    } finally {
+      if (float) {
+        if (done) float.reframe(-u.x, -u.y, this.doc.width, this.doc.height);
+        this.setLive(float);
+      }
+    }
   }
 
   /** Crop the canvas to the selection bounds (pixels outside a free-form selection clear). */

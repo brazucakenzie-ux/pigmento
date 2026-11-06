@@ -1,3 +1,4 @@
+import { Selection } from '@engine/doc/Selection';
 import { engine } from '../state/engine';
 import { useUi } from '../state/store';
 import { openPath } from '../services/files';
@@ -37,12 +38,14 @@ export function installTestHook(): void {
       const d = ctx.getImageData(x, y, 1, 1).data;
       return { r: d[0], g: d[1], b: d[2], a: d[3] };
     },
-    /** Fill a raster layer with a colour (test setup; recorded as no history step). */
-    fillLayer: (id: string, c: { r: number; g: number; b: number; a: number }) => {
+    /** Fill a raster layer (or part of it) with a colour (test setup; recorded as no history step). */
+    fillLayer: (id: string, c: { r: number; g: number; b: number; a: number }, r?: { x: number; y: number; w: number; h: number }) => {
       const layer = engine.doc.layerById(id);
       if (layer?.kind !== 'raster') return;
-      layer.surface.fillRect(engine.doc.bounds, c);
+      layer.surface.fillRect(r ?? engine.doc.bounds, c);
       engine.layerChanged(layer, null);
     },
+    selectRect: (x: number, y: number, w: number, h: number) =>
+      engine.setSelection(Selection.fromRect({ x, y, w, h }, engine.doc.width, engine.doc.height)),
   };
 }

@@ -66,6 +66,9 @@ test('groups layers, collapses them and applies the group visibility and opacity
   await expect(rows()).toHaveCount(2);
   await page.keyboard.press('Control+z');
   await expect(rows()).toHaveCount(3);
+  // The shortcut does the same.
+  await page.keyboard.press('Control+Alt+Shift+g');
+  await expect(rows()).toHaveCount(2);
 });
 
 test('blend modes inside groups look the same on screen and when saved', async () => {

@@ -189,6 +189,52 @@ export function flattenOnto(data: Uint8ClampedArray, bg: RGBA): void {
   }
 }
 
+/** Bounds of pixels with alpha > 0 in a w×h RGBA buffer, or null if all are transparent. */
+export function alphaBounds(data: Uint8ClampedArray, w: number, h: number): { x: number; y: number; w: number; h: number } | null {
+  let top = -1;
+  for (let y = 0; y < h && top < 0; y++) {
+    for (let i = y * w * 4 + 3, e = i + w * 4; i < e; i += 4) {
+      if (data[i] !== 0) {
+        top = y;
+        break;
+      }
+    }
+  }
+  if (top < 0) return null;
+  let bottom = top;
+  for (let y = h - 1; y > top; y--) {
+    let hit = false;
+    for (let i = y * w * 4 + 3, e = i + w * 4; i < e; i += 4) {
+      if (data[i] !== 0) {
+        hit = true;
+        break;
+      }
+    }
+    if (hit) {
+      bottom = y;
+      break;
+    }
+  }
+  let left = w;
+  let right = -1;
+  for (let y = top; y <= bottom; y++) {
+    const row = y * w * 4 + 3;
+    for (let x = 0; x < left; x++) {
+      if (data[row + x * 4] !== 0) {
+        left = x;
+        break;
+      }
+    }
+    for (let x = w - 1; x > right; x--) {
+      if (data[row + x * 4] !== 0) {
+        right = x;
+        break;
+      }
+    }
+  }
+  return { x: left, y: top, w: right - left + 1, h: bottom - top + 1 };
+}
+
 export function hasTransparency(data: Uint8ClampedArray): boolean {
   for (let i = 3; i < data.length; i += 4) if (data[i] !== 255) return true;
   return false;

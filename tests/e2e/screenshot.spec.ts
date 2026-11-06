@@ -70,6 +70,21 @@ test('capture UI states', async () => {
     await page.waitForTimeout(250);
     await shot('resize-dialog');
     await page.keyboard.press('Escape');
+    await page.locator('.rb-split', { has: page.getByRole('button', { name: 'Crop', exact: true }) }).locator('[aria-haspopup="menu"]').click();
+    await page.waitForTimeout(200);
+    await shot('image-tab');
+    await page.keyboard.press('Escape');
+
+    await page.evaluate(() => window.__pigmentoTest!.addLayer());
+    await page.keyboard.press('Control+Alt+Shift+S');
+    await page.getByRole('radio', { name: '2×' }).click();
+    await page.getByRole('radio', { name: 'Selected layer' }).click();
+    await page.waitForTimeout(250);
+    await shot('export-dialog');
+    await page.getByLabel('Format').selectOption('jpeg');
+    await page.waitForTimeout(150);
+    await shot('export-dialog-jpeg');
+    await page.keyboard.press('Escape');
 
     await page.getByRole('tab', { name: 'View' }).click();
     await page.getByRole('button', { name: 'Theme' }).click();

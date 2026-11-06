@@ -63,10 +63,10 @@ export class FloatObject implements LiveObject {
     src: ImageBuf,
     origin: Point,
     outline: Point[][],
-    readonly hole: MaskView | null,
+    public hole: MaskView | null,
     label: I18nKey,
-    private readonly docW: number,
-    private readonly docH: number,
+    private docW: number,
+    private docH: number,
   ) {
     this.src = src;
     this.outline = outline;
@@ -127,6 +127,19 @@ export class FloatObject implements LiveObject {
       w: this.docW,
       h: this.docH,
     });
+  }
+
+  /** Whole placed area, including any part outside the canvas. */
+  extent(): Rect {
+    return rectRoundOut(matApplyRect(this.matrix(), { x: 0, y: 0, w: this.src.w, h: this.src.h }));
+  }
+
+  /** The canvas was reframed: its old (dx, dy) offset is the new origin, and its size is docW×docH. */
+  reframe(dx: number, dy: number, docW: number, docH: number): void {
+    this.geom = { ...this.geom, cx: this.geom.cx + dx, cy: this.geom.cy + dy };
+    if (this.hole) this.hole = { ...this.hole, ox: this.hole.ox + dx, oy: this.hole.oy + dy };
+    this.docW = docW;
+    this.docH = docH;
   }
 
   filterBounds(): Rect | null {

@@ -5,6 +5,7 @@ const en = {
   'jump.newDesc': 'Open a new Pigmento window',
   'dialog.open.title': 'Open image',
   'dialog.save.title': 'Save image as',
+  'dialog.export.title': 'Export image',
   'dialog.filter.images': 'Images and projects',
   'dialog.filter.all': 'All files',
   'dialog.unsaved.message': 'Do you want to save changes to {name}?',

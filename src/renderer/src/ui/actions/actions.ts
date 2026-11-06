@@ -68,6 +68,17 @@ const base: Action[] = [
   { id: 'open', labelKey: 'action.open', icon: 'open', group: 'file', shortcut: ['Ctrl+O'], run: () => files.open() },
   { id: 'save', labelKey: 'action.save', icon: 'save', group: 'file', shortcut: ['Ctrl+S'], run: async () => void (await files.save()) },
   { id: 'saveAs', labelKey: 'action.saveAs', icon: 'save', group: 'file', shortcut: ['Ctrl+Shift+S'], run: async () => void (await files.saveAs()) },
+  {
+    id: 'export',
+    labelKey: 'action.export',
+    icon: 'export',
+    group: 'file',
+    shortcut: ['Ctrl+Alt+Shift+S'],
+    run: () => {
+      engine.commitLive();
+      openDialog({ kind: 'export' });
+    },
+  },
   { id: 'print', labelKey: 'action.print', icon: 'print', group: 'file', shortcut: ['Ctrl+P'], run: () => files.printImage() },
   { id: 'properties', labelKey: 'file.properties', icon: 'properties', group: 'image', shortcut: ['Ctrl+E'], run: () => openDialog({ kind: 'properties' }) },
   // Edit
@@ -75,6 +86,7 @@ const base: Action[] = [
   { id: 'redo', labelKey: 'action.redo', icon: 'redo', group: 'edit', shortcut: ['Ctrl+Y', 'Ctrl+Shift+Z'], run: () => engine.redo(), enabled: (s) => s.history.canRedo },
   { id: 'cut', labelKey: 'action.cut', icon: 'cut', group: 'edit', shortcut: ['Ctrl+X'], run: () => files.cut(), enabled: hasSelection },
   { id: 'copy', labelKey: 'action.copy', icon: 'copy', group: 'edit', shortcut: ['Ctrl+C'], run: () => files.copy(), enabled: hasSelection },
+  { id: 'copyImage', labelKey: 'action.copyImage', icon: 'copy-image', group: 'edit', shortcut: ['Ctrl+Shift+C'], run: () => files.copyImage() },
   { id: 'paste', labelKey: 'action.paste', icon: 'paste', group: 'edit', shortcut: ['Ctrl+V'], run: () => files.paste() },
   { id: 'pasteNew', labelKey: 'action.pasteNew', icon: 'paste-new', group: 'edit', shortcut: ['Ctrl+Alt+V'], run: () => files.pasteAsNew() },
   { id: 'pasteFromFile', labelKey: 'file.pasteFrom', icon: 'open', group: 'edit', run: () => files.pasteFromFile() },
@@ -96,6 +108,8 @@ const base: Action[] = [
   },
   // Image
   { id: 'crop', labelKey: 'action.crop', icon: 'crop', group: 'image', shortcut: ['Ctrl+Shift+X'], run: safe(() => engine.crop()), enabled: hasSelection },
+  { id: 'trim', labelKey: 'action.trim', icon: 'trim', group: 'image', run: safe(() => engine.trimTransparentEdges()) },
+  { id: 'fitCanvas', labelKey: 'action.fitCanvas', icon: 'fit-canvas', group: 'image', run: safe(() => engine.fitCanvasToContents()) },
   { id: 'resize', labelKey: 'action.resizeSkew', icon: 'resize', group: 'image', shortcut: ['Ctrl+W'], run: () => openDialog({ kind: 'resize' }) },
   { id: 'canvasSize', labelKey: 'action.canvasSize', icon: 'canvas-size', group: 'image', shortcut: ['Ctrl+Shift+R'], run: () => openDialog({ kind: 'canvasSize' }) },
   { id: 'rotateCw', labelKey: 'action.rotateCw', icon: 'rotate-cw', group: 'image', shortcut: ['Ctrl+Period'], run: safe(() => engine.rotate(1)) },
@@ -170,7 +184,7 @@ const base: Action[] = [
   { id: 'layerMergeDown', labelKey: 'action.layerMergeDown', icon: 'merge', group: 'image', shortcut: ['Ctrl+Shift+E'], run: () => void engine.layers.mergeDown(), enabled: (s) => s.layers.count > 0 && engine.layers.canMergeDown() },
   { id: 'layerFlatten', labelKey: 'action.layerFlatten', icon: 'flatten', group: 'image', run: () => void engine.layers.flatten(), enabled: (s) => s.layers.count > 1 },
   { id: 'layerGroup', labelKey: 'action.layerGroup', icon: 'folder', group: 'image', shortcut: ['Ctrl+Alt+G'], run: () => void engine.layers.group() },
-  { id: 'layerUngroup', labelKey: 'action.layerUngroup', icon: 'ungroup', group: 'image', shortcut: ['Ctrl+Shift+Alt+G'], run: () => void engine.layers.ungroup(), enabled: (s) => s.layers.count > 0 && engine.doc.activeLayer.kind === 'group' },
+  { id: 'layerUngroup', labelKey: 'action.layerUngroup', icon: 'ungroup', group: 'image', shortcut: ['Ctrl+Alt+Shift+G'], run: () => void engine.layers.ungroup(), enabled: (s) => s.layers.count > 0 && engine.doc.activeLayer.kind === 'group' },
   { id: 'layerUp', labelKey: 'action.layerUp', icon: 'arrow-up', group: 'image', shortcut: ['Ctrl+]'], run: () => void engine.layers.step(engine.doc.activeId, 1) },
   { id: 'layerDown', labelKey: 'action.layerDown', icon: 'arrow-down', group: 'image', shortcut: ['Ctrl+['], run: () => void engine.layers.step(engine.doc.activeId, -1) },
   // Colours

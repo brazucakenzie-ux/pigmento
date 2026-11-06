@@ -5,6 +5,7 @@ import { TooltipLayer } from '../components/Tooltips';
 import { AboutDialog, EditColorsDialog, PasteLargerDialog, QualityDialog, RecoverDialog, ShortcutsDialog } from '../dialogs/OtherDialogs';
 import { clearOwnAutosave, offerRecovery, startAutosave } from '../services/autosave';
 import { CanvasSizeDialog, NewImageDialog, PropertiesDialog, ResizeDialog, RotateDialog } from '../dialogs/ImageDialogs';
+import { ExportDialog } from '../dialogs/ExportDialog';
 import { confirmDiscard, openPath } from '../services/files';
 import { bindEngine, engine } from '../state/engine';
 import { updateSettings, useUi } from '../state/store';
@@ -112,6 +113,8 @@ function DialogHost() {
       return <AboutDialog />;
     case 'recover':
       return <RecoverDialog items={d.items} />;
+    case 'export':
+      return <ExportDialog />;
   }
 }
 

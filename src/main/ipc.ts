@@ -82,11 +82,15 @@ export function registerIpc(): void {
     if (!req || typeof req.defaultName !== 'string' || !isFormat(req.format)) {
       throw new Error('Invalid save request');
     }
-    const order: FileFormat[] = [req.format, ...(Object.keys(FILE_FORMATS) as FileFormat[]).filter((f) => f !== req.format)];
+    const exportOnly = req.exportOnly === true;
+    if (exportOnly && req.format === 'pigm') throw new Error('Invalid export request');
+    const order: FileFormat[] = exportOnly
+      ? [req.format]
+      : [req.format, ...(Object.keys(FILE_FORMATS) as FileFormat[]).filter((f) => f !== req.format)];
     const base = path.basename(req.defaultName).replace(/[<>:"/\\|?*]/g, '_') || 'Untitled';
     const folder = getSettings().export.lastFolder ?? app.getPath('pictures');
     const res = await dialog.showSaveDialog(win, {
-      title: tm('dialog.save.title'),
+      title: tm(exportOnly ? 'dialog.export.title' : 'dialog.save.title'),
       defaultPath: path.join(folder, base),
       filters: order.map((f) => ({
         name: tm(FILE_FORMATS[f].labelKey as MainStringKey),
@@ -98,7 +102,12 @@ export function registerIpc(): void {
     let p = res.filePath;
     let format = order[0];
     const ext = path.extname(p).slice(1).toLowerCase();
-    const byExt = (Object.values(FILE_FORMATS).find((f) => f.extensions.includes(ext)) ?? null)?.id;
+    // An export was set up for one format, so its file always gets that format's extension.
+    const byExt = exportOnly
+      ? FILE_FORMATS[format].extensions.includes(ext)
+        ? format
+        : null
+      : (Object.values(FILE_FORMATS).find((f) => f.extensions.includes(ext)) ?? null)?.id;
     if (byExt) format = byExt;
     else p = `${p}.${FILE_FORMATS[format].extensions[0]}`;
     grantPath(p);

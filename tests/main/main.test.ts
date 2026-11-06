@@ -61,6 +61,12 @@ describe('settings', () => {
     expect(s.colors).toEqual(defaultSettings().colors);
     expect(parseSettings(null)).toEqual(defaultSettings());
   });
+
+  it('adds the export choices to settings saved by older builds', () => {
+    const s = parseSettings({ export: { jpegQuality: 70, webpQuality: 80, lastFolder: 'D:/Art' } });
+    expect(s.export).toEqual({ jpegQuality: 70, webpQuality: 80, lastFolder: 'D:/Art', format: 'png', scale: 1, resample: 'bicubic' });
+    expect(parseSettings({ export: { scale: 7 } }).export.scale).toBe(1);
+  });
 });
 
 describe('wallpaper (Windows)', () => {

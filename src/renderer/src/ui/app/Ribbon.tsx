@@ -69,6 +69,7 @@ function FileMenu() {
             ))
           }
         </SubMenu>
+        <ActionMenuItem id="export" close={close} />
         <MenuSeparator />
         <ActionMenuItem id="print" close={close} label={t('file.print')} />
         <SubMenu label={t('file.wallpaper')} icon="wallpaper">
@@ -127,6 +128,7 @@ function HomeTab() {
         <div className="rb-stack">
           <ActionButton id="cut" variant="small" />
           <ActionButton id="copy" variant="small" />
+          <ActionButton id="copyImage" variant="small" />
         </div>
       </RibbonGroup>
       <RibbonGroup label={t('group.selection')}>
@@ -195,7 +197,16 @@ function ImageTab() {
           <ActionButton id="deselect" variant="small" />
           <ActionButton id="transparentSelection" variant="small" />
         </div>
-        <ActionButton id="crop" />
+        {/* Crop, and the automatic crops that need no selection. */}
+        <SplitButton id="crop" menuLabel={t('a11y.more')}>
+          {(close) => (
+            <>
+              <ActionMenuItem id="crop" close={close} />
+              <ActionMenuItem id="trim" close={close} />
+              <ActionMenuItem id="fitCanvas" close={close} />
+            </>
+          )}
+        </SplitButton>
       </RibbonGroup>
       <RibbonGroup label={t('group.size')}>
         <ActionButton id="resize" label={t('action.resize')} />

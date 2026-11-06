@@ -75,6 +75,8 @@ export interface PrintRequest {
 export interface SaveDialogRequest {
   defaultName: string;
   format: FileFormat;
+  /** Export: offer only `format` (an image format), titled "Export image". */
+  exportOnly?: boolean;
 }
 
 export interface SaveDialogResult {

@@ -88,6 +88,9 @@ import {
   Scan,
   Expand,
   Palette,
+  ClipboardCopy,
+  Shrink,
+  Fullscreen,
   type LucideIcon,
 } from 'lucide-react';
 import type { JSX } from 'react';
@@ -115,6 +118,9 @@ const LUCIDE: Record<string, LucideIcon> = {
   crop: Crop,
   resize: Scaling,
   'canvas-size': Frame,
+  'copy-image': ClipboardCopy,
+  trim: Shrink,
+  'fit-canvas': Fullscreen,
   'rotate-cw': RotateCw,
   'rotate-ccw': RotateCcw,
   'flip-h': FlipHorizontal2,

@@ -22,6 +22,7 @@ export type DialogState =
   | { kind: 'editColors'; target: 'primary' | 'secondary' }
   | { kind: 'quality'; format: ImageFormat; transparent: boolean; layers: boolean; resolve: (q: number | null) => void }
   | { kind: 'recover'; items: AutosaveEntry[] }
+  | { kind: 'export' }
   | { kind: 'pasteLarger'; w: number; h: number; resolve: (r: 'enlarge' | 'keep' | null) => void }
   | { kind: 'shortcuts' }
   | { kind: 'about' };
