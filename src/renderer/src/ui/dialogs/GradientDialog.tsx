@@ -11,10 +11,13 @@ import { engine } from '../state/engine';
 import { closeDialog, useUi } from '../state/store';
 import { gradientCss, stopCss } from '../app/PaintOptions';
 
-/** The Gradient tool's colours: presets, then stops that can be added, moved, recoloured and removed. */
-export function GradientDialog() {
+/**
+ * A gradient's colours (the Gradient tool's, or a shape's fill or outline): presets, then stops
+ * that can be added, moved, recoloured and removed.
+ */
+export function GradientDialog({ toolId, optKey }: { toolId: string; optKey: string }) {
   const colors = useUi((s) => s.colors);
-  const current = useUi((s) => s.toolOptions.gradient?.stops ?? engine.options('gradient').stops);
+  const current = useUi((s) => s.toolOptions[toolId]?.[optKey] ?? engine.options(toolId)[optKey]);
   const [useColors, setUseColors] = useState(current === null || current === undefined);
   const [custom, setCustom] = useState<GradientStop[]>(() => stopsFromOptions(current, colors.primary, colors.secondary));
   const [sel, setSel] = useState(0);
@@ -64,7 +67,7 @@ export function GradientDialog() {
   };
 
   const ok = () => {
-    engine.setToolOption('gradient', 'stops', useColors ? null : custom.map((s) => ({ pos: s.pos, color: toHex8(s.color) })));
+    engine.setToolOption(toolId, optKey, useColors ? null : custom.map((s) => ({ pos: s.pos, color: toHex8(s.color) })));
     closeDialog();
   };
 

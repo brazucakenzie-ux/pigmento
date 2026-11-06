@@ -2,7 +2,22 @@ import { dragBox, rectUnion, type Point } from '../core/geometry';
 import { boxFromRect } from '../live/BoxGeom';
 import { ShapeObject, type FillMode, type ShapeKind, type ShapeStyle } from '../live/ShapeObject';
 import type { I18nKey } from '../../i18n';
-import type { OptionSpec, Tool, ToolContext, ToolPointerEvent } from './Tool';
+import type { GradientStopValue, OptionSpec, Tool, ToolContext, ToolOptions, ToolPointerEvent } from './Tool';
+import { parseHex, toHex8 } from '../core/color';
+import {
+  ARROW_HEADS,
+  CAP_STYLES,
+  DASH_STYLES,
+  FILL_KINDS,
+  JOIN_STYLES,
+  OUTLINE_KINDS,
+  SHAPE_GRADIENT_TYPES,
+  type CapStyle,
+  type JoinStyle,
+  type PaintStop,
+  type ShapeGradient,
+  type ShapeStyleExtras,
+} from '../vector/style';
 
 /** Draw shapes into the layer's pixels, or as editable objects on a shape layer. */
 export const DRAW_AS_OPTION: OptionSpec = {
@@ -51,6 +66,171 @@ export const ANTIALIAS_OPTION: OptionSpec = {
 
 export const SHAPE_COLORS_HINT: OptionSpec = { key: 'colorsHint', type: 'hint', labelKey: 'opt.shapeColors' };
 
+const GRADIENT_TYPE_CHOICES = [
+  { value: 'linear', labelKey: 'opt.gradientType.linear', icon: 'grad-linear' },
+  { value: 'radial', labelKey: 'opt.gradientType.radial', icon: 'grad-radial' },
+  { value: 'angular', labelKey: 'opt.gradientType.angular', icon: 'grad-angular' },
+] satisfies { value: (typeof SHAPE_GRADIENT_TYPES)[number]; labelKey: I18nKey; icon: string }[];
+
+const is = (key: string, value: string) => (o: Record<string, unknown>) => (o[key] ?? 'solid') === value;
+const notMode = (mode: string) => (o: Record<string, unknown>) => o.mode !== mode;
+
+/** Gradient settings for the fill or the outline (keys prefixed with `fill` or `outline`). */
+function gradientOptions(prefix: 'fill' | 'outline'): OptionSpec[] {
+  const kind = `${prefix}Kind`;
+  const grad = is(kind, 'gradient');
+  return [
+    { key: `${prefix}GradientType`, type: 'segmented', labelKey: 'opt.gradientType', default: 'linear', iconsOnly: true, choices: GRADIENT_TYPE_CHOICES, visibleIf: grad },
+    { key: `${prefix}Stops`, type: 'gradient', labelKey: 'opt.gradientColors', default: null, visibleIf: grad },
+    {
+      key: `${prefix}Angle`,
+      type: 'slider',
+      labelKey: 'opt.angle',
+      min: 0,
+      max: 360,
+      step: 1,
+      unit: '°',
+      default: 0,
+      visibleIf: (o) => grad(o) && o[`${prefix}GradientType`] !== 'radial',
+    },
+  ];
+}
+
+/** Fill: a colour, a gradient, a pattern or a picture (shown unless only the outline is drawn). */
+export const FILL_STYLE_OPTION: OptionSpec = {
+  key: 'fillStyle',
+  type: 'popover',
+  labelKey: 'opt.fillStyle',
+  icon: 'fill',
+  visibleIf: notMode('outline'),
+  summary: (o) => `opt.fillKind.${FILL_KINDS.includes(o.fillKind as never) ? String(o.fillKind) : 'solid'}` as I18nKey,
+  options: [
+    {
+      key: 'fillKind',
+      type: 'segmented',
+      labelKey: 'opt.fillKind',
+      default: 'solid',
+      choices: FILL_KINDS.map((k) => ({ value: k, labelKey: `opt.fillKind.${k}` as I18nKey })),
+    },
+    ...gradientOptions('fill'),
+    { key: 'fillPattern', type: 'pattern', labelKey: 'opt.pattern', default: 'checker', visibleIf: is('fillKind', 'pattern') },
+    { key: 'fillPatternScale', type: 'slider', labelKey: 'opt.patternScale', min: 1, max: 8, step: 1, unit: '×', default: 1, visibleIf: is('fillKind', 'pattern') },
+    { key: 'fillImage', type: 'image', labelKey: 'opt.fillImage', default: '', visibleIf: is('fillKind', 'image') },
+  ],
+};
+
+const ARROW_CHOICES = ARROW_HEADS.map((a) => ({ value: a, labelKey: `opt.arrow.${a}` as I18nKey }));
+
+/** Outline: colour or gradient, dashes, ends and corners (and arrowheads on lines). */
+export function outlineStyleOption(d: { cap: CapStyle; join: JoinStyle; arrows?: boolean | 'ifLines'; corners?: boolean }): OptionSpec {
+  // The Move tool shows arrowheads only when the selection has a line or curve.
+  const arrowsShown = d.arrows === 'ifLines' ? (o: Record<string, unknown>) => o.hasLines === true : undefined;
+  return {
+    key: 'outlineStyle',
+    type: 'popover',
+    labelKey: 'opt.outlineStyle',
+    icon: 'pen',
+    visibleIf: notMode('fill'),
+    summary: (o) => `opt.dash.${DASH_STYLES.includes(o.dash as never) ? String(o.dash) : 'solid'}` as I18nKey,
+    options: [
+      {
+        key: 'outlineKind',
+        type: 'segmented',
+        labelKey: 'opt.outlineKind',
+        default: 'solid',
+        choices: OUTLINE_KINDS.map((k) => ({ value: k, labelKey: `opt.fillKind.${k}` as I18nKey })),
+      },
+      ...gradientOptions('outline'),
+      { key: 'dash', type: 'segmented', labelKey: 'opt.dash', default: 'solid', choices: DASH_STYLES.map((k) => ({ value: k, labelKey: `opt.dash.${k}` as I18nKey })) },
+      { key: 'cap', type: 'segmented', labelKey: 'opt.cap', default: d.cap, choices: CAP_STYLES.map((k) => ({ value: k, labelKey: `opt.cap.${k}` as I18nKey })) },
+      ...(d.corners === false
+        ? []
+        : [{ key: 'join', type: 'segmented', labelKey: 'opt.join', default: d.join, choices: JOIN_STYLES.map((k) => ({ value: k, labelKey: `opt.join.${k}` as I18nKey })) } as OptionSpec]),
+      ...(d.arrows
+        ? ([
+            { key: 'arrowStart', type: 'segmented', labelKey: 'opt.arrowStart', default: 'none', choices: ARROW_CHOICES, visibleIf: arrowsShown },
+            { key: 'arrowEnd', type: 'segmented', labelKey: 'opt.arrowEnd', default: 'none', choices: ARROW_CHOICES, visibleIf: arrowsShown },
+          ] as OptionSpec[])
+        : []),
+    ],
+  };
+}
+
+const pick = <T extends string>(v: unknown, list: readonly T[], fallback: T): T => (list.includes(v as T) ? (v as T) : fallback);
+
+function stopsOf(v: unknown): PaintStop[] | null {
+  if (!Array.isArray(v)) return null;
+  const stops = (v as GradientStopValue[]).map((s) => ({ pos: Number(s.pos), color: parseHex(String(s.color)) })).filter((s): s is PaintStop => s.color !== null && Number.isFinite(s.pos));
+  return stops.length >= 2 ? stops : null;
+}
+
+function gradientOf(o: ToolOptions, prefix: 'fill' | 'outline'): ShapeGradient {
+  return { type: pick(o[`${prefix}GradientType`], SHAPE_GRADIENT_TYPES, 'linear'), stops: stopsOf(o[`${prefix}Stops`]), angle: Number(o[`${prefix}Angle`] ?? 0) || 0 };
+}
+
+/**
+ * The fill and outline styles in tool options, as stored on a shape. Only what's in use is
+ * kept (a solid fill stores no gradient), so files stay small.
+ */
+export function styleExtrasOf(o: ToolOptions): ShapeStyleExtras {
+  const x: ShapeStyleExtras = {};
+  const fillKind = pick(o.fillKind, FILL_KINDS, 'solid');
+  if (fillKind !== 'solid') x.fillKind = fillKind;
+  if (fillKind === 'gradient') x.fillGradient = gradientOf(o, 'fill');
+  if (fillKind === 'pattern') x.fillPattern = { id: String(o.fillPattern ?? 'checker'), scale: Math.max(1, Math.min(8, Math.round(Number(o.fillPatternScale ?? 1)))) };
+  if (fillKind === 'image' && typeof o.fillImage === 'string' && o.fillImage) x.fillImage = o.fillImage;
+  const outlineKind = pick(o.outlineKind, OUTLINE_KINDS, 'solid');
+  if (outlineKind === 'gradient') {
+    x.outlineKind = 'gradient';
+    x.outlineGradient = gradientOf(o, 'outline');
+  }
+  const dash = pick(o.dash, DASH_STYLES, 'solid');
+  if (dash !== 'solid') x.dash = dash;
+  if (o.cap !== undefined) x.cap = pick(o.cap, CAP_STYLES, 'butt');
+  if (o.join !== undefined) x.join = pick(o.join, JOIN_STYLES, 'miter');
+  const start = pick(o.arrowStart, ARROW_HEADS, 'none');
+  const end = pick(o.arrowEnd, ARROW_HEADS, 'none');
+  if (start !== 'none') x.arrowStart = start;
+  if (end !== 'none') x.arrowEnd = end;
+  return x;
+}
+
+const stopValues = (stops: PaintStop[] | null): GradientStopValue[] | null => (stops ? stops.map((s) => ({ pos: s.pos, color: toHex8(s.color) })) : null);
+
+/**
+ * The other way round: a shape's style as tool option values (the Move tool shows them), with
+ * its caps and corners as drawn.
+ */
+export function optionsOfStyle(s: ShapeStyle, line: { cap: CapStyle; join: JoinStyle }, hasLines = false): ToolOptions {
+  const o: ToolOptions = {
+    hasLines,
+    cap: line.cap,
+    join: line.join,
+    mode: s.mode,
+    width: s.width,
+    fillKind: s.fillKind ?? 'solid',
+    outlineKind: s.outlineKind ?? 'solid',
+    dash: s.dash ?? 'solid',
+    arrowStart: s.arrowStart ?? 'none',
+    arrowEnd: s.arrowEnd ?? 'none',
+  };
+  for (const [prefix, g] of [
+    ['fill', s.fillGradient],
+    ['outline', s.outlineGradient],
+  ] as const) {
+    if (!g) continue;
+    o[`${prefix}GradientType`] = g.type;
+    o[`${prefix}Stops`] = stopValues(g.stops);
+    o[`${prefix}Angle`] = g.angle;
+  }
+  if (s.fillPattern) {
+    o.fillPattern = s.fillPattern.id;
+    o.fillPatternScale = s.fillPattern.scale;
+  }
+  if (s.fillImage) o.fillImage = s.fillImage;
+  return o;
+}
+
 /** Current style from tool options and colours (right-button drawing swaps the colours). */
 export function shapeStyle(ctx: ToolContext, toolId: string, swapped: boolean): ShapeStyle {
   const o = ctx.options(toolId);
@@ -63,6 +243,7 @@ export function shapeStyle(ctx: ToolContext, toolId: string, swapped: boolean): 
     fill: b,
     radius: Number(o.radius ?? 0),
     antialias: o.antialias !== false,
+    ...styleExtrasOf(o),
   };
 }
 
@@ -153,6 +334,7 @@ interface BoxShapeConfig {
   leadOptions?: OptionSpec[];
   /** Library shape to draw (parametric tools). */
   library?: (ctx: ToolContext) => { shapeId: string; params: Record<string, number> };
+  galleryOnly?: boolean;
 }
 
 /** Rectangle, rounded rectangle and ellipse: drag a box, then adjust with handles. */
@@ -168,8 +350,19 @@ export function createBoxShapeTool(cfg: BoxShapeConfig): Tool {
     shortcut: cfg.shortcut,
     group: 'shapes',
     order: cfg.order,
+    galleryOnly: cfg.galleryOnly,
     paints: true,
-    options: [...(cfg.leadOptions ?? []), DRAW_AS_OPTION, FILL_MODE_OPTION, WIDTH_OPTION, ...(cfg.extraOptions ?? []), ANTIALIAS_OPTION, SHAPE_COLORS_HINT],
+    options: [
+      ...(cfg.leadOptions ?? []),
+      DRAW_AS_OPTION,
+      FILL_MODE_OPTION,
+      WIDTH_OPTION,
+      FILL_STYLE_OPTION,
+      outlineStyleOption({ cap: 'butt', join: cfg.kind === 'rect' || cfg.kind === 'parametric' ? 'miter' : 'round', corners: cfg.kind === 'rect' || cfg.kind === 'parametric' }),
+      ...(cfg.extraOptions ?? []),
+      ANTIALIAS_OPTION,
+      SHAPE_COLORS_HINT,
+    ],
     cursor: () => 'crosshair',
 
     pointerDown(ctx, e) {

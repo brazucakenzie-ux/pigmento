@@ -289,3 +289,66 @@ test('capture shape library', async () => {
     await h.close();
   }
 });
+
+// Fill and outline styles: gradient, pattern and dashed shapes, arrowheads and the popovers.
+test('capture shape styles', async () => {
+  test.skip(!process.env.PIGMENTO_SCREENSHOT, 'Set PIGMENTO_SCREENSHOT=1 to capture screenshots');
+  const out = process.env.PIGMENTO_SCREENSHOT_DIR ?? path.resolve('test-results');
+  const h = await launchApp();
+  const { page } = h;
+  const shot = (name: string) => page.screenshot({ path: path.join(out, `${name}.png`) });
+  const popover = (name: 'Fill' | 'Outline') => page.locator('.opt-pop-btn', { hasText: name });
+  try {
+    await ready(page);
+    await page.getByRole('tab', { name: 'View' }).click();
+    await page.getByRole('button', { name: 'Light' }).click();
+    await page.getByRole('tab', { name: 'Home' }).click();
+    await page.getByRole('button', { name: /Colour #4B4BE0/ }).click();
+    await page.getByRole('button', { name: /Colour #FFC914/ }).click({ button: 'right' });
+    await page.keyboard.press('r');
+    await page.getByRole('radio', { name: 'Outline and fill' }).click();
+    await popover('Fill').click();
+    await page.getByRole('dialog', { name: 'Fill' }).getByRole('radio', { name: 'Gradient' }).click();
+    await page.waitForTimeout(150);
+    await shot('style-fill-popover');
+    await page.keyboard.press('Escape');
+    await drag(page, [
+      [80, 80],
+      [380, 300],
+    ]);
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('o');
+    await page.getByRole('radio', { name: 'Outline and fill' }).click();
+    await popover('Fill').click();
+    await page.getByRole('dialog', { name: 'Fill' }).getByRole('radio', { name: 'Pattern' }).click();
+    await page.keyboard.press('Escape');
+    await popover('Outline').click();
+    await page.getByRole('dialog', { name: 'Outline' }).getByRole('radio', { name: 'Dashes' }).click();
+    await page.waitForTimeout(150);
+    await shot('style-outline-popover');
+    await page.keyboard.press('Escape');
+    await drag(page, [
+      [460, 80],
+      [760, 300],
+    ]);
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('l');
+    await page.getByRole('button', { name: '8', exact: true }).click();
+    await popover('Outline').click();
+    const ol = page.getByRole('dialog', { name: 'Outline' });
+    await ol.getByRole('radiogroup', { name: 'End' }).getByRole('radio', { name: 'Arrow' }).click();
+    await ol.getByRole('radiogroup', { name: 'Start' }).getByRole('radio', { name: 'Dot' }).click();
+    await ol.getByRole('radio', { name: 'Gradient' }).click();
+    await page.keyboard.press('Escape');
+    await drag(page, [
+      [100, 420],
+      [700, 560],
+    ]);
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(150);
+    await shot('style-canvas');
+    console.warn('errors:', JSON.stringify(h.errors));
+  } finally {
+    await h.close();
+  }
+});

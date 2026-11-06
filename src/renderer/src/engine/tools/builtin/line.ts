@@ -1,18 +1,6 @@
 import { rectUnion, snapAngle45, type Point } from '../../core/geometry';
 import { ShapeObject } from '../../live/ShapeObject';
-import {
-  ANTIALIAS_OPTION,
-  WIDTH_OPTION, DRAW_AS_OPTION,
-  beginShapeEdit,
-  dragShapeEdit,
-  endShapeEdit,
-  hoverCursor,
-  liveShape,
-  restyleLive,
-  shapeKeys,
-  shapeStyle,
-  snapCenter,
-} from '../shapeTools';
+import { ANTIALIAS_OPTION, WIDTH_OPTION, DRAW_AS_OPTION, beginShapeEdit, dragShapeEdit, endShapeEdit, hoverCursor, liveShape, restyleLive, shapeKeys, shapeStyle, snapCenter, outlineStyleOption } from '../shapeTools';
 import { registerTool } from '../ToolRegistry';
 
 let start: Point | null = null;
@@ -27,7 +15,7 @@ export default registerTool({
   group: 'shapes',
   order: 100,
   paints: true,
-  options: [DRAW_AS_OPTION, WIDTH_OPTION, ANTIALIAS_OPTION],
+  options: [DRAW_AS_OPTION, WIDTH_OPTION, outlineStyleOption({ cap: 'round', join: 'round', arrows: true, corners: false }), ANTIALIAS_OPTION],
   cursor: () => 'crosshair',
 
   pointerDown(ctx, e) {

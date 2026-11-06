@@ -14,7 +14,21 @@ import {
 import { Selection } from '../doc/Selection';
 import { guide } from '../doc/guides';
 import { parseHex, toHex8 } from '../core/color';
-import type { VectorNode } from '../vector/model';
+import { walkShapes, type VectorNode } from '../vector/model';
+import type { ShapeStyle } from '../live/ShapeObject';
+import { MAX_STOPS } from '../raster/gradient';
+import { addImageAsset, ASSET_ID, imageAsset, MAX_ASSET_PIXELS } from '../vector/assets';
+import {
+  ARROW_HEADS,
+  CAP_STYLES,
+  DASH_STYLES,
+  FILL_KINDS,
+  JOIN_STYLES,
+  OUTLINE_KINDS,
+  SHAPE_GRADIENT_TYPES,
+  type PaintStop,
+  type ShapeGradient,
+} from '../vector/style';
 import { Surface } from '../raster/Surface';
 import { MAX_DIMENSION, MAX_PIXELS } from './protocol';
 
@@ -28,6 +42,8 @@ export const PROJECT_VERSION = 1;
 const MAX_LAYERS = 2000;
 const MAX_DEPTH = 64;
 const MAX_SAVED_SELECTIONS = 200;
+/** Pictures used by image fills. */
+const MAX_ASSETS = 256;
 const MAX_ENTRY_BYTES = 1024 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024;
 
@@ -75,14 +91,74 @@ const SavedSelectionJson = z.object({
 const MAX_OBJECTS = 50000;
 const num = z.number().finite();
 const PointJson = z.object({ x: num, y: num });
+const Hex8 = z.string().regex(/^#[0-9a-f]{8}$/i);
+const GradientJson = z.object({
+  type: z.enum(SHAPE_GRADIENT_TYPES),
+  stops: z
+    .array(z.object({ pos: z.number().min(0).max(1), color: Hex8 }))
+    .min(2)
+    .max(MAX_STOPS)
+    .nullable(),
+  angle: num,
+});
 const ShapeStyleJson = z.object({
   mode: z.enum(['outline', 'fill', 'both']),
   width: z.number().min(0).max(1000),
-  outline: z.string().regex(/^#[0-9a-f]{8}$/i),
-  fill: z.string().regex(/^#[0-9a-f]{8}$/i),
+  outline: Hex8,
+  fill: Hex8,
   radius: z.number().min(0).max(1e6),
   antialias: z.boolean(),
+  // Fill and outline styles (all optional: a solid colour and the shape's usual line).
+  fillKind: z.enum(FILL_KINDS).optional(),
+  fillGradient: GradientJson.optional(),
+  fillPattern: z.object({ id: z.string().regex(/^[a-z0-9-]{1,64}$/i), scale: int.min(1).max(8) }).optional(),
+  fillImage: z.string().regex(ASSET_ID).optional(),
+  outlineKind: z.enum(OUTLINE_KINDS).optional(),
+  outlineGradient: GradientJson.optional(),
+  dash: z.enum(DASH_STYLES).optional(),
+  cap: z.enum(CAP_STYLES).optional(),
+  join: z.enum(JOIN_STYLES).optional(),
+  arrowStart: z.enum(ARROW_HEADS).optional(),
+  arrowEnd: z.enum(ARROW_HEADS).optional(),
 });
+type ShapeStyleJsonT = z.infer<typeof ShapeStyleJson>;
+
+function gradientToJson(g: ShapeGradient): z.infer<typeof GradientJson> {
+  return { type: g.type, angle: g.angle, stops: g.stops ? g.stops.map((s) => ({ pos: s.pos, color: toHex8(s.color) })) : null };
+}
+
+function gradientFromJson(g: z.infer<typeof GradientJson>): ShapeGradient {
+  const stops = g.stops?.map((s) => ({ pos: s.pos, color: parseHex(s.color) })) ?? null;
+  if (stops?.some((s) => !s.color)) throw new ProjectError('error.projectInvalid', 'Bad gradient colour');
+  return { type: g.type, angle: g.angle, stops: stops as PaintStop[] | null };
+}
+
+function styleToJson(s: ShapeStyle): ShapeStyleJsonT {
+  const out: ShapeStyleJsonT = { mode: s.mode, width: s.width, outline: toHex8(s.outline), fill: toHex8(s.fill), radius: s.radius, antialias: s.antialias };
+  if (s.fillKind) out.fillKind = s.fillKind;
+  if (s.fillGradient) out.fillGradient = gradientToJson(s.fillGradient);
+  if (s.fillPattern) out.fillPattern = { id: s.fillPattern.id, scale: s.fillPattern.scale };
+  if (s.fillImage) out.fillImage = s.fillImage;
+  if (s.outlineKind) out.outlineKind = s.outlineKind;
+  if (s.outlineGradient) out.outlineGradient = gradientToJson(s.outlineGradient);
+  for (const k of ['dash', 'cap', 'join', 'arrowStart', 'arrowEnd'] as const) if (s[k]) (out as Record<string, unknown>)[k] = s[k];
+  return out;
+}
+
+function styleFromJson(j: ShapeStyleJsonT): ShapeStyle {
+  const outline = parseHex(j.outline);
+  const fill = parseHex(j.fill);
+  if (!outline || !fill) throw new ProjectError('error.projectInvalid', 'Bad colour');
+  const s: ShapeStyle = { mode: j.mode, width: j.width, outline, fill, radius: j.radius, antialias: j.antialias };
+  if (j.fillKind) s.fillKind = j.fillKind;
+  if (j.fillGradient) s.fillGradient = gradientFromJson(j.fillGradient);
+  if (j.fillPattern) s.fillPattern = { ...j.fillPattern };
+  if (j.fillImage) s.fillImage = j.fillImage;
+  if (j.outlineKind) s.outlineKind = j.outlineKind;
+  if (j.outlineGradient) s.outlineGradient = gradientFromJson(j.outlineGradient);
+  for (const k of ['dash', 'cap', 'join', 'arrowStart', 'arrowEnd'] as const) if (j[k]) (s as unknown as Record<string, unknown>)[k] = j[k];
+  return s;
+}
 const ShapeNodeJson = z.object({
   type: z.literal('shape'),
   id: z.string().min(1).max(100),
@@ -112,7 +188,7 @@ function nodeToJson(n: VectorNode): VectorNodeJson {
     shape: n.shape,
     box: n.box ? { ...n.box } : null,
     points: n.points.map((p) => ({ x: p.x, y: p.y })),
-    style: { mode: s.mode, width: s.width, outline: toHex8(s.outline), fill: toHex8(s.fill), radius: s.radius, antialias: s.antialias },
+    style: styleToJson(s),
     ...(n.shapeId ? { shapeId: n.shapeId, params: { ...n.params } } : {}),
   };
 }
@@ -120,13 +196,10 @@ function nodeToJson(n: VectorNode): VectorNodeJson {
 function nodeFromJson(n: VectorNodeJson, depth: number, counter: { n: number }): VectorNode {
   if (depth > MAX_DEPTH || ++counter.n > MAX_OBJECTS) throw new ProjectError('error.projectInvalid', 'Too many shapes');
   if (n.type === 'group') return { type: 'group', id: n.id, children: n.children.map((c) => nodeFromJson(c, depth + 1, counter)) };
-  const outline = parseHex(n.style.outline);
-  const fill = parseHex(n.style.fill);
-  if (!outline || !fill) throw new ProjectError('error.projectInvalid', 'Bad colour');
   // A library shape needs its box and id.
   if (n.shape === 'parametric' && (!n.box || !n.shapeId)) throw new ProjectError('error.projectInvalid', 'Bad shape');
   const library = n.shape === 'parametric' ? { shapeId: n.shapeId!, params: { ...n.params } } : {};
-  return { type: 'shape', id: n.id, shape: n.shape, box: n.box ? { ...n.box } : null, points: n.points, style: { ...n.style, outline, fill }, ...library };
+  return { type: 'shape', id: n.id, shape: n.shape, box: n.box ? { ...n.box } : null, points: n.points, style: styleFromJson(n.style), ...library };
 }
 
 type LayerJson = z.infer<typeof RasterJson> | z.infer<typeof VectorJson> | GroupJson;
@@ -166,6 +239,11 @@ export const DocumentJsonSchema = z.object({
   layers: z.array(LayerJsonSchema).min(1).max(MAX_LAYERS),
   /** Optional: files without saved selections leave it out. */
   selections: z.array(SavedSelectionJson).max(MAX_SAVED_SELECTIONS).optional(),
+  /** Pictures used by image fills; optional. */
+  assets: z
+    .array(z.object({ id: z.string().regex(ASSET_ID), file: z.string().regex(/^assets\/\d{1,6}\.png$/), w: int.min(1).max(MAX_DIMENSION), h: int.min(1).max(MAX_DIMENSION) }))
+    .max(MAX_ASSETS)
+    .optional(),
   /** Ruler guides; optional. */
   guides: z
     .array(z.object({ axis: z.enum(['x', 'y']), pos: z.number().min(-MAX_DIMENSION).max(2 * MAX_DIMENSION) }))
@@ -226,6 +304,20 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
     files[file] = [await codec.encode(grey, b.w, b.h), { level: 0 }];
     selections.push({ id: s.id, name: s.name, mask: { file, x: b.x, y: b.y, w: b.w, h: b.h } });
   }
+  // Pictures used by image fills on shape layers.
+  const assets: NonNullable<DocumentJson['assets']> = [];
+  const used = new Set<string>();
+  for (const l of walkLayers(doc.layers)) {
+    if (l.kind !== 'vector') continue;
+    for (const s of walkShapes(l.objects)) if (s.style.fillImage) used.add(s.style.fillImage);
+  }
+  for (const id of used) {
+    const a = imageAsset(id);
+    if (!a) continue;
+    const file = `assets/${String(assets.length + 1).padStart(4, '0')}.png`;
+    files[file] = [await codec.encode(a.data, a.w, a.h), { level: 0 }];
+    assets.push({ id, file, w: a.w, h: a.h });
+  }
   const json: DocumentJson = {
     format: PROJECT_MAGIC,
     version: PROJECT_VERSION,
@@ -236,6 +328,7 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
     activeId: doc.activeId,
     layers,
     ...(selections.length ? { selections } : {}),
+    ...(assets.length ? { assets } : {}),
     ...(doc.guides.length ? { guides: doc.guides.map((g) => ({ axis: g.axis, pos: g.pos })) } : {}),
   };
   files['document.json'] = [strToU8(JSON.stringify(json, null, 1)), { level: 6 }];
@@ -256,13 +349,14 @@ function unzipSafely(bytes: Uint8Array): Record<string, Uint8Array> {
       filter: (f) => {
         entries++;
         total += f.originalSize;
-        if (entries > MAX_LAYERS + MAX_SAVED_SELECTIONS + 16 || f.originalSize > MAX_ENTRY_BYTES || total > MAX_TOTAL_BYTES) {
+        if (entries > MAX_LAYERS + MAX_SAVED_SELECTIONS + MAX_ASSETS + 16 || f.originalSize > MAX_ENTRY_BYTES || total > MAX_TOTAL_BYTES) {
           throw new ProjectError('error.projectInvalid', 'Archive is too large');
         }
         return (
           f.name === 'document.json' ||
           /^layers\/\d{1,6}\.png$/.test(f.name) ||
           /^selections\/\d{1,6}\.png$/.test(f.name) ||
+          /^assets\/\d{1,6}\.png$/.test(f.name) ||
           f.name === 'thumbnail.png'
         );
       },
@@ -292,6 +386,16 @@ export async function loadProject(bytes: Uint8Array, codec: PngCodec): Promise<P
   if (!res.success) throw new ProjectError('error.projectInvalid', res.error.message);
   const json = res.data;
   if (json.width * json.height > MAX_PIXELS) throw new ProjectError('error.tooLarge', `${json.width}x${json.height}`);
+
+  // Pictures first, so the shapes that use them can draw.
+  for (const a of json.assets ?? []) {
+    if (a.w * a.h > MAX_ASSET_PIXELS) throw new ProjectError('error.projectInvalid', `${a.file} is too large`);
+    const png = files[a.file];
+    if (!png) throw new ProjectError('error.projectInvalid', `${a.file} missing`);
+    const img = await codec.decode(png);
+    if (img.w !== a.w || img.h !== a.h) throw new ProjectError('error.projectInvalid', `${a.file} has the wrong size`);
+    addImageAsset(img.w, img.h, img.data, a.id);
+  }
 
   const seen = new Set<string>();
   let count = 0;

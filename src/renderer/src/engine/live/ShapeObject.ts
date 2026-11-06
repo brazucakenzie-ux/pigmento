@@ -31,14 +31,16 @@ import {
   type BoxHandle,
 } from './BoxGeom';
 import type { LiveObject } from './LiveObject';
-import { buildShapePath, hardenEdges, paintShape } from '../vector/render';
+import { hardenEdges, paintShape, shapePad } from '../vector/render';
+import type { ShapeStyleExtras } from '../vector/style';
 import type { VectorNode } from '../vector/model';
 
 /** `parametric` shapes come from the shape library (`shapeId`), drawn into their box. */
 export type ShapeKind = 'line' | 'curve' | 'rect' | 'roundRect' | 'ellipse' | 'polygon' | 'parametric';
 export type FillMode = 'outline' | 'fill' | 'both';
 
-export interface ShapeStyle {
+/** Colours, fill mode and width, plus the optional gradient, pattern, image and line styles. */
+export interface ShapeStyle extends ShapeStyleExtras {
   mode: FillMode;
   width: number;
   outline: RGBA;
@@ -123,11 +125,6 @@ export class ShapeObject implements LiveObject {
     return this.area;
   }
 
-  /** Path in document coordinates. */
-  private buildPath(): Path2D {
-    return buildShapePath(this, this.open, this.rubber);
-  }
-
   private geometryBounds(): Rect | null {
     if (this.box) return boxBounds(this.box);
     const pts = this.open && this.rubber ? [...this.points, this.rubber] : this.points;
@@ -141,7 +138,7 @@ export class ShapeObject implements LiveObject {
       this.area = null;
       return;
     }
-    const pad = this.style.width + 2;
+    const pad = Math.max(this.style.width + 2, shapePad(this, this.open));
     const area = rectIntersect(rectRoundOut(rectInflate(gb, pad)), { x: 0, y: 0, w: this.docW, h: this.docH });
     this.area = area;
     if (!area) return;
@@ -153,7 +150,7 @@ export class ShapeObject implements LiveObject {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, area.w, area.h);
     ctx.translate(-area.x, -area.y);
-    paintShape(ctx, this, this.buildPath(), this.open);
+    paintShape(ctx, this, this.open, this.rubber);
     if (!this.style.antialias) {
       // Hard edges: threshold coverage so every pixel is fully on or off.
       ctx.setTransform(1, 0, 0, 1, 0, 0);

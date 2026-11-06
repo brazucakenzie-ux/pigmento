@@ -134,6 +134,12 @@ export class VectorLayer extends LayerBase {
     this.cache = null;
   }
 
+  /** Something the objects use (a saved pattern) changed: draw them again. */
+  redraw(): void {
+    this.version++;
+    this.cache = null;
+  }
+
   /** The canvas size changed (objects are moved separately). */
   resize(width: number, height: number): void {
     this.width = width;

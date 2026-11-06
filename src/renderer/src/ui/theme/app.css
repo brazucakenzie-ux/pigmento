@@ -1989,3 +1989,57 @@ kbd {
     stroke: Highlight;
   }
 }
+
+/* Options popovers (fill and outline styles). */
+.popover {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  color: var(--text);
+  box-shadow: var(--shadow-3);
+  inset: auto;
+}
+.opt-popover:popover-open {
+  display: grid;
+  gap: 10px;
+  min-width: 300px;
+  max-width: min(520px, 94vw);
+}
+.opt-popover .opt {
+  justify-content: space-between;
+  gap: 12px;
+  white-space: nowrap;
+}
+.opt-pop-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: var(--fs-xs);
+}
+.opt-pop-btn:hover,
+.opt-pop-btn[aria-expanded='true'] {
+  background: var(--bg-hover);
+}
+.opt-pop-summary {
+  color: var(--text-muted);
+}
+.image-swatch {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+@media (forced-colors: active) {
+  .popover,
+  .opt-pop-btn {
+    border-color: CanvasText;
+  }
+}

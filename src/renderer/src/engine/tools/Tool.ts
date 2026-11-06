@@ -28,7 +28,7 @@ export type OptionSpec =
       min: number;
       max: number;
       step?: number;
-      unit?: 'px' | '%' | 'pt' | '×';
+      unit?: 'px' | '%' | 'pt' | '×' | '°';
       default: number;
       /** Quick-pick values shown as chips (Paint-style size picker). */
       presets?: number[];
@@ -47,6 +47,10 @@ export type OptionSpec =
   | (OptionBase & { type: 'gradient'; default: GradientStopValue[] | null })
   /** A fill pattern id (built-in or saved). */
   | (OptionBase & { type: 'pattern'; default: string })
+  /** A picture (image asset id, '' for none). */
+  | (OptionBase & { type: 'image'; default: string })
+  /** A button that opens more options in a popover (their values are ordinary options). */
+  | (OptionBase & { type: 'popover'; icon: string; options: OptionSpec[]; summary?: (values: Record<string, unknown>) => I18nKey })
   /** A shape from the shape library (its id). */
   | (OptionBase & { type: 'shape'; default: string })
   /** Slider values per library shape: { shapeId: { param: value } }; `shapeKey` names the shape option. */
@@ -199,6 +203,8 @@ export interface Tool {
   readonly order: number;
   /** Not shown in the ribbon or menus (a mode entered by a command, like free transform). */
   readonly hidden?: boolean;
+  /** Picked from the Shapes tab's gallery rather than a button in the Home tab. */
+  readonly galleryOnly?: boolean;
   readonly options: OptionSpec[];
   /** Tool records a history step and benefits from the pen's eraser end override. */
   readonly paints?: boolean;
@@ -216,8 +222,18 @@ export interface Tool {
   colorsChanged?(ctx: ToolContext): void;
 }
 
+/** Every option with a value, popovers opened up. */
+export function flatOptions(specs: readonly OptionSpec[]): Exclude<OptionSpec, { type: 'popover' | 'hint' }>[] {
+  const out: Exclude<OptionSpec, { type: 'popover' | 'hint' }>[] = [];
+  for (const s of specs) {
+    if (s.type === 'popover') out.push(...flatOptions(s.options));
+    else if (s.type !== 'hint') out.push(s);
+  }
+  return out;
+}
+
 export function defaultOptions(tool: Tool): ToolOptions {
   const o: ToolOptions = {};
-  for (const spec of tool.options) if (spec.type !== 'hint') o[spec.key] = spec.default;
+  for (const spec of flatOptions(tool.options)) o[spec.key] = spec.default;
   return o;
 }

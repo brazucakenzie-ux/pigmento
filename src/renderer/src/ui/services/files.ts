@@ -389,6 +389,21 @@ export async function pasteAsNew(): Promise<void> {
   useUi.setState({ file: { path: null, name: null, format: null } });
 }
 
+/** Pick a picture file for an image fill; returns its asset id (null if cancelled or unreadable). */
+export async function pickFillImage(): Promise<string | null> {
+  const path = await window.pigmento.files.showOpenDialog();
+  if (!path) return null;
+  const name = path.split(/[\\/]/).pop() ?? path;
+  try {
+    const { bytes } = await window.pigmento.files.read(path);
+    const img = await decode(bytes, name);
+    return img ? engine.addFillImage({ w: img.w, h: img.h, data: img.data }) : null;
+  } catch {
+    showToast({ kind: 'error', key: 'error.open', params: { name } });
+    return null;
+  }
+}
+
 export async function pasteFromFile(): Promise<void> {
   const path = await window.pigmento.files.showOpenDialog();
   if (!path) return;

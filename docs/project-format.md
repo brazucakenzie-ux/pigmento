@@ -7,6 +7,7 @@ A `.pigm` file is a ZIP archive. It holds everything needed to reopen an image w
 | `document.json` | Document description (below), UTF-8 JSON |
 | `layers/0001.png` … | One PNG per raster layer, cropped to the layer's non-transparent pixels |
 | `selections/0001.png` … | One greyscale PNG per saved selection (white = selected, grey = partly selected) |
+| `assets/0001.png` … | Pictures used by image-filled shapes, one per picture |
 | `thumbnail.png` | Optional preview of the flattened image (up to 256 px) |
 
 Any other entries are ignored.
@@ -23,7 +24,8 @@ Any other entries are ignored.
   "paper": { "r": 255, "g": 255, "b": 255, "a": 255 },
   "activeId": "layer-3-lx1",
   "layers": [ /* bottom layer first */ ],
-  "selections": [ /* optional, saved selections in the order they were saved */ ]
+  "selections": [ /* optional, saved selections in the order they were saved */ ],
+  "assets": [ /* optional: { "id": "img-1a2b3c4d-640x480", "file": "assets/0001.png", "w": 640, "h": 480 } */ ]
 }
 ```
 
@@ -92,6 +94,22 @@ A shape from the shape library is `"shape": "parametric"` with a `box`, the libr
 ```
 An unknown `shapeId` (for example from a newer version) is kept as is and drawn as its box until that shape is available.
 
+A `style` may also say how the shape is filled and outlined. Every field is optional; without them a shape has a solid fill and outline and the usual ends and corners for its kind:
+
+| Field | Values |
+|---|---|
+| `fillKind` | `solid`, `gradient`, `pattern` or `image` |
+| `fillGradient`, `outlineGradient` | `{ "type", "angle", "stops" }`: `type` is `linear`, `radial` or `angular`, `angle` is in degrees, `stops` is a list of `{ "pos": 0–1, "color": "#rrggbbaa" }` or `null` to run from the outline colour to the fill colour. The gradient is laid over the shape's box and turns with it |
+| `fillPattern` | `{ "id": built-in or saved pattern, "scale": 1–8 }`; built-in patterns are drawn in the outline colour on the fill colour |
+| `fillImage` | the `id` of an entry in `assets`; the picture covers the box, cropped to its proportions |
+| `outlineKind` | `solid` or `gradient` |
+| `dash` | `solid`, `dash`, `dot` or `dashDot` (lengths scale with the width) |
+| `cap` | `butt`, `round` or `square` |
+| `join` | `miter`, `round` or `bevel` |
+| `arrowStart`, `arrowEnd` | lines and curves: `none`, `triangle`, `open`, `circle` or `diamond` |
+
+A fill whose pattern or picture is missing (for example a saved pattern from another PC) is drawn in the fill colour.
+
 **Saved selection** (Select → Save selection)
 ```json
 { "id": "selection-4-lx1", "name": "Window", "mask": { "file": "selections/0001.png", "x": 90, "y": 90, "w": 220, "h": 220 } }
@@ -101,8 +119,8 @@ The PNG's red channel is the coverage (0–255) and is placed at (`x`, `y`). The
 `blend` is one of `normal, multiply, screen, overlay, darken, lighten, color-dodge, color-burn, difference, soft-light, hard-light, hue, saturation, color, luminosity`. Groups composite their children in isolation, then blend the result as one layer.
 
 ## Limits and safety
-- Width and height are at most 30,000 px each and 250 megapixels in total. Files may hold at most 2,000 layers, nested at most 64 deep, and 200 saved selections.
-- Each archive entry is capped at 1 GB uncompressed and the whole archive at 2 GB. PNG sizes must match `image.w`/`image.h`.
+- Width and height are at most 30,000 px each and 250 megapixels in total. Files may hold at most 2,000 layers, nested at most 64 deep, 200 saved selections and 256 pictures (each at most 4096 × 4096 px; bigger pictures are scaled down when chosen).
+- Each archive entry is capped at 1 GB uncompressed and the whole archive at 2 GB. PNG sizes must match the sizes recorded for them.
 - Duplicate layer ids are replaced with fresh ones. A file with a newer `version` is refused with a clear message instead of being half-read.
 
 ## Autosave

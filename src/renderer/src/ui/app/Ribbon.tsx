@@ -107,7 +107,10 @@ function HelpMenu() {
 function ToolButtons({ group, variant }: { group: 'tools' | 'shapes' | 'brushes'; variant: 'compact' | 'large' }) {
   return (
     <>
-      {toolRegistry.byGroup(group).map((tool) => (
+      {toolRegistry
+        .byGroup(group)
+        .filter((tool) => !tool.galleryOnly)
+        .map((tool) => (
         <ActionButton key={tool.id} id={`tool.${tool.id}`} variant={variant} />
       ))}
     </>

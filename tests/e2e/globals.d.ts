@@ -43,6 +43,10 @@ export interface VectorObject {
   width?: number;
   outline?: { r: number; g: number; b: number; a: number };
   fill?: { r: number; g: number; b: number; a: number };
+  shapeId?: string | null;
+  params?: Record<string, number> | null;
+  /** The full style (fill and outline styles included). */
+  style?: { dash?: string; fillKind?: string; [key: string]: unknown };
   children?: VectorObject[];
 }
 

@@ -5,9 +5,11 @@ import { Selection } from '../../doc/Selection';
 import { boxCorners, boxFromRect, handleCursor, handlePosition, hitHandle, resizeBox, rotateBox, RESIZE_HANDLES, type BoxGeom, type BoxHandle } from '../../live/BoxGeom';
 import type { FloatObject } from '../../live/FloatObject';
 import { ShapeObject, type FillMode } from '../../live/ShapeObject';
-import { boundsOf, nodeBounds, rectToRect, transformNode, translateNode, type VectorNode } from '../../vector/model';
+import { boundsOf, nodeBounds, rectToRect, transformNode, translateNode, walkShapes, type VectorNode } from '../../vector/model';
 import type { RGBA } from '../../core/color';
-import { beginShapeEdit, dragShapeEdit, endShapeEdit, FILL_MODE_OPTION, WIDTH_OPTION } from '../shapeTools';
+import { beginShapeEdit, dragShapeEdit, endShapeEdit, FILL_MODE_OPTION, FILL_STYLE_OPTION, optionsOfStyle, outlineStyleOption, styleExtrasOf, WIDTH_OPTION } from '../shapeTools';
+import { lineStyleOf } from '../../vector/render';
+import type { ShapeStyle } from '../../live/ShapeObject';
 import { registerTool } from '../ToolRegistry';
 import type { OptionSpec, ToolContext, ToolPointerEvent } from '../Tool';
 
@@ -88,6 +90,8 @@ export default registerTool({
   options: [
     { ...FILL_MODE_OPTION, iconsOnly: true } as OptionSpec,
     { ...WIDTH_OPTION, presets: undefined } as OptionSpec,
+    FILL_STYLE_OPTION,
+    outlineStyleOption({ cap: 'butt', join: 'miter', arrows: 'ifLines' }),
   ],
   cursor: () => 'default',
 
@@ -235,11 +239,18 @@ export default registerTool({
 
   optionsChanged(ctx) {
     const st = ctx.selectedVectorStyle();
-    if (!st) return;
+    const first = walkShapes(ctx.selectedVectorNodes()).next().value;
+    if (!st || !first) return;
     const o = ctx.options('move');
-    const mode = String(o.mode ?? st.mode) as FillMode;
-    const width = Number(o.width ?? st.width);
-    if (mode !== st.mode || width !== st.width) ctx.restyleVector({ mode, width });
+    // Compare what the options say with the first selected shape, both read the same way, and
+    // apply only what differs (so selecting shapes never restyles them).
+    const have: Record<string, unknown> = { mode: st.mode, width: st.width, ...styleExtrasOf(optionsOfStyle(st, lineStyleOf(first))) };
+    const want: Record<string, unknown> = { mode: String(o.mode ?? st.mode) as FillMode, width: Number(o.width ?? st.width), ...styleExtrasOf(o) };
+    const change: Record<string, unknown> = {};
+    for (const k of new Set([...Object.keys(have), ...Object.keys(want)])) {
+      if (JSON.stringify(have[k]) !== JSON.stringify(want[k])) change[k] = want[k];
+    }
+    if (Object.keys(change).length) ctx.restyleVector(change as Partial<ShapeStyle>);
   },
 
   colorsChanged(ctx) {

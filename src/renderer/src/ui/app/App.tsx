@@ -127,7 +127,7 @@ function DialogHost() {
     case 'loadSelection':
       return <LoadSelectionDialog />;
     case 'gradient':
-      return <GradientDialog />;
+      return <GradientDialog toolId={d.toolId ?? 'gradient'} optKey={d.optKey ?? 'stops'} />;
   }
 }
 

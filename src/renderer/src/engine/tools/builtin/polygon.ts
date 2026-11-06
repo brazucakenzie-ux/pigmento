@@ -1,20 +1,7 @@
 import { rectUnion, snapAngle45, type Point } from '../../core/geometry';
 import { ShapeObject } from '../../live/ShapeObject';
 import type { ToolContext, ToolPointerEvent } from '../Tool';
-import {
-  ANTIALIAS_OPTION,
-  FILL_MODE_OPTION, DRAW_AS_OPTION,
-  SHAPE_COLORS_HINT,
-  WIDTH_OPTION,
-  beginShapeEdit,
-  dragShapeEdit,
-  endShapeEdit,
-  hoverCursor,
-  liveShape,
-  restyleLive,
-  shapeStyle,
-  snapCenter,
-} from '../shapeTools';
+import { ANTIALIAS_OPTION, FILL_MODE_OPTION, DRAW_AS_OPTION, SHAPE_COLORS_HINT, WIDTH_OPTION, beginShapeEdit, dragShapeEdit, endShapeEdit, hoverCursor, liveShape, restyleLive, shapeStyle, snapCenter, FILL_STYLE_OPTION, outlineStyleOption } from '../shapeTools';
 import { registerTool } from '../ToolRegistry';
 
 let swapped = false;
@@ -58,7 +45,7 @@ export default registerTool({
   group: 'shapes',
   order: 150,
   paints: true,
-  options: [DRAW_AS_OPTION, FILL_MODE_OPTION, WIDTH_OPTION, ANTIALIAS_OPTION, SHAPE_COLORS_HINT],
+  options: [DRAW_AS_OPTION, FILL_MODE_OPTION, WIDTH_OPTION, FILL_STYLE_OPTION, outlineStyleOption({ cap: 'butt', join: 'round' }), ANTIALIAS_OPTION, SHAPE_COLORS_HINT],
   cursor: () => 'crosshair',
 
   pointerDown(ctx, e) {

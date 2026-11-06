@@ -16,15 +16,15 @@ export function gradientCss(stops: readonly GradientStop[]): string {
   return `linear-gradient(to right, ${parts.join(', ')})`;
 }
 
-/** Options bar: the gradient's colours; opens the gradient editor. */
-export function GradientButton({ value, label }: { value: unknown; label: string }) {
+/** Options bar: the gradient's colours; opens the gradient editor for that option. */
+export function GradientButton({ value, label, toolId, optKey }: { value: unknown; label: string; toolId: string; optKey: string }) {
   const colors = useUi((s) => s.colors);
   const stops = stopsFromOptions(value, colors.primary, colors.secondary);
   const title = value === null ? t('gradient.usingColors') : t('gradient.edit');
   return (
     <span className="opt">
       <span>{label}</span>
-      <button type="button" className="gradient-button" aria-label={`${label}: ${title}`} data-tip={t('gradient.edit')} onClick={() => openDialog({ kind: 'gradient' })}>
+      <button type="button" className="gradient-button" aria-label={`${label}: ${title}`} data-tip={t('gradient.edit')} onClick={() => openDialog({ kind: 'gradient', toolId, optKey })}>
         <span className="gradient-strip checker-bg">
           <span style={{ background: gradientCss(stops) }} />
         </span>

@@ -1,4 +1,7 @@
-import { useCallback, useLayoutEffect, useRef, useState, type ReactNode, type WheelEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type WheelEvent } from 'react';
+import { assetCanvas } from '@engine/vector/assets';
+import { Popover } from '../components/Popover';
+import { pickFillImage } from '../services/files';
 import type { OptionSpec } from '@engine/tools/Tool';
 import type { LayerNode } from '@engine/doc/LayerController';
 import { toolRegistry } from '@engine/tools/ToolRegistry';
@@ -28,7 +31,7 @@ function FontPicker({ value, onChange, label }: { value: string; onChange: (v: s
   );
 }
 
-function OptionControl({ toolId, spec, values }: { toolId: string; spec: OptionSpec; values: Record<string, unknown> }) {
+function OptionControl({ toolId, spec, values, inPopover = false }: { toolId: string; spec: OptionSpec; values: Record<string, unknown>; inPopover?: boolean }) {
   const set = (v: unknown) => engine.setToolOption(toolId, spec.key, v);
   const label = t(spec.labelKey);
   switch (spec.type) {
@@ -69,7 +72,7 @@ function OptionControl({ toolId, spec, values }: { toolId: string; spec: OptionS
     case 'segmented':
       return (
         <span className="opt">
-          {spec.iconsOnly ? null : <span>{label}</span>}
+          {spec.iconsOnly && !inPopover ? null : <span>{label}</span>}
           <Segmented
             value={String(values[spec.key] ?? spec.default)}
             onChange={set}
@@ -86,11 +89,15 @@ function OptionControl({ toolId, spec, values }: { toolId: string; spec: OptionS
         </span>
       );
     case 'gradient':
-      return <GradientButton value={values[spec.key] ?? spec.default} label={label} />;
+      return <GradientButton value={values[spec.key] ?? spec.default} label={label} toolId={toolId} optKey={spec.key} />;
     case 'pattern':
       return <PatternPicker value={String(values[spec.key] ?? spec.default)} onChange={set} label={label} />;
     case 'shape':
       return <ShapeOption value={values[spec.key] ?? spec.default} />;
+    case 'image':
+      return <ImageOption value={String(values[spec.key] ?? '')} onChange={set} label={label} />;
+    case 'popover':
+      return <OptionPopover toolId={toolId} spec={spec} values={values} />;
     case 'shapeParams':
       return <ShapeToolParams values={values} />;
     case 'hint':
@@ -150,6 +157,55 @@ function OptionScroller({ children }: { children: ReactNode }) {
         </button>
       ) : null}
     </>
+  );
+}
+
+/** A picture for image fills: a preview and a button to choose another. */
+function ImageOption({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const img = value ? assetCanvas(value) : null;
+  useEffect(() => {
+    const c = ref.current;
+    const ctx = c?.getContext('2d');
+    if (!c || !ctx) return;
+    ctx.clearRect(0, 0, c.width, c.height);
+    if (!img) return;
+    const k = Math.max(c.width / img.width, c.height / img.height);
+    ctx.drawImage(img, (c.width - img.width * k) / 2, (c.height - img.height * k) / 2, img.width * k, img.height * k);
+  }, [img]);
+  return (
+    <span className="opt">
+      <span>{label}</span>
+      {img ? <canvas ref={ref} className="image-swatch checker-bg" width={48} height={48} aria-hidden="true" /> : null}
+      <button type="button" className="btn small" onClick={() => void pickFillImage().then((id) => id && onChange(id))}>
+        {t(img ? 'opt.fillImage.change' : 'opt.fillImage.choose')}
+      </button>
+    </span>
+  );
+}
+
+/** A button that opens more options (fill or outline styles) in a popover. */
+function OptionPopover({ toolId, spec, values }: { toolId: string; spec: Extract<OptionSpec, { type: 'popover' }>; values: Record<string, unknown> }) {
+  const ref = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  const label = t(spec.labelKey);
+  const summary = spec.summary ? t(spec.summary(values)) : null;
+  const inner = spec.options.filter((o) => !o.visibleIf || o.visibleIf(values));
+  return (
+    <span className="opt">
+      <button ref={ref} type="button" className="opt-pop-btn" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <Icon name={spec.icon} size={15} />
+        <span>{label}</span>
+        {summary ? <span className="opt-pop-summary">{summary}</span> : null}
+        <Icon name="chevron-down" size={12} />
+      </button>
+      <Popover anchor={ref} open={open} onClose={close} label={label} className="opt-popover">
+        {inner.map((o) => (
+          <OptionControl key={o.key} toolId={toolId} spec={o} values={values} inPopover />
+        ))}
+      </Popover>
+    </span>
   );
 }
 

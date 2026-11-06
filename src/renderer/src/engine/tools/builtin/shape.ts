@@ -43,5 +43,6 @@ export default registerTool(
     leadOptions: [SHAPE_OPTION],
     extraOptions: [PARAMS_OPTION],
     library: (ctx) => libraryShapeOf(ctx.options('shape')),
+    galleryOnly: true,
   }),
 );

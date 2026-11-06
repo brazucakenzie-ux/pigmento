@@ -1,12 +1,16 @@
-import { toCss } from '../core/color';
-import { rectInflate, rectIntersect, rectRoundOut, type Point } from '../core/geometry';
+import { toCss, type RGBA } from '../core/color';
+import { boundsOfPoints, rectInflate, rectIntersect, rectRoundOut, type Point, type Rect } from '../core/geometry';
 import type { BoxGeom } from '../live/BoxGeom';
 import type { ShapeKind, ShapeStyle } from '../live/ShapeObject';
+import { patternById, renderPattern } from '../raster/patterns';
 import { Surface } from '../raster/Surface';
+import type { ImageBuf } from '../raster/transform';
 import { shapePath, shapeRegistry, type ShapeDef } from '../shapes/ShapeRegistry';
 import { toPath2D } from '../shapes/path';
 import '../shapes/library';
+import { assetCanvas } from './assets';
 import { shapeBounds, walkShapes, type VectorNode, type VectorShape } from './model';
+import { arrowHead, dashArray, gradientStops, hasArrows, lineDefaults, linearEnds, MITER_LIMIT, outlineReach, type ShapeGradient } from './style';
 
 /** What's needed to draw a shape (a live ShapeObject or a vector object). */
 export interface ShapeGeom {
@@ -39,9 +43,37 @@ function fillRuleOf(g: ShapeGeom): CanvasFillRule {
   return shapeDefOf(g)?.fillRule ?? 'nonzero';
 }
 
-/** Path in document coordinates. Outlines are inset so the stroke stays inside the box. */
-export function buildShapePath(g: ShapeGeom, open = false, rubber: Point | null = null): Path2D {
-  const p = new Path2D();
+/** Caps and corners the outline uses (the style's, or the kind's usual ones). */
+export function lineStyleOf(g: ShapeGeom, open = false): { cap: CanvasLineCap; join: CanvasLineJoin } {
+  const d = lineDefaults(g.shape, isStrokeOnly(g, open));
+  return { cap: g.style.cap ?? d.cap, join: g.style.join ?? d.join };
+}
+
+/** Arrowheads only go on lines and curves. */
+function arrowsOf(g: ShapeGeom): boolean {
+  return (g.shape === 'line' || g.shape === 'curve') && hasArrows(g.style);
+}
+
+/** How far the drawn shape can reach past its geometric bounds (outline, corners, arrows). */
+export function shapePad(g: ShapeGeom, open = false): number {
+  const line = isStrokeOnly(g, open);
+  const outlined = line || g.style.mode !== 'fill';
+  if (!outlined) return 1;
+  return outlineReach(g.style.width, lineStyleOf(g, open).join, arrowsOf(g)) + 2;
+}
+
+/**
+ * A shape in its own frame: the path, the box the paint is laid over, and the matrix to the
+ * document. Box shapes use their oriented box (so gradients turn and flip with them); point
+ * shapes use document space and their bounds.
+ */
+interface Frame {
+  path: Path2D;
+  matrix: DOMMatrix | null;
+  rect: Rect;
+}
+
+function frameOf(g: ShapeGeom, open = false, rubber: Point | null = null): Frame {
   const { style } = g;
   if (g.box) {
     const b = g.box;
@@ -70,41 +102,197 @@ export function buildShapePath(g: ShapeGeom, open = false, rubber: Point | null 
     }
     const c = Math.cos(b.angle);
     const s = Math.sin(b.angle);
-    p.addPath(local, new DOMMatrix([c * sx, s * sx, -s * sy, c * sy, b.cx, b.cy]));
-    return p;
+    const aw = Math.abs(b.w);
+    const ah = Math.abs(b.h);
+    return { path: local, matrix: new DOMMatrix([c * sx, s * sx, -s * sy, c * sy, b.cx, b.cy]), rect: { x: -aw / 2, y: -ah / 2, w: aw, h: ah } };
   }
+  const p = new Path2D();
   const pts = g.points;
-  if (pts.length === 0) return p;
+  const all = open && rubber ? [...pts, rubber] : [...pts];
+  const rect = boundsOfPoints(all) ?? { x: 0, y: 0, w: 0, h: 0 };
+  if (pts.length === 0) return { path: p, matrix: null, rect };
   if (g.shape === 'curve' && pts.length === 4) {
     p.moveTo(pts[0].x, pts[0].y);
     p.bezierCurveTo(pts[1].x, pts[1].y, pts[2].x, pts[2].y, pts[3].x, pts[3].y);
-    return p;
+    return { path: p, matrix: null, rect };
   }
   p.moveTo(pts[0].x, pts[0].y);
   for (let i = 1; i < pts.length; i++) p.lineTo(pts[i].x, pts[i].y);
   if (open && rubber) p.lineTo(rubber.x, rubber.y);
   if (g.shape === 'polygon' && !open) p.closePath();
+  return { path: p, matrix: null, rect };
+}
+
+/** Path in document coordinates. Outlines are inset so the stroke stays inside the box. */
+export function buildShapePath(g: ShapeGeom, open = false, rubber: Point | null = null): Path2D {
+  const f = frameOf(g, open, rubber);
+  if (!f.matrix) return f.path;
+  const p = new Path2D();
+  p.addPath(f.path, f.matrix);
   return p;
 }
 
-/** Fill and/or stroke a shape's path with its style. */
-export function paintShape(ctx: Ctx, g: ShapeGeom, path: Path2D, open = false): void {
+// ---- paints -------------------------------------------------------------------------------
+
+/** Saved patterns live in the engine; it registers how to find them. */
+let savedPatternTile: (id: string, scale: number) => ImageBuf | null = () => null;
+
+export function setSavedPatternSource(fn: (id: string, scale: number) => ImageBuf | null): void {
+  savedPatternTile = fn;
+  patternCache.clear();
+}
+
+const patternCache = new Map<string, OffscreenCanvas>();
+
+function patternCanvas(id: string, scale: number, fg: RGBA, bg: RGBA): OffscreenCanvas | null {
+  const key = `${id}|${scale}|${toCss(fg)}|${toCss(bg)}`;
+  let c = patternCache.get(key);
+  if (c) return c;
+  const def = patternById(id);
+  const tile = def ? renderPattern(def, fg, bg, scale) : savedPatternTile(id, scale);
+  if (!tile) return null;
+  c = new OffscreenCanvas(tile.w, tile.h);
+  c.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(tile.data), tile.w, tile.h), 0, 0);
+  if (patternCache.size > 48) patternCache.delete(patternCache.keys().next().value!);
+  patternCache.set(key, c);
+  return c;
+}
+
+function makeGradient(ctx: Ctx, g: ShapeGradient | undefined, r: Rect, outline: RGBA, fill: RGBA): CanvasGradient {
+  const cx = r.x + r.w / 2;
+  const cy = r.y + r.h / 2;
+  const type = g?.type ?? 'linear';
+  let grad: CanvasGradient;
+  if (type === 'radial') grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(0.5, Math.hypot(r.w, r.h) / 2));
+  else if (type === 'angular') grad = ctx.createConicGradient((((g?.angle ?? 0) * Math.PI) / 180), cx, cy);
+  else {
+    const [a, b] = linearEnds(cx, cy, r.w, r.h, g?.angle ?? 0);
+    grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+  }
+  for (const s of gradientStops(g, outline, fill)) grad.addColorStop(Math.min(1, Math.max(0, s.pos)), toCss(s.color));
+  return grad;
+}
+
+/** Paint for the outline (a colour or a gradient over the shape's frame). */
+function outlinePaint(ctx: Ctx, g: ShapeGeom, f: Frame): string | CanvasGradient {
+  const st = g.style;
+  return st.outlineKind === 'gradient' ? makeGradient(ctx, st.outlineGradient, f.rect, st.outline, st.fill) : toCss(st.outline);
+}
+
+function fillShape(ctx: Ctx, g: ShapeGeom, f: Frame): void {
+  const st = g.style;
+  const rule = fillRuleOf(g);
+  const kind = st.fillKind ?? 'solid';
+  if (kind === 'gradient') {
+    ctx.fillStyle = makeGradient(ctx, st.fillGradient, f.rect, st.outline, st.fill);
+    ctx.fill(f.path, rule);
+    return;
+  }
+  if (kind === 'pattern' && st.fillPattern) {
+    const tile = patternCanvas(st.fillPattern.id, Math.max(1, Math.min(8, Math.round(st.fillPattern.scale))), st.outline, st.fill);
+    const pattern = tile ? ctx.createPattern(tile, 'repeat') : null;
+    if (pattern) {
+      // Tiles line up with the document, like the Fill tool's, whatever the shape's angle.
+      if (f.matrix) pattern.setTransform(f.matrix.inverse());
+      ctx.fillStyle = pattern;
+      ctx.fill(f.path, rule);
+      return;
+    }
+  }
+  if (kind === 'image' && st.fillImage) {
+    const img = assetCanvas(st.fillImage);
+    if (img) {
+      // The picture covers the box, cropped to its proportions.
+      const r = f.rect;
+      const k = Math.max(r.w / img.width, r.h / img.height);
+      const w = img.width * k;
+      const h = img.height * k;
+      ctx.save();
+      ctx.clip(f.path, rule);
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, r.x + (r.w - w) / 2, r.y + (r.h - h) / 2, w, h);
+      ctx.restore();
+      return;
+    }
+  }
+  ctx.fillStyle = toCss(st.fill);
+  ctx.fill(f.path, rule);
+}
+
+/** Unit direction from a to b (or null when they coincide). */
+function dirOf(a: Point, b: Point): Point | null {
+  const d = Math.hypot(b.x - a.x, b.y - a.y);
+  return d < 1e-6 ? null : { x: (b.x - a.x) / d, y: (b.y - a.y) / d };
+}
+
+/** A line or curve with arrowheads: the line pulled back into the heads, then the heads. */
+function strokeWithArrows(ctx: Ctx, g: ShapeGeom, paint: string | CanvasGradient): void {
+  const st = g.style;
+  const pts = g.points.map((p) => ({ ...p }));
+  if (pts.length < 2) return;
+  const last = pts.length - 1;
+  // Tangents at the ends (curves: towards their nearest distinct control point).
+  const startFrom = g.shape === 'curve' ? (pts.slice(1).find((p) => dirOf(p, pts[0])) ?? pts[last]) : pts[1];
+  const endFrom = g.shape === 'curve' ? ([...pts.slice(0, last)].reverse().find((p) => dirOf(p, pts[last])) ?? pts[0]) : pts[last - 1];
+  const dStart = dirOf(startFrom, pts[0]);
+  const dEnd = dirOf(endFrom, pts[last]);
+  const length = Math.hypot(pts[last].x - pts[0].x, pts[last].y - pts[0].y);
+  const heads = [
+    dStart ? arrowHead(st.arrowStart ?? 'none', pts[0], dStart, st.width) : null,
+    dEnd ? arrowHead(st.arrowEnd ?? 'none', pts[last], dEnd, st.width) : null,
+  ];
+  const pull = (i: number, d: Point | null, inset: number) => {
+    if (!d || !inset) return;
+    const k = Math.min(inset, length * 0.45);
+    pts[i] = { x: pts[i].x - d.x * k, y: pts[i].y - d.y * k };
+  };
+  pull(0, dStart, heads[0]?.inset ?? 0);
+  pull(last, dEnd, heads[1]?.inset ?? 0);
+  const p = new Path2D();
+  p.moveTo(pts[0].x, pts[0].y);
+  if (g.shape === 'curve' && pts.length === 4) p.bezierCurveTo(pts[1].x, pts[1].y, pts[2].x, pts[2].y, pts[3].x, pts[3].y);
+  else for (let i = 1; i < pts.length; i++) p.lineTo(pts[i].x, pts[i].y);
+  ctx.stroke(p);
+  ctx.setLineDash([]);
+  for (const h of heads) {
+    if (!h) continue;
+    const hp = new Path2D();
+    h.points.forEach((q, i) => (i === 0 ? hp.moveTo(q.x, q.y) : hp.lineTo(q.x, q.y)));
+    if (h.closed) {
+      hp.closePath();
+      ctx.fillStyle = paint;
+      ctx.fill(hp);
+    } else {
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.stroke(hp);
+    }
+  }
+}
+
+/** Fill and/or outline a shape with its style. */
+export function paintShape(ctx: Ctx, g: ShapeGeom, open = false, rubber: Point | null = null): void {
   const { style } = g;
   const line = isStrokeOnly(g, open);
   const fill = !line && (style.mode === 'fill' || style.mode === 'both');
   const stroke = line || style.mode === 'outline' || style.mode === 'both';
-  if (fill) {
-    ctx.fillStyle = toCss(style.fill);
-    ctx.fill(path, fillRuleOf(g));
-  }
+  const f = frameOf(g, open, rubber);
+  ctx.save();
+  if (f.matrix) ctx.transform(f.matrix.a, f.matrix.b, f.matrix.c, f.matrix.d, f.matrix.e, f.matrix.f);
+  if (fill) fillShape(ctx, g, f);
   if (stroke && style.width > 0) {
-    ctx.strokeStyle = toCss(style.outline);
+    const { cap, join } = lineStyleOf(g, open);
+    const paint = outlinePaint(ctx, g, f);
+    ctx.strokeStyle = paint;
     ctx.lineWidth = style.width;
-    ctx.lineJoin = g.shape === 'rect' || (g.shape === 'parametric' && !line) ? 'miter' : 'round';
-    ctx.miterLimit = 2;
-    ctx.lineCap = line ? 'round' : 'butt';
-    ctx.stroke(path);
+    ctx.lineJoin = join;
+    ctx.miterLimit = MITER_LIMIT;
+    ctx.lineCap = cap;
+    ctx.setLineDash(dashArray(style.dash, style.width, cap));
+    if (arrowsOf(g) && !open) strokeWithArrows(ctx, g, paint);
+    else ctx.stroke(f.path);
   }
+  ctx.restore();
 }
 
 /** Make every pixel fully on or off (shapes with anti-aliasing turned off). */
@@ -119,22 +307,21 @@ let scratch: OffscreenCanvas | null = null;
 
 /** Draw one vector shape into ctx (document coordinates). */
 export function drawVectorShape(ctx: Ctx, s: VectorShape, docW: number, docH: number): void {
-  const path = buildShapePath(s);
   if (s.style.antialias) {
-    paintShape(ctx, s, path);
+    paintShape(ctx, s);
     return;
   }
   // Hard edges need their own bitmap, thresholded, then drawn in place.
   const b = shapeBounds(s);
   if (!b) return;
-  const area = rectIntersect(rectRoundOut(rectInflate(b, s.style.width + 2)), { x: 0, y: 0, w: docW, h: docH });
+  const area = rectIntersect(rectRoundOut(rectInflate(b, shapePad(s))), { x: 0, y: 0, w: docW, h: docH });
   if (!area) return;
   if (!scratch || scratch.width < area.w || scratch.height < area.h) scratch = new OffscreenCanvas(Math.max(area.w, scratch?.width ?? 0), Math.max(area.h, scratch?.height ?? 0));
   const sc = scratch.getContext('2d', { willReadFrequently: true })!;
   sc.setTransform(1, 0, 0, 1, 0, 0);
   sc.clearRect(0, 0, area.w, area.h);
   sc.translate(-area.x, -area.y);
-  paintShape(sc, s, path);
+  paintShape(sc, s);
   sc.setTransform(1, 0, 0, 1, 0, 0);
   hardenEdges(sc, area.w, area.h);
   ctx.drawImage(scratch, 0, 0, area.w, area.h, area.x, area.y, area.w, area.h);

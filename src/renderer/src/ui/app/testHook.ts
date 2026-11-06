@@ -44,7 +44,7 @@ export function installTestHook(): void {
       const summary = (n: VectorNode): Record<string, unknown> =>
         n.type === 'group'
           ? { type: 'group', id: n.id, children: n.children.map(summary) }
-          : { type: 'shape', id: n.id, shape: n.shape, box: n.box, points: n.points, mode: n.style.mode, width: n.style.width, outline: n.style.outline, fill: n.style.fill, shapeId: n.shapeId ?? null, params: n.params ?? null };
+          : { type: 'shape', id: n.id, shape: n.shape, box: n.box, points: n.points, mode: n.style.mode, width: n.style.width, outline: n.style.outline, fill: n.style.fill, shapeId: n.shapeId ?? null, params: n.params ?? null, style: structuredClone(n.style) };
       return l.objects.map(summary);
     },
     vectorSelection: () => [...engine.vectorSelection],

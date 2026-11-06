@@ -53,7 +53,9 @@ import {
   type VectorNode,
   type VectorShape,
 } from './vector/model';
-import { hitTestNodes, rasterizeNodes } from './vector/render';
+import { hitTestNodes, lineStyleOf, rasterizeNodes, setSavedPatternSource, shapePad } from './vector/render';
+import { optionsOfStyle } from './tools/shapeTools';
+import { addImageAsset, ASSET_ID, MAX_ASSET_PIXELS } from './vector/assets';
 import { alphaBounds, flattenOnto, hasTransparency, invertView, type MaskView } from './raster/pixels';
 import { Surface } from './raster/Surface';
 import { affineTransform, placeImage, resample, type ImageBuf, type Resample } from './raster/transform';
@@ -61,14 +63,7 @@ import { Overlay } from './render/Overlay';
 import { Renderer, type LayerFilter, type Theme } from './render/Renderer';
 import { View, type ViewState } from './render/View';
 import { InputController } from './input/InputController';
-import {
-  defaultOptions,
-  type FillPattern,
-  type TextEditState,
-  type Tool,
-  type ToolContext,
-  type ToolOptions,
-} from './tools/Tool';
+import { defaultOptions, type FillPattern, type TextEditState, type Tool, type ToolContext, type ToolOptions, flatOptions } from './tools/Tool';
 import { toolRegistry, type ToolRegistry } from './tools/ToolRegistry';
 import type { I18nKey, I18nParams } from '../i18n';
 import type { TileDelta } from './raster/Surface';
@@ -314,6 +309,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.renderer = new Renderer(this.doc, this.view);
     this.overlay = new Overlay(this.view);
     this.history.on('change', () => this.emitHistory());
+    // Shapes filled with a saved pattern find its tile here.
+    setSavedPatternSource((id, scale) => this.patternTile({ pattern: id, fg: { r: 0, g: 0, b: 0, a: 255 }, bg: null, scale }));
   }
 
   // ---- lifecycle ------------------------------------------------------------------------
@@ -627,8 +624,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       const saved = values[tool.id];
       const merged = defaultOptions(tool);
       if (saved) {
-        for (const spec of tool.options) {
-          if (spec.type === 'hint') continue;
+        for (const spec of flatOptions(tool.options)) {
           const v = saved[spec.key];
           if (spec.type === 'slider' && typeof v === 'number' && Number.isFinite(v)) {
             merged[spec.key] = Math.min(spec.max, Math.max(spec.min, v));
@@ -639,6 +635,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
           else if (spec.type === 'pattern' && typeof v === 'string' && /^[a-z0-9-]{1,64}$/i.test(v)) merged[spec.key] = v;
           else if (spec.type === 'gradient' && (v === null || isStopList(v))) merged[spec.key] = v;
           else if (spec.type === 'shape' && typeof v === 'string' && /^[a-z0-9-]{1,100}$/i.test(v)) merged[spec.key] = v;
+          else if (spec.type === 'image' && typeof v === 'string' && (v === '' || ASSET_ID.test(v))) merged[spec.key] = v;
           else if (spec.type === 'shapeParams' && isShapeParamTable(v)) merged[spec.key] = v;
         }
       }
@@ -1233,7 +1230,10 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.emit('vectorSelection', this.vectorSelectionInfo());
     // The Move tool's options show the selected shape's style (set together: changing them restyles).
     const st = this.selectedVectorStyle();
-    if (st && this.activeTool.id === 'move') this.setToolOptions('move', { mode: st.mode, width: st.width });
+    if (st && this.activeTool.id === 'move') {
+      const shapes = [...walkShapes(this.selectedVectorNodes())];
+      this.setToolOptions('move', optionsOfStyle(st, lineStyleOf(shapes[0]), shapes.some((s) => s.shape === 'line' || s.shape === 'curve')));
+    }
     this.requestRender();
   }
 
@@ -1449,7 +1449,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     const b = boundsOf(l.objects);
     if (!b) return null;
     let pad = 1;
-    for (const s of walkShapes(l.objects)) if (s.style.mode !== 'fill' || s.shape === 'line' || s.shape === 'curve') pad = Math.max(pad, s.style.width / 2 + 1);
+    for (const s of walkShapes(l.objects)) pad = Math.max(pad, shapePad(s));
     return { x: Math.floor(b.x - pad), y: Math.floor(b.y - pad), w: Math.ceil(b.w + 2 * pad) + 1, h: Math.ceil(b.h + 2 * pad) + 1 };
   }
 
@@ -1616,10 +1616,32 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   addSavedPattern(id: string, name: string, tile: ImageBuf): void {
     this.savedPatterns.set(id, { name, tile });
     this.emit('patterns', this.patternsInfo());
+    this.patternsChanged();
+  }
+
+  /** Shapes may be filled with a saved pattern: forget cached tiles and draw them again. */
+  private patternsChanged(): void {
+    setSavedPatternSource((pid, scale) => this.patternTile({ pattern: pid, fg: { r: 0, g: 0, b: 0, a: 255 }, bg: null, scale }));
+    for (const l of this.doc.vectorLayers()) {
+      l.redraw();
+      this.vectorChanged(l);
+    }
   }
 
   removeSavedPattern(id: string): void {
-    if (this.savedPatterns.delete(id)) this.emit('patterns', this.patternsInfo());
+    if (!this.savedPatterns.delete(id)) return;
+    this.emit('patterns', this.patternsInfo());
+    this.patternsChanged();
+  }
+
+  /** A picture for image fills (very large ones are scaled down); returns its id. */
+  addFillImage(img: ImageBuf): string {
+    let src = img;
+    if (img.w * img.h > MAX_ASSET_PIXELS) {
+      const k = Math.sqrt(MAX_ASSET_PIXELS / (img.w * img.h));
+      src = resample(img, Math.max(1, Math.floor(img.w * k)), Math.max(1, Math.floor(img.h * k)), 'bilinear');
+    }
+    return addImageAsset(src.w, src.h, new Uint8ClampedArray(src.data));
   }
 
   /** One tile of a pattern: built-ins in the given colours, saved patterns as made. */

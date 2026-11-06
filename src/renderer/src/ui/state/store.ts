@@ -29,7 +29,8 @@ export type DialogState =
   | { kind: 'colorRange' }
   | { kind: 'saveSelection' }
   | { kind: 'loadSelection' }
-  | { kind: 'gradient' }
+  /** Edit a gradient option (the Gradient tool's colours unless another option is named). */
+  | { kind: 'gradient'; toolId?: string; optKey?: string }
   | { kind: 'pasteLarger'; w: number; h: number; resolve: (r: 'enlarge' | 'keep' | null) => void }
   | { kind: 'shortcuts' }
   | { kind: 'about' };
