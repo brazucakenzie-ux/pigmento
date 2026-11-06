@@ -104,7 +104,7 @@ export function handleGlobalKey(e: KeyboardEvent): void {
   }
 
   const n = NUDGE[e.key];
-  if (n && !e.ctrlKey && !e.altKey && state.selection.bounds) {
+  if (n && !e.ctrlKey && !e.altKey && (state.selection.bounds || state.vectorSelection.count > 0)) {
     const k = e.shiftKey ? 10 : 1;
     if (engine.nudgeSelection(n[0] * k, n[1] * k)) {
       e.preventDefault();

@@ -1,6 +1,7 @@
 import {
   GroupLayer,
   RasterLayer,
+  VectorLayer,
   captureTree,
   walkLayers,
   type BlendMode,
@@ -14,6 +15,7 @@ import type { History } from '../history/History';
 import type { CommandHost } from '../history/commands';
 import { LayerPropsCommand, LayerTreeCommand } from '../history/layerCommands';
 import type { I18nKey } from '../../i18n';
+import { cloneNode } from '../vector/model';
 
 export interface LayerNode {
   id: string;
@@ -36,7 +38,7 @@ export interface LayersInfo {
 }
 
 /** Name generator supplied by the UI (the engine never stores English text). */
-export type LayerNamer = (kind: 'layer' | 'group' | 'copy', arg: number | string) => string;
+export type LayerNamer = (kind: 'layer' | 'group' | 'shapes' | 'copy', arg: number | string) => string;
 
 /** What the layer controller needs from the engine. */
 export interface LayerHost extends CommandHost {
@@ -72,10 +74,12 @@ function cloneLayer(l: Layer, name: string): Layer {
   const copy =
     l.kind === 'raster'
       ? new RasterLayer(name, l.surface.clone())
-      : new GroupLayer(
-          name,
-          l.children.map((c) => cloneLayer(c, c.name)),
-        );
+      : l.kind === 'vector'
+        ? new VectorLayer(name, l.width, l.height, l.objects.map(cloneNode))
+        : new GroupLayer(
+            name,
+            l.children.map((c) => cloneLayer(c, c.name)),
+          );
   copy.setProps({ opacity: l.opacity, blend: l.blend, visible: l.visible, locked: false });
   if (copy.kind === 'group' && l.kind === 'group') copy.collapsed = l.collapsed;
   return copy;
@@ -137,6 +141,26 @@ export class LayerController {
     const layer = new RasterLayer(this.namer('layer', this.nextNumber('raster')), new Surface(this.doc.width, this.doc.height));
     this.edit('history.layerAdd', () => this.insertAboveActive(layer));
     return layer.id;
+  }
+
+  /** A new, empty shape layer above the active one. */
+  addVector(): string {
+    const layer = new VectorLayer(this.namer('shapes', this.nextNumber('vector')), this.doc.width, this.doc.height);
+    this.edit('history.layerAddShapes', () => this.insertAboveActive(layer));
+    return layer.id;
+  }
+
+  /** Turn a shape layer into a pixel layer (its objects become pixels). */
+  rasterize(id = this.doc.activeId): boolean {
+    const slot = this.doc.slotOf(id);
+    const layer = this.doc.layerById(id);
+    if (!slot || layer?.kind !== 'vector') return false;
+    const raster = new RasterLayer(layer.name, layer.surface.clone(), undefined);
+    raster.setProps({ opacity: layer.opacity, blend: layer.blend, visible: layer.visible, locked: layer.locked });
+    return this.edit('history.rasterizeLayer', () => {
+      slot.list.splice(slot.index, 1, raster);
+      this.doc.activeId = raster.id;
+    });
   }
 
   /** Add a layer holding pixels (e.g. "paste as new layer"); `pixels` must be doc-sized. */

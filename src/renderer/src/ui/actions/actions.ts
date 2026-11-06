@@ -23,6 +23,8 @@ export interface Action {
 }
 
 const hasSelection = (s: UiState) => s.selection.bounds !== null;
+/** At least n objects selected on the active shape layer. */
+const hasShapes = (n: number) => (s: UiState) => s.vectorSelection.count >= n;
 
 /** Open a selection dialog with floating pixels put down first (their selection stays). */
 function selectionDialog(d: Parameters<typeof openDialog>[0]): void {
@@ -122,7 +124,7 @@ const base: Action[] = [
   { id: 'definePattern', labelKey: 'action.definePattern', icon: 'fill', group: 'edit', run: async () => void (await makePatternFromSelection()), enabled: hasSelection },
   { id: 'saveSelection', labelKey: 'action.saveSelection', icon: 'save-selection', group: 'edit', run: () => selectionDialog({ kind: 'saveSelection' }), enabled: hasSelection },
   { id: 'loadSelection', labelKey: 'action.loadSelection', icon: 'load-selection', group: 'edit', run: () => selectionDialog({ kind: 'loadSelection' }), enabled: (s) => s.savedSelections.length > 0 },
-  { id: 'delete', labelKey: 'action.delete', icon: 'delete', group: 'edit', shortcut: ['Delete'], run: () => engine.deleteSelection(), enabled: hasSelection },
+  { id: 'delete', labelKey: 'action.delete', icon: 'delete', group: 'edit', shortcut: ['Delete'], run: () => engine.deleteSelection(), enabled: (s) => hasSelection(s) || s.vectorSelection.count > 0 },
   {
     id: 'transparentSelection',
     labelKey: 'action.transparentSelection',
@@ -225,6 +227,23 @@ const base: Action[] = [
   { id: 'layerUngroup', labelKey: 'action.layerUngroup', icon: 'ungroup', group: 'image', shortcut: ['Ctrl+Alt+Shift+G'], run: () => void engine.layers.ungroup(), enabled: (s) => s.layers.count > 0 && engine.doc.activeLayer.kind === 'group' },
   { id: 'layerUp', labelKey: 'action.layerUp', icon: 'arrow-up', group: 'image', shortcut: ['Ctrl+]'], run: () => void engine.layers.step(engine.doc.activeId, 1) },
   { id: 'layerDown', labelKey: 'action.layerDown', icon: 'arrow-down', group: 'image', shortcut: ['Ctrl+['], run: () => void engine.layers.step(engine.doc.activeId, -1) },
+  // Shape layers
+  { id: 'newShapeLayer', labelKey: 'action.newShapeLayer', icon: 'shapes', group: 'image', run: () => void engine.newShapeLayer() },
+  { id: 'rasterizeLayer', labelKey: 'action.rasterizeLayer', icon: 'pixel-grid', group: 'image', run: () => void engine.rasterizeActiveLayer(), enabled: (s) => s.layers.count > 0 && engine.doc.activeLayer.kind === 'vector' },
+  { id: 'alignLeft', labelKey: 'action.alignLeft', icon: 'shape-align-left', group: 'image', run: () => engine.alignVector('left'), enabled: hasShapes(1) },
+  { id: 'alignHCenter', labelKey: 'action.alignHCenter', icon: 'shape-align-hcenter', group: 'image', run: () => engine.alignVector('hcenter'), enabled: hasShapes(1) },
+  { id: 'alignRight', labelKey: 'action.alignRight', icon: 'shape-align-right', group: 'image', run: () => engine.alignVector('right'), enabled: hasShapes(1) },
+  { id: 'alignTop', labelKey: 'action.alignTop', icon: 'shape-align-top', group: 'image', run: () => engine.alignVector('top'), enabled: hasShapes(1) },
+  { id: 'alignVCenter', labelKey: 'action.alignVCenter', icon: 'shape-align-vcenter', group: 'image', run: () => engine.alignVector('vcenter'), enabled: hasShapes(1) },
+  { id: 'alignBottom', labelKey: 'action.alignBottom', icon: 'shape-align-bottom', group: 'image', run: () => engine.alignVector('bottom'), enabled: hasShapes(1) },
+  { id: 'distributeH', labelKey: 'action.distributeH', icon: 'distribute-h', group: 'image', run: () => engine.distributeVector('x'), enabled: hasShapes(3) },
+  { id: 'distributeV', labelKey: 'action.distributeV', icon: 'distribute-v', group: 'image', run: () => engine.distributeVector('y'), enabled: hasShapes(3) },
+  { id: 'bringToFront', labelKey: 'action.bringToFront', icon: 'front', group: 'image', run: () => engine.arrangeVector('front'), enabled: hasShapes(1) },
+  { id: 'bringForward', labelKey: 'action.bringForward', icon: 'bring-forward', group: 'image', run: () => engine.arrangeVector('forward'), enabled: hasShapes(1) },
+  { id: 'sendBackward', labelKey: 'action.sendBackward', icon: 'send-backward', group: 'image', run: () => engine.arrangeVector('backward'), enabled: hasShapes(1) },
+  { id: 'sendToBack', labelKey: 'action.sendToBack', icon: 'back', group: 'image', run: () => engine.arrangeVector('back'), enabled: hasShapes(1) },
+  { id: 'groupShapes', labelKey: 'action.groupShapes', icon: 'group', group: 'image', run: () => engine.groupVector(), enabled: hasShapes(2) },
+  { id: 'ungroupShapes', labelKey: 'action.ungroupShapes', icon: 'ungroup', group: 'image', run: () => engine.ungroupVector(), enabled: (s) => s.vectorSelection.groups > 0 },
   // Colours
   { id: 'swapColors', labelKey: 'action.swapColors', icon: 'swap', group: 'colors', shortcut: ['X'], run: () => engine.swapColors() },
   { id: 'resetColors', labelKey: 'action.resetColors', group: 'colors', shortcut: ['D'], run: () => engine.resetColors() },

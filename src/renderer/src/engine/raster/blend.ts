@@ -128,7 +128,7 @@ export function compositeLayers(
 ): void {
   for (const layer of layers) {
     if (!layer.visible || layer.opacity <= 0 || skip?.(layer)) continue;
-    if (layer.kind === 'raster') {
+    if (layer.kind === 'raster' || layer.kind === 'vector') {
       layer.surface.forEachTile(r, (tile, sub) => blendImage(out, sub, tile, layer.blend, layer.opacity), false, true);
     } else {
       const buf = new Uint8ClampedArray(r.w * r.h * 4);

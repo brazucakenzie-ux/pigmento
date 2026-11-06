@@ -11,6 +11,7 @@ function treeLayers(t: LayerTree): Set<Layer> {
 
 function layerBytes(l: Layer): number {
   if (l.kind === 'raster') return l.surface.bytes;
+  if (l.kind === 'vector') return 512 * l.objects.length;
   let n = 0;
   for (const c of l.children) n += layerBytes(c);
   return n;
@@ -32,8 +33,8 @@ export class LayerTreeCommand implements Command {
     const a = treeLayers(before);
     const b = treeLayers(after);
     let n = 256;
-    for (const l of a) if (!b.has(l) && l.kind === 'raster') n += layerBytes(l);
-    for (const l of b) if (!a.has(l) && l.kind === 'raster') n += layerBytes(l);
+    for (const l of a) if (!b.has(l) && l.kind !== 'group') n += layerBytes(l);
+    for (const l of b) if (!a.has(l) && l.kind !== 'group') n += layerBytes(l);
     this.bytes = n;
   }
 

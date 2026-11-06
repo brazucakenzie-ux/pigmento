@@ -2,7 +2,7 @@ import { rectUnion, snapAngle45, type Point } from '../../core/geometry';
 import { ShapeObject } from '../../live/ShapeObject';
 import {
   ANTIALIAS_OPTION,
-  WIDTH_OPTION,
+  WIDTH_OPTION, DRAW_AS_OPTION,
   beginShapeEdit,
   dragShapeEdit,
   endShapeEdit,
@@ -27,7 +27,7 @@ export default registerTool({
   group: 'shapes',
   order: 100,
   paints: true,
-  options: [WIDTH_OPTION, ANTIALIAS_OPTION],
+  options: [DRAW_AS_OPTION, WIDTH_OPTION, ANTIALIAS_OPTION],
   cursor: () => 'crosshair',
 
   pointerDown(ctx, e) {

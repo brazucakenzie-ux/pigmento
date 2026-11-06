@@ -15,6 +15,10 @@ export interface PigmentoTestHook {
   transformInfo(): { x: number; y: number; w: number; h: number; angle: number; skew: number; distorted: boolean } | null;
   transformCorners(): { x: number; y: number }[] | null;
   guides(): { axis: 'x' | 'y'; pos: number }[];
+  vectorObjects(id?: string): VectorObject[] | null;
+  vectorSelection(): string[];
+  setVectorSelection(ids: string[]): void;
+  activeLayerKind(): 'raster' | 'group' | 'vector';
   addGuide(axis: 'x' | 'y', pos: number): void;
   snapLines(): { axis: 'x' | 'y'; pos: number; kind: string; from: number; to: number }[];
   openPath(path: string): Promise<boolean>;
@@ -29,9 +33,22 @@ export interface PigmentoTestHook {
   setLayerProps(id: string, p: Record<string, unknown>): void;
 }
 
+export interface VectorObject {
+  type: 'shape' | 'group';
+  id: string;
+  shape?: string;
+  box?: { cx: number; cy: number; w: number; h: number; angle: number } | null;
+  points?: { x: number; y: number }[];
+  mode?: string;
+  width?: number;
+  outline?: { r: number; g: number; b: number; a: number };
+  fill?: { r: number; g: number; b: number; a: number };
+  children?: VectorObject[];
+}
+
 export interface LayerNode {
   id: string;
-  kind: 'raster' | 'group';
+  kind: 'raster' | 'group' | 'vector';
   name: string;
   opacity: number;
   blend: string;

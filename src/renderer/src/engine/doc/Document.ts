@@ -2,6 +2,7 @@ import type { RGBA } from '../core/color';
 import { Surface } from '../raster/Surface';
 import type { Selection } from './Selection';
 import type { Guide } from './guides';
+import type { VectorNode } from '../vector/model';
 
 /** Canvas 2D composite operation names; also implemented in JS (raster/blend.ts). */
 export type BlendMode =
@@ -101,7 +102,54 @@ export class GroupLayer extends LayerBase {
   }
 }
 
-export type Layer = RasterLayer | GroupLayer;
+/**
+ * A shape layer: vector objects that stay editable. Its pixels (for blending, export and the
+ * colour picker) are made from the objects when needed.
+ */
+export class VectorLayer extends LayerBase {
+  readonly kind = 'vector' as const;
+  private list: VectorNode[];
+  width: number;
+  height: number;
+  /** Bumped on every change, so the display knows to redraw. */
+  version = 0;
+  private cache: Surface | null = null;
+  /** Turns objects into pixels; installed by the engine (it needs a canvas). */
+  static rasterizer: ((l: VectorLayer) => Surface) | null = null;
+
+  constructor(name: string, width: number, height: number, objects: VectorNode[] = [], id?: string) {
+    super(name, id, 'shapes');
+    this.width = width;
+    this.height = height;
+    this.list = objects;
+  }
+
+  get objects(): readonly VectorNode[] {
+    return this.list;
+  }
+
+  setObjects(objects: readonly VectorNode[]): void {
+    this.list = [...objects];
+    this.version++;
+    this.cache = null;
+  }
+
+  /** The canvas size changed (objects are moved separately). */
+  resize(width: number, height: number): void {
+    this.width = width;
+    this.height = height;
+    this.version++;
+    this.cache = null;
+  }
+
+  /** The objects as pixels (made on first use after a change). */
+  get surface(): Surface {
+    this.cache ??= VectorLayer.rasterizer ? VectorLayer.rasterizer(this) : new Surface(this.width, this.height);
+    return this.cache;
+  }
+}
+
+export type Layer = RasterLayer | GroupLayer | VectorLayer;
 
 export interface DocumentInit {
   width: number;
@@ -168,6 +216,11 @@ export class PaintDocument {
 
   slotOf(id: string): LayerSlot | null {
     return findSlot(this.layers, null, id);
+  }
+
+  /** Every shape layer, bottom to top, including inside groups. */
+  vectorLayers(): VectorLayer[] {
+    return [...walkLayers(this.layers)].filter((l): l is VectorLayer => l.kind === 'vector');
   }
 
   /** Every raster layer, bottom to top, including inside groups. */

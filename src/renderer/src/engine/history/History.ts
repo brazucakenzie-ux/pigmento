@@ -19,6 +19,32 @@ export interface Command {
   readonly keepsSaved?: boolean;
 }
 
+/** Several commands recorded as one step (e.g. "new shape layer" + "rectangle"). */
+export class CompoundCommand implements Command {
+  readonly bytes: number;
+  readonly keepsSaved: boolean;
+
+  constructor(
+    readonly label: I18nKey,
+    private readonly parts: Command[],
+  ) {
+    this.bytes = parts.reduce((n, c) => n + c.bytes, 0);
+    this.keepsSaved = parts.every((c) => c.keepsSaved === true);
+  }
+
+  undo(): void {
+    for (let i = this.parts.length - 1; i >= 0; i--) this.parts[i].undo();
+  }
+
+  redo(): void {
+    for (const c of this.parts) c.redo();
+  }
+
+  dispose(): void {
+    for (const c of this.parts) c.dispose?.();
+  }
+}
+
 export interface HistoryEntry {
   label: I18nKey;
 }
@@ -82,9 +108,29 @@ export class History extends Emitter<HistoryEvents> {
     return this.items.map((c) => ({ label: c.label }));
   }
 
+  private collecting: Command[] | null = null;
+
+  /** Record everything pushed while `fn` runs as one undoable step. */
+  group<T>(label: I18nKey, fn: () => T): T {
+    if (this.collecting) return fn();
+    this.collecting = [];
+    try {
+      return fn();
+    } finally {
+      const parts = this.collecting;
+      this.collecting = null;
+      if (parts.length === 1) this.push(parts[0]);
+      else if (parts.length > 1) this.push(new CompoundCommand(label, parts));
+    }
+  }
+
   /** Record a command whose effect has already been applied. */
   push(cmd: Command): void {
     if (this.busy) throw new Error('Cannot push while undoing/redoing');
+    if (this.collecting) {
+      this.collecting.push(cmd);
+      return;
+    }
     const top = this._index === this.items.length ? this.items[this._index - 1] : undefined;
     if (top?.mergeWith?.(cmd)) {
       // The merged step no longer matches a save made right after it.

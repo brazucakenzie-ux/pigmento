@@ -5,6 +5,7 @@ import {
   GroupLayer,
   PaintDocument,
   RasterLayer,
+  VectorLayer,
   walkLayers,
   type BlendMode,
   type Layer,
@@ -12,6 +13,8 @@ import {
 } from '../doc/Document';
 import { Selection } from '../doc/Selection';
 import { guide } from '../doc/guides';
+import { parseHex, toHex8 } from '../core/color';
+import type { VectorNode } from '../vector/model';
 import { Surface } from '../raster/Surface';
 import { MAX_DIMENSION, MAX_PIXELS } from './protocol';
 
@@ -68,7 +71,55 @@ const SavedSelectionJson = z.object({
   }),
 });
 
-type LayerJson = z.infer<typeof RasterJson> | GroupJson;
+/** Most objects (shapes and groups) all shape layers together may hold. */
+const MAX_OBJECTS = 50000;
+const num = z.number().finite();
+const PointJson = z.object({ x: num, y: num });
+const ShapeStyleJson = z.object({
+  mode: z.enum(['outline', 'fill', 'both']),
+  width: z.number().min(0).max(1000),
+  outline: z.string().regex(/^#[0-9a-f]{8}$/i),
+  fill: z.string().regex(/^#[0-9a-f]{8}$/i),
+  radius: z.number().min(0).max(1e6),
+  antialias: z.boolean(),
+});
+const ShapeNodeJson = z.object({
+  type: z.literal('shape'),
+  id: z.string().min(1).max(100),
+  shape: z.enum(['line', 'curve', 'rect', 'roundRect', 'ellipse', 'polygon']),
+  box: z.object({ cx: num, cy: num, w: num, h: num, angle: num }).nullable(),
+  points: z.array(PointJson).max(100000),
+  style: ShapeStyleJson,
+});
+type VectorNodeJson = z.infer<typeof ShapeNodeJson> | { type: 'group'; id: string; children: VectorNodeJson[] };
+const VectorNodeSchema: z.ZodType<VectorNodeJson> = z.lazy(() =>
+  z.discriminatedUnion('type', [ShapeNodeJson, z.object({ type: z.literal('group'), id: z.string().min(1).max(100), children: z.array(VectorNodeSchema).max(MAX_OBJECTS) })]),
+);
+const VectorJson = z.object({ kind: z.literal('vector'), ...Common, objects: z.array(VectorNodeSchema).max(MAX_OBJECTS) });
+
+function nodeToJson(n: VectorNode): VectorNodeJson {
+  if (n.type === 'group') return { type: 'group', id: n.id, children: n.children.map(nodeToJson) };
+  const s = n.style;
+  return {
+    type: 'shape',
+    id: n.id,
+    shape: n.shape,
+    box: n.box ? { ...n.box } : null,
+    points: n.points.map((p) => ({ x: p.x, y: p.y })),
+    style: { mode: s.mode, width: s.width, outline: toHex8(s.outline), fill: toHex8(s.fill), radius: s.radius, antialias: s.antialias },
+  };
+}
+
+function nodeFromJson(n: VectorNodeJson, depth: number, counter: { n: number }): VectorNode {
+  if (depth > MAX_DEPTH || ++counter.n > MAX_OBJECTS) throw new ProjectError('error.projectInvalid', 'Too many shapes');
+  if (n.type === 'group') return { type: 'group', id: n.id, children: n.children.map((c) => nodeFromJson(c, depth + 1, counter)) };
+  const outline = parseHex(n.style.outline);
+  const fill = parseHex(n.style.fill);
+  if (!outline || !fill) throw new ProjectError('error.projectInvalid', 'Bad colour');
+  return { type: 'shape', id: n.id, shape: n.shape, box: n.box ? { ...n.box } : null, points: n.points, style: { ...n.style, outline, fill } };
+}
+
+type LayerJson = z.infer<typeof RasterJson> | z.infer<typeof VectorJson> | GroupJson;
 interface GroupJson {
   kind: 'group';
   id: string;
@@ -84,6 +135,7 @@ interface GroupJson {
 const LayerJsonSchema: z.ZodType<LayerJson> = z.lazy(() =>
   z.discriminatedUnion('kind', [
     RasterJson,
+    VectorJson,
     z.object({
       kind: z.literal('group'),
       ...Common,
@@ -138,6 +190,8 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
       for (const c of l.children) children.push(await toJson(c));
       return { kind: 'group', ...common, collapsed: l.collapsed, children };
     }
+    // Shape layers are kept as objects, not pixels.
+    if (l.kind === 'vector') return { kind: 'vector', ...common, objects: l.objects.map(nodeToJson) };
     const b = l.surface.contentBounds();
     if (!b) return { kind: 'raster', ...common, image: null };
     const file = `layers/${String(++n).padStart(4, '0')}.png`;
@@ -231,6 +285,7 @@ export async function loadProject(bytes: Uint8Array, codec: PngCodec): Promise<P
 
   const seen = new Set<string>();
   let count = 0;
+  const objectCount = { n: 0 };
   const build = async (l: LayerJson, depth: number): Promise<Layer> => {
     if (depth > MAX_DEPTH || ++count > MAX_LAYERS) throw new ProjectError('error.projectInvalid', 'Too many layers');
     // Duplicate ids would confuse the layer tree; give repeats fresh ones.
@@ -243,6 +298,8 @@ export async function loadProject(bytes: Uint8Array, codec: PngCodec): Promise<P
       const g = new GroupLayer(l.name, children, id);
       g.collapsed = l.collapsed;
       layer = g;
+    } else if (l.kind === 'vector') {
+      layer = new VectorLayer(l.name, json.width, json.height, l.objects.map((n) => nodeFromJson(n, 0, objectCount)), id);
     } else {
       const surface = new Surface(json.width, json.height);
       if (l.image) {

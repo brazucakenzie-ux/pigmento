@@ -4,6 +4,19 @@ import { ShapeObject, type FillMode, type ShapeKind, type ShapeStyle } from '../
 import type { I18nKey } from '../../i18n';
 import type { OptionSpec, Tool, ToolContext, ToolPointerEvent } from './Tool';
 
+/** Draw shapes into the layer's pixels, or as editable objects on a shape layer. */
+export const DRAW_AS_OPTION: OptionSpec = {
+  key: 'drawAs',
+  type: 'segmented',
+  labelKey: 'opt.drawAs',
+  default: 'pixels',
+  iconsOnly: true,
+  choices: [
+    { value: 'pixels', labelKey: 'opt.drawAs.pixels', icon: 'pixel-grid' },
+    { value: 'shape', labelKey: 'opt.drawAs.shape', icon: 'shapes' },
+  ],
+};
+
 export const FILL_MODE_OPTION: OptionSpec = {
   key: 'mode',
   type: 'segmented',
@@ -152,7 +165,7 @@ export function createBoxShapeTool(cfg: BoxShapeConfig): Tool {
     group: 'shapes',
     order: cfg.order,
     paints: true,
-    options: [FILL_MODE_OPTION, WIDTH_OPTION, ...(cfg.extraOptions ?? []), ANTIALIAS_OPTION, SHAPE_COLORS_HINT],
+    options: [DRAW_AS_OPTION, FILL_MODE_OPTION, WIDTH_OPTION, ...(cfg.extraOptions ?? []), ANTIALIAS_OPTION, SHAPE_COLORS_HINT],
     cursor: () => 'crosshair',
 
     pointerDown(ctx, e) {

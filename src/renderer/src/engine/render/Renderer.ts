@@ -1,6 +1,7 @@
 import { toCss } from '../core/color';
 import { rectIntersect, rectUnion, type Rect } from '../core/geometry';
-import { walkLayers, type GroupLayer, type Layer, type PaintDocument, type RasterLayer } from '../doc/Document';
+import { walkLayers, type GroupLayer, type Layer, type PaintDocument, type RasterLayer, type VectorLayer } from '../doc/Document';
+import { drawNodes } from '../vector/render';
 import type { Surface } from '../raster/Surface';
 import { TILE_SIZE } from '../raster/Surface';
 import type { PixelView } from '../raster/pixels';
@@ -14,6 +15,8 @@ interface Mirror {
   tileImages: Map<number, ImageData>;
   /** The surface last uploaded; a different one (merge, undo of a resize) forces a full sync. */
   surface: Surface | null;
+  /** Shape layers: the object version last drawn. */
+  version: number;
 }
 
 /** Off-screen canvas a group's children are composited into before it is blended as one. */
@@ -104,6 +107,10 @@ export class Renderer {
     const live = new Set<string>();
     for (const layer of walkLayers(this.doc.layers)) {
       live.add(layer.id);
+      if (layer.kind === 'vector') {
+        this.drawVector(layer);
+        continue;
+      }
       if (layer.kind !== 'raster') continue;
       const m = this.mirrors.get(layer.id);
       if (!m || m.surface !== layer.surface || m.canvas.width !== this.doc.width || m.canvas.height !== this.doc.height) {
@@ -115,11 +122,27 @@ export class Renderer {
     this.invalidate(null);
   }
 
-  private mirrorFor(layer: RasterLayer): Mirror {
+  /** Redraw a shape layer's canvas from its objects if they changed since last time. */
+  private drawVector(layer: VectorLayer): boolean {
+    const m = this.mirrorFor(layer);
+    if (m.version === layer.version) return false;
+    m.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    m.ctx.clearRect(0, 0, m.canvas.width, m.canvas.height);
+    drawNodes(m.ctx, layer.objects, this.doc.width, this.doc.height);
+    m.version = layer.version;
+    return true;
+  }
+
+  /** A shape layer changed: redraw it and recomposite. */
+  syncVector(layer: VectorLayer): void {
+    if (this.drawVector(layer)) this.invalidate(null);
+  }
+
+  private mirrorFor(layer: RasterLayer | VectorLayer): Mirror {
     let m = this.mirrors.get(layer.id);
     if (!m || m.canvas.width !== this.doc.width || m.canvas.height !== this.doc.height) {
       const canvas = new OffscreenCanvas(this.doc.width, this.doc.height);
-      m = { canvas, ctx: ctx2d(canvas), tileImages: new Map(), surface: null };
+      m = { canvas, ctx: ctx2d(canvas), tileImages: new Map(), surface: null, version: -1 };
       this.mirrors.set(layer.id, m);
     }
     return m;
@@ -151,7 +174,7 @@ export class Renderer {
     target.imageSmoothingQuality = 'medium';
     const draw = (l: Layer, top: boolean): void => {
       if (!top && !l.visible) return;
-      if (l.kind === 'raster') {
+      if (l.kind === 'raster' || l.kind === 'vector') {
         const m = this.mirrors.get(l.id);
         if (!m) return;
         target.globalAlpha = top ? 1 : l.opacity;
@@ -245,6 +268,9 @@ export class Renderer {
       if (layer.visible) {
         let source: OffscreenCanvas;
         if (layer.kind === 'raster') {
+          source = this.mirrorFor(layer).canvas;
+        } else if (layer.kind === 'vector') {
+          this.drawVector(layer);
           source = this.mirrorFor(layer).canvas;
         } else {
           const g = this.groupCanvas(layer);

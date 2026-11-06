@@ -1,8 +1,8 @@
 import { BLACK, WHITE, colorEquals, type RGBA } from './core/color';
 import { Emitter } from './core/emitter';
 import { rectCorners, rectEquals, rectIntersect, rectUnion, type Point, type Rect } from './core/geometry';
-import { matApplyPoints, matAround, matRotate, matSkew, matTranslate, matChain } from './core/matrix';
-import { PaintDocument, RasterLayer, newId, type Layer } from './doc/Document';
+import { matApplyPoints, matApplyRect, matAround, matRotate, matScale, matSkew, matTranslate, matChain, type Mat } from './core/matrix';
+import { PaintDocument, RasterLayer, VectorLayer, newId, type Layer } from './doc/Document';
 import { transformSaved } from './doc/savedSelections';
 import { colorRangeMask } from './doc/selectionMath';
 import { LayerController, type LayersInfo } from './doc/LayerController';
@@ -13,6 +13,7 @@ import {
   DocStateCommand,
   GuidesCommand,
   PixelCommand,
+  VectorEditCommand,
   SavedSelectionsCommand,
   SelectionCommand,
   captureDocState,
@@ -31,6 +32,27 @@ import { boxLines, snapBox, snapPoint, type SnapLine, type SnapMatch, type SnapT
 import { MAX_STOPS } from './raster/gradient';
 import type { LiveKind, LiveObject } from './live/LiveObject';
 import type { TextObject } from './live/TextObject';
+import { ShapeObject, type ShapeStyle } from './live/ShapeObject';
+import {
+  alignNodes,
+  arrangeNodes,
+  boundsOf,
+  distributeNodes,
+  groupNodes,
+  nodeBounds,
+  removeNodes,
+  restyleNode,
+  transformNode,
+  translateNode,
+  ungroupNodes,
+  vectorId,
+  walkShapes,
+  type Align,
+  type Arrange,
+  type VectorNode,
+  type VectorShape,
+} from './vector/model';
+import { hitTestNodes, rasterizeNodes } from './vector/render';
 import { alphaBounds, flattenOnto, hasTransparency, invertView, type MaskView } from './raster/pixels';
 import { Surface } from './raster/Surface';
 import { affineTransform, placeImage, resample, type ImageBuf, type Resample } from './raster/transform';
@@ -96,6 +118,17 @@ const MODIFY_LABEL: Record<SelectionModify, I18nKey> = {
   border: 'history.border',
 };
 
+// Shape layers turn their objects into pixels with Canvas 2D (blending, export, picking).
+VectorLayer.rasterizer = (l) => rasterizeNodes(l.objects, l.width, l.height);
+
+/** The objects selected on the active shape layer, as the UI needs them. */
+export interface VectorSelectionInfo {
+  count: number;
+  /** How many of them are groups (for Ungroup). */
+  groups: number;
+  bounds: Rect | null;
+}
+
 /** A fill pattern as the pattern picker lists it. */
 export interface PatternInfo {
   id: string;
@@ -138,6 +171,8 @@ export interface EngineEvents {
   patterns: PatternInfo[];
   /** Number of guides (for enabling "Clear guides"). */
   guides: number;
+  /** Objects selected on the active shape layer. */
+  vectorSelection: VectorSelectionInfo;
 }
 
 export type Anchor = 'nw' | 'n' | 'ne' | 'w' | 'c' | 'e' | 'sw' | 's' | 'se';
@@ -468,6 +503,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   layersChanged(): void {
     if (!this.doc.layerById(this.doc.activeId)) this.doc.activeId = this.doc.layers[this.doc.layers.length - 1].id;
     this.renderer.syncTree();
+    this.pruneVectorSelection();
     this.emit('layers', this.layers.info());
     this.requestRender();
     this.notifyPixels();
@@ -597,6 +633,19 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     return this.toolValues;
   }
 
+  /** Set several options at once (the tool hears about it once). */
+  setToolOptions(toolId: string, values: Record<string, unknown>): void {
+    const cur = this.options(toolId);
+    if (Object.entries(values).every(([k, v]) => cur[k] === v)) return;
+    const o = { ...cur, ...values };
+    this.toolValues[toolId] = o;
+    this.emit('toolOptions', { toolId, values: o });
+    if (toolId === this.activeToolId) {
+      this.activeTool.optionsChanged?.(this);
+      this.requestRender();
+    }
+  }
+
   setToolOption(toolId: string, key: string, value: unknown): void {
     const o = { ...this.options(toolId), [key]: value };
     this.toolValues[toolId] = o;
@@ -723,8 +772,16 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   }
 
   commitLive(keepSelection = false): void {
-    const obj = this._live;
-    if (!obj) return;
+    const live = this._live;
+    if (!live) return;
+    if (live instanceof ShapeObject) {
+      const target = this.vectorTargetFor(live);
+      if (target) {
+        this.commitShapeToVector(live, target);
+        return;
+      }
+    }
+    const obj: LiveObject = live;
     const lifted = obj.lifted === true;
     const text = obj.kind === 'text' ? (obj as TextObject) : null;
     // A free transform keeps its (transformed) selection; a floating selection only when asked.
@@ -770,6 +827,14 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   cancelLive(): void {
     const obj = this.detachLive();
     if (!obj) return;
+    // A shape-layer object edited in place goes back as it was.
+    if (obj instanceof ShapeObject && obj.vectorEdit) {
+      const l = this.doc.layerById(obj.vectorEdit.layerId);
+      if (l?.kind === 'vector') {
+        l.setObjects(obj.vectorEdit.before);
+        this.vectorChanged(l);
+      }
+    }
     obj.dispose();
     this.afterLive(obj);
     this.emitLive();
@@ -809,6 +874,23 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   }
 
   canPaint(): boolean {
+    const al = this.doc.activeLayer;
+    if (al.kind === 'vector') {
+      // Shapes are added to a shape layer as objects; other tools need pixels.
+      if (this.activeTool.group !== 'shapes' && this.activeTool.id !== 'move') {
+        this.notify('info', 'notice.vectorLayer');
+        return false;
+      }
+      if (al.locked) {
+        this.notify('info', 'notice.layerLocked');
+        return false;
+      }
+      if (!this.doc.isEffectivelyVisible(al.id)) {
+        this.notify('info', 'notice.layerHidden');
+        return false;
+      }
+      return true;
+    }
     const l = this.doc.activeRaster;
     if (!l) {
       this.notify('info', 'notice.notRaster');
@@ -1088,6 +1170,252 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     return f;
   }
 
+  // ---- shape layers ------------------------------------------------------------------------
+
+  /** A shape layer's objects changed (or were undone): redraw it. */
+  vectorChanged(layer: VectorLayer): void {
+    this.renderer.syncVector(layer);
+    this.pruneVectorSelection();
+    this.requestRender();
+    this.notifyPixels();
+  }
+
+  get activeVector(): VectorLayer | null {
+    const l = this.doc.activeLayer;
+    return l.kind === 'vector' ? l : null;
+  }
+
+  private vectorSel: string[] = [];
+
+  get vectorSelection(): readonly string[] {
+    return this.vectorSel;
+  }
+
+  selectedVectorNodes(): VectorNode[] {
+    const layer = this.activeVector;
+    if (!layer) return [];
+    return layer.objects.filter((n) => this.vectorSel.includes(n.id));
+  }
+
+  vectorSelectionInfo(): VectorSelectionInfo {
+    const nodes = this.selectedVectorNodes();
+    return { count: nodes.length, groups: nodes.filter((n) => n.type === 'group').length, bounds: boundsOf(nodes) };
+  }
+
+  setVectorSelection(ids: readonly string[]): void {
+    const layer = this.activeVector;
+    const valid = layer ? ids.filter((id, i) => ids.indexOf(id) === i && layer.objects.some((n) => n.id === id)) : [];
+    if (valid.length === this.vectorSel.length && valid.every((id, i) => id === this.vectorSel[i])) return;
+    this.vectorSel = valid;
+    this.emit('vectorSelection', this.vectorSelectionInfo());
+    // The Move tool's options show the selected shape's style (set together: changing them restyles).
+    const st = this.selectedVectorStyle();
+    if (st && this.activeTool.id === 'move') this.setToolOptions('move', { mode: st.mode, width: st.width });
+    this.requestRender();
+  }
+
+  private pruneVectorSelection(): void {
+    if (this.vectorSel.length) this.setVectorSelection(this.vectorSel);
+    else this.emit('vectorSelection', this.vectorSelectionInfo());
+  }
+
+  /** The top-level object under a document point on the active shape layer. */
+  vectorHit(p: Point): string | null {
+    const layer = this.activeVector;
+    return layer ? hitTestNodes(layer.objects, p, 4 / this.view.zoom) : null;
+  }
+
+  /** Objects whose bounds touch a document rectangle. */
+  vectorIdsIn(r: Rect): string[] {
+    const layer = this.activeVector;
+    if (!layer) return [];
+    return layer.objects.filter((n) => {
+      const b = nodeBounds(n);
+      return b !== null && b.x <= r.x + r.w && b.x + b.w >= r.x && b.y <= r.y + r.h && b.y + b.h >= r.y;
+    }).map((n) => n.id);
+  }
+
+  /** Show new objects during a drag without recording a step. */
+  previewVector(layer: VectorLayer, objects: readonly VectorNode[]): void {
+    layer.setObjects(objects);
+    this.vectorChanged(layer);
+  }
+
+  /** Record the change from `before` to the layer's current objects as one step. */
+  recordVector(label: I18nKey, layer: VectorLayer, before: readonly VectorNode[], mergeKey: string | null = null): void {
+    if (before === layer.objects) return;
+    this.history.push(new VectorEditCommand(label, this, layer, before, layer.objects, mergeKey));
+  }
+
+  /** Change the active shape layer's objects as one step (selection updated to `select`). */
+  private editVector(label: I18nKey, fn: (objects: readonly VectorNode[], selected: ReadonlySet<string>) => VectorNode[] | null, select?: string[], mergeKey: string | null = null): boolean {
+    const layer = this.activeVector;
+    if (!layer || layer.locked) return false;
+    const before = layer.objects;
+    const after = fn(before, new Set(this.vectorSel));
+    if (!after) return false;
+    layer.setObjects(after);
+    this.history.push(new VectorEditCommand(label, this, layer, before, layer.objects, mergeKey));
+    this.vectorChanged(layer);
+    if (select) this.setVectorSelection(select);
+    return true;
+  }
+
+  /** Line selected objects up (one object: with the canvas). */
+  alignVector(how: Align): void {
+    const nodes = this.selectedVectorNodes();
+    if (!nodes.length) return;
+    const ref = nodes.length === 1 ? this.doc.bounds : boundsOf(nodes);
+    if (!ref) return;
+    const moved = new Map(alignNodes(nodes, how, ref).map((n) => [n.id, n]));
+    this.editVector('history.alignShapes', (list) => list.map((n) => moved.get(n.id) ?? n));
+  }
+
+  distributeVector(axis: 'x' | 'y'): void {
+    const nodes = this.selectedVectorNodes();
+    if (nodes.length < 3) return;
+    const moved = new Map(distributeNodes(nodes, axis).map((n) => [n.id, n]));
+    this.editVector('history.distributeShapes', (list) => list.map((n) => moved.get(n.id) ?? n));
+  }
+
+  arrangeVector(how: Arrange): void {
+    if (!this.vectorSel.length) return;
+    this.editVector('history.arrangeShapes', (list, sel) => arrangeNodes(list, sel, how));
+  }
+
+  groupVector(): void {
+    if (this.vectorSel.length < 2) return;
+    let id: string | null = null;
+    this.editVector('history.groupShapes', (list, sel) => {
+      const g = groupNodes(list, sel);
+      id = g.id;
+      return g.id ? g.list : null;
+    });
+    if (id) this.setVectorSelection([id]);
+  }
+
+  ungroupVector(): void {
+    let freed: string[] = [];
+    this.editVector('history.ungroupShapes', (list, sel) => {
+      const u = ungroupNodes(list, sel);
+      freed = u.ids;
+      return u.ids.length ? u.list : null;
+    });
+    if (freed.length) this.setVectorSelection(freed);
+  }
+
+  deleteVector(): void {
+    if (!this.vectorSel.length) return;
+    this.editVector('history.deleteShapes', (list, sel) => removeNodes(list, sel), []);
+  }
+
+  nudgeVector(dx: number, dy: number): void {
+    if (!this.vectorSel.length) return;
+    this.editVector('history.nudgeShapes', (list, sel) => list.map((n) => (sel.has(n.id) ? translateNode(n, dx, dy) : n)), undefined, `nudge:${this.vectorSel.join(',')}`);
+  }
+
+  /** New colours, fill mode or outline width for the selected objects. */
+  restyleVector(change: Partial<ShapeStyle>): void {
+    if (!this.vectorSel.length) return;
+    this.editVector('history.restyleShapes', (list, sel) =>
+      list.map((n) => (sel.has(n.id) ? restyleNode(n, (s) => ({ ...s, ...change, outline: { ...(change.outline ?? s.outline) }, fill: { ...(change.fill ?? s.fill) } })) : n)),
+    );
+  }
+
+  /** Style of the first selected shape (the options bar shows it). */
+  selectedVectorStyle(): ShapeStyle | null {
+    for (const s of walkShapes(this.selectedVectorNodes())) return s.style;
+    return null;
+  }
+
+  newShapeLayer(): string {
+    this.commitLive();
+    return this.layers.addVector();
+  }
+
+  rasterizeActiveLayer(): boolean {
+    this.commitLive();
+    return this.layers.rasterize();
+  }
+
+  /** Double-click an object to change its corners and handles as a live shape. */
+  editVectorShape(id: string): boolean {
+    const layer = this.activeVector;
+    if (!layer || layer.locked) return false;
+    const index = layer.objects.findIndex((n) => n.id === id);
+    const node = layer.objects[index];
+    if (!node || node.type !== 'shape') return false;
+    this.commitLive();
+    const s = new ShapeObject(node.shape, { ...node.style }, this.doc.width, this.doc.height, node.box ? { box: { ...node.box } } : { points: node.points.map((p) => ({ ...p })) });
+    s.vectorEdit = { layerId: layer.id, id, index, before: layer.objects };
+    // The original is hidden while it's edited (nothing recorded until the edit is applied).
+    this.previewVector(layer, layer.objects.filter((n) => n.id !== id));
+    this.setVectorSelection([]);
+    this.setLive(s);
+    return true;
+  }
+
+  /** Where a committed shape goes: its shape layer, the active shape layer, or a new one. */
+  private vectorTargetFor(s: ShapeObject): VectorLayer | 'new' | null {
+    if (s.vectorEdit) {
+      const l = this.doc.layerById(s.vectorEdit.layerId);
+      return l?.kind === 'vector' ? l : null;
+    }
+    const active = this.activeVector;
+    if (active) return active;
+    if (this.activeTool.group === 'shapes' && this.options(this.activeToolId).drawAs === 'shape') return 'new';
+    return null;
+  }
+
+  private commitShapeToVector(s: ShapeObject, target: VectorLayer | 'new'): void {
+    const edit = s.vectorEdit;
+    const label: I18nKey = edit ? 'history.editShape' : s.historyLabel;
+    if (!s.close()) {
+      this.cancelLive();
+      return;
+    }
+    this.detachLive();
+    const node: VectorShape = {
+      type: 'shape',
+      id: edit?.id ?? vectorId(),
+      shape: s.shape,
+      box: s.box ? { ...s.box } : null,
+      points: s.points.map((p) => ({ ...p })),
+      style: { ...s.style, outline: { ...s.style.outline }, fill: { ...s.style.fill } },
+    };
+    let layer: VectorLayer | null = target === 'new' ? null : target;
+    this.history.group(label, () => {
+      if (!layer) layer = this.doc.layerById(this.layers.addVector()) as VectorLayer;
+      const before = edit ? edit.before : layer.objects;
+      const list = [...layer.objects];
+      if (edit) list.splice(Math.min(edit.index, list.length), 0, node);
+      else list.push(node);
+      layer.setObjects(list);
+      this.history.push(new VectorEditCommand(label, this, layer, before, layer.objects));
+    });
+    if (layer) this.vectorChanged(layer);
+    s.dispose();
+    this.emitLive();
+    if (edit) this.setVectorSelection([node.id]);
+  }
+
+  /** Apply a whole-image change (crop, resize, rotate…) to every shape layer. */
+  private reframeVectors(m: Mat, w: number, h: number): void {
+    for (const l of this.doc.vectorLayers()) {
+      l.resize(w, h);
+      l.setObjects(l.objects.map((n) => transformNode(n, m)));
+    }
+  }
+
+  /** Area a shape layer's objects cover, outlines included. */
+  private vectorExtent(l: VectorLayer): Rect | null {
+    const b = boundsOf(l.objects);
+    if (!b) return null;
+    let pad = 1;
+    for (const s of walkShapes(l.objects)) if (s.style.mode !== 'fill' || s.shape === 'line' || s.shape === 'curve') pad = Math.max(pad, s.style.width / 2 + 1);
+    return { x: Math.floor(b.x - pad), y: Math.floor(b.y - pad), w: Math.ceil(b.w + 2 * pad) + 1, h: Math.ceil(b.h + 2 * pad) + 1 };
+  }
+
   // ---- guides and snapping ----------------------------------------------------------------
 
   /** A guide being dragged (from a ruler, or an existing one): drawn instead of the original. */
@@ -1146,7 +1474,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
 
   /** Edges and centres of the other visible layers (cached until the image changes). */
   private objectLines(): { xs: SnapLine[]; ys: SnapLine[] } {
-    const key = `${this.history.index}/${this.history.length}/${this.doc.activeId}/${this.doc.width}x${this.doc.height}`;
+    const versions = this.doc.vectorLayers().map((l) => l.version).join(',');
+    const key = `${this.history.index}/${this.history.length}/${this.doc.activeId}/${this.doc.width}x${this.doc.height}/${versions}/${this.vectorSel.join(',')}`;
     if (this.snapCache?.key === key) return this.snapCache.objects;
     const xs: SnapLine[] = [];
     const ys: SnapLine[] = [];
@@ -1157,6 +1486,18 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       const lines = boxLines(b, 'object');
       xs.push(...lines.xs);
       ys.push(...lines.ys);
+    }
+    // Other shapes (also on the active shape layer, except the ones being moved).
+    for (const l of this.doc.vectorLayers()) {
+      if (!this.doc.isEffectivelyVisible(l.id)) continue;
+      for (const n of l.objects) {
+        if (l.id === this.doc.activeId && this.vectorSel.includes(n.id)) continue;
+        const b = nodeBounds(n);
+        if (!b) continue;
+        const lines = boxLines(b, 'object');
+        xs.push(...lines.xs);
+        ys.push(...lines.ys);
+      }
     }
     this.snapCache = { key, objects: { xs, ys } };
     return this.snapCache.objects;
@@ -1476,6 +1817,10 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   }
 
   deleteSelection(label: I18nKey = 'history.delete'): void {
+    if (!this._live && this.vectorSel.length > 0) {
+      this.deleteVector();
+      return;
+    }
     const f = this.floating;
     const layer = this.doc.activeRaster;
     if (f) {
@@ -1517,6 +1862,10 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   }
 
   nudgeSelection(dx: number, dy: number): boolean {
+    if (!this._live && this.vectorSel.length > 0) {
+      this.nudgeVector(dx, dy);
+      return true;
+    }
     const t = this.transforming;
     if (t) {
       t.nudge(dx, dy);
@@ -1625,13 +1974,15 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     const { width: w, height: h } = this.doc;
     const centered = matAround(m, { x: w / 2, y: h / 2 });
     // Every layer has the same size, so they share the warped bounds (the new canvas).
-    const rasters = this.doc.rasterLayers();
-    const results = rasters.map((layer) =>
-      affineTransform({ w, h, data: layer.surface.toRGBA() }, centered, true),
-    );
-    const nw = results[0].w;
-    const nh = results[0].h;
+    const wb = matApplyRect(centered, { x: 0, y: 0, w, h });
+    const x0 = Math.floor(wb.x + 1e-6);
+    const y0 = Math.floor(wb.y + 1e-6);
+    const nw = Math.ceil(wb.x + wb.w - 1e-6) - x0;
+    const nh = Math.ceil(wb.y + wb.h - 1e-6) - y0;
     checkSize(nw, nh);
+    const rasters = this.doc.rasterLayers();
+    const results = rasters.map((layer) => affineTransform({ w, h, data: layer.surface.toRGBA() }, centered, true));
+    this.reframeVectors(matChain(centered, matTranslate(-x0, -y0)), nw, nh);
     rasters.forEach((layer, i) => {
       layer.surface = Surface.fromRGBA(nw, nh, results[i].data);
     });
@@ -1666,6 +2017,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     }
     this.doc.savedSelections = transformSaved(this.doc.savedSelections, this.doc.width, this.doc.height, (img) => resample(img, w, h, method));
     this.doc.guides = scaleGuides(this.doc.guides, this.doc.width, this.doc.height, w, h);
+    this.reframeVectors(matScale(w / this.doc.width, h / this.doc.height), w, h);
     this.doc.width = w;
     this.doc.height = h;
     this.doc.selection = null;
@@ -1702,6 +2054,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       placeImage(img, r.w, r.h, -r.x, -r.y),
     );
     this.doc.guides = reframeGuides(this.doc.guides, r);
+    this.reframeVectors(matTranslate(-r.x, -r.y), r.w, r.h);
     this.doc.width = r.w;
     this.doc.height = r.h;
     this.doc.selection = null;
@@ -1733,6 +2086,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     const float = this.floating;
     let u: Rect | null = null;
     for (const l of this.doc.rasterLayers()) u = rectUnion(u, l.surface.contentBounds());
+    for (const l of this.doc.vectorLayers()) u = rectUnion(u, this.vectorExtent(l));
     if (float) u = rectUnion(u, float.extent());
     if (!u) {
       this.notify('info', 'notice.trimEmpty');
@@ -1775,6 +2129,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       placeImage(img, b.w, b.h, -b.x, -b.y),
     );
     this.doc.guides = reframeGuides(this.doc.guides, b);
+    this.reframeVectors(matTranslate(-b.x, -b.y), b.w, b.h);
     this.doc.width = b.w;
     this.doc.height = b.h;
     this.doc.selection = null;

@@ -15,6 +15,7 @@ function host(doc: PaintDocument): CommandHost & { changes: number } {
     structureChanged() {},
     savedSelectionsChanged() {},
     guidesChanged() {},
+    vectorChanged() {},
     layersChanged() {},
     setSelection(sel) {
       doc.selection = sel;

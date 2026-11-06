@@ -4,7 +4,7 @@ import type { AutosaveEntry, RecentFile, SystemTheme } from '@shared/ipc';
 import { defaultSettings, type Settings } from '@shared/settings';
 import type { RGBA } from '@engine/core/color';
 import type { Point } from '@engine/core/geometry';
-import type { DocInfo, HistoryInfo, Notice, PatternInfo, SavedSelectionInfo, SelectionInfo } from '@engine/Engine';
+import type { DocInfo, HistoryInfo, Notice, PatternInfo, SavedSelectionInfo, SelectionInfo, VectorSelectionInfo } from '@engine/Engine';
 import type { TransformInfo } from '@engine/live/TransformObject';
 import type { SelectionModify } from '@engine/doc/Selection';
 import type { LayersInfo } from '@engine/doc/LayerController';
@@ -75,6 +75,8 @@ export interface UiState {
   patterns: PatternInfo[];
   /** How many guides the image has. */
   guides: number;
+  /** Objects selected on the active shape layer. */
+  vectorSelection: VectorSelectionInfo;
 }
 
 export const useUi = create<UiState>(() => ({
@@ -106,6 +108,7 @@ export const useUi = create<UiState>(() => ({
   transform: null,
   patterns: [],
   guides: 0,
+  vectorSelection: { count: 0, groups: 0, bounds: null },
 }));
 
 let pendingPatch: Partial<Settings> = {};

@@ -1,11 +1,12 @@
 import type { OptionSpec } from '@engine/tools/Tool';
+import type { LayerNode } from '@engine/doc/LayerController';
 import { toolRegistry } from '@engine/tools/ToolRegistry';
 import { t } from '../../i18n';
 import { Icon } from '../icons/Icon';
 import { NumberField, Segmented, Slider } from '../components/Controls';
 import { engine } from '../state/engine';
 import { useUi } from '../state/store';
-import { runAction } from '../actions/actions';
+import { actions, runAction } from '../actions/actions';
 import { GradientButton, PatternPicker } from './PaintOptions';
 
 const FALLBACK_FONTS = ['Segoe UI', 'Arial', 'Calibri', 'Cambria', 'Comic Sans MS', 'Consolas', 'Georgia', 'Impact', 'Segoe Print', 'Times New Roman', 'Trebuchet MS', 'Verdana'];
@@ -95,6 +96,49 @@ function OptionControl({ toolId, spec, values }: { toolId: string; spec: OptionS
   }
 }
 
+/** Kind of a layer in the tree (the Layers info the store mirrors). */
+function findKind(tree: LayerNode[], id: string): LayerNode['kind'] | null {
+  for (const n of tree) {
+    if (n.id === id) return n.kind;
+    const k = findKind(n.children, id);
+    if (k) return k;
+  }
+  return null;
+}
+
+/** An action as a small icon button (enabled state from the action). */
+function ActionIcon({ id }: { id: string }) {
+  const a = actions().get(id)!;
+  const enabled = useUi((s) => (a.enabled ? a.enabled(s) : true));
+  return (
+    <button type="button" className="icon-btn" aria-label={t(a.labelKey)} data-tip={t(a.labelKey)} disabled={!enabled} onClick={() => runAction(id)}>
+      <Icon name={a.icon ?? 'info'} size={16} />
+    </button>
+  );
+}
+
+/** Move tool on a shape layer: align, distribute, arrange, group and rasterise. */
+function VectorBar() {
+  const isVector = useUi((s) => findKind(s.layers.tree, s.layers.activeId)) === 'vector';
+  if (!isVector) return null;
+  const group = (ids: string[]) => (
+    <span className="opt tf-field" role="group">
+      {ids.map((id) => (
+        <ActionIcon key={id} id={id} />
+      ))}
+    </span>
+  );
+  return (
+    <span className="opt vector-bar" role="group" aria-label={t('a11y.shapeTools')}>
+      {group(['alignLeft', 'alignHCenter', 'alignRight', 'alignTop', 'alignVCenter', 'alignBottom'])}
+      {group(['distributeH', 'distributeV'])}
+      {group(['bringToFront', 'bringForward', 'sendBackward', 'sendToBack'])}
+      {group(['groupShapes', 'ungroupShapes'])}
+      {group(['rasterizeLayer'])}
+    </span>
+  );
+}
+
 /** Free transform: position, scale, rotation and skew as numbers, plus flips. */
 function TransformFields() {
   const info = useUi((s) => s.transform);
@@ -147,16 +191,18 @@ export function OptionsBar() {
   const values = useUi((s) => s.toolOptions[toolId]) ?? engine.options(toolId);
   const live = useUi((s) => s.live);
   const transparent = useUi((s) => s.transparentSelection);
+  // Move's style options only mean something on a shape layer.
+  const shapeLayer = useUi((s) => findKind(s.layers.tree, s.layers.activeId)) === 'vector';
   const tool = toolRegistry.get(toolId);
   if (!tool) return <div className="optionsbar" />;
-  const visible = tool.options.filter((o) => !o.visibleIf || o.visibleIf(values));
+  const visible = tool.id === 'move' && !shapeLayer ? [] : tool.options.filter((o) => !o.visibleIf || o.visibleIf(values));
   return (
     <div className="optionsbar" role="toolbar" aria-label={t('a11y.toolOptions')}>
       <span className="tool-name">
         <Icon name={tool.icon} size={18} />
         {t(tool.labelKey)}
       </span>
-      {tool.group === 'selection' && !tool.hidden ? (
+      {tool.group === 'selection' && !tool.hidden && tool.id !== 'move' ? (
         <label className="check opt">
           <input type="checkbox" checked={transparent} onChange={() => runAction('transparentSelection')} />
           {t('action.transparentSelection')}
@@ -166,6 +212,7 @@ export function OptionsBar() {
         <OptionControl key={spec.key} toolId={toolId} spec={spec} values={values} />
       ))}
       {toolId === 'transform' ? <TransformFields /> : null}
+      {toolId === 'move' ? <VectorBar /> : null}
       <span className="grow" />
       {live ? (
         <>

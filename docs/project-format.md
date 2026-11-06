@@ -60,6 +60,31 @@ Any other entries are ignored.
 }
 ```
 
+**Shape layer** (shapes that stay editable; no PNG, the objects are stored)
+```json
+{
+  "kind": "vector",
+  "id": "shapes-5-lx1",
+  "name": "Shapes 1",
+  "opacity": 1,
+  "blend": "normal",
+  "visible": true,
+  "locked": false,
+  "objects": [
+    {
+      "type": "shape",
+      "id": "v3-lx2",
+      "shape": "roundRect",
+      "box": { "cx": 200, "cy": 150, "w": 200, "h": 100, "angle": 0 },
+      "points": [],
+      "style": { "mode": "both", "width": 3, "outline": "#d7263dff", "fill": "#1e88e5ff", "radius": 12, "antialias": true }
+    },
+    { "type": "group", "id": "v9-lx2", "children": [ /* shapes or groups */ ] }
+  ]
+}
+```
+`shape` is `rect`, `roundRect` or `ellipse` (with an oriented `box`: centre, size, angle in radians; a negative size is a flip) or `line`, `curve` (four points: start, two controls, end) or `polygon` (with `points`). Objects are listed bottom to top. All shape layers together may hold at most 50,000 objects.
+
 **Saved selection** (Select → Save selection)
 ```json
 { "id": "selection-4-lx1", "name": "Window", "mask": { "file": "selections/0001.png", "x": 90, "y": 90, "w": 220, "h": 220 } }

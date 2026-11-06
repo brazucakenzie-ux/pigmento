@@ -1,6 +1,8 @@
 import type { RGBA } from '../core/color';
 import type { Point, Rect } from '../core/geometry';
-import type { PaintDocument, Layer } from '../doc/Document';
+import type { PaintDocument, Layer, VectorLayer } from '../doc/Document';
+import type { VectorNode } from '../vector/model';
+import type { ShapeStyle } from '../live/ShapeObject';
 import type { Selection, SelectionMode } from '../doc/Selection';
 import type { History } from '../history/History';
 import type { LiveObject } from '../live/LiveObject';
@@ -136,6 +138,23 @@ export interface ToolContext {
   snapPoint(p: Point): Point;
   /** Shift that lines a moving box up with the snap targets (shows alignment lines). */
   snapMove(r: Rect): Point;
+  /** Shape layers: the active one, and its selected objects (by id). */
+  readonly activeVector: VectorLayer | null;
+  readonly vectorSelection: readonly string[];
+  setVectorSelection(ids: readonly string[]): void;
+  selectedVectorNodes(): VectorNode[];
+  /** Topmost object under a document point on the active shape layer. */
+  vectorHit(p: Point): string | null;
+  vectorIdsIn(r: Rect): string[];
+  /** Show objects during a drag; record the drag as one step at the end. */
+  previewVector(layer: VectorLayer, objects: readonly VectorNode[]): void;
+  recordVector(label: I18nKey, layer: VectorLayer, before: readonly VectorNode[]): void;
+  /** Edit an object's corners and handles as a live shape. */
+  editVectorShape(id: string): boolean;
+  restyleVector(change: Partial<ShapeStyle>): void;
+  /** Delete the selected objects (or selected pixels). */
+  deleteSelection(): void;
+  selectedVectorStyle(): ShapeStyle | null;
   /** Fill the area of similar colour with a colour or a pattern. */
   floodFill(x: number, y: number, paint: RGBA | FillPattern, tolerance: number, contiguous: boolean): Promise<void>;
   zoomAt(zoom: number, sx: number, sy: number): void;

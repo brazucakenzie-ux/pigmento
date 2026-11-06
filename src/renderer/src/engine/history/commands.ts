@@ -1,6 +1,7 @@
 import type { RGBA } from '../core/color';
 import type { Rect } from '../core/geometry';
-import type { PaintDocument, RasterLayer, SavedSelection } from '../doc/Document';
+import type { PaintDocument, RasterLayer, SavedSelection, VectorLayer } from '../doc/Document';
+import type { VectorNode } from '../vector/model';
 import type { Guide } from '../doc/guides';
 import type { Selection } from '../doc/Selection';
 import type { Surface, TileDelta } from '../raster/Surface';
@@ -21,6 +22,8 @@ export interface CommandHost {
   savedSelectionsChanged(): void;
   /** Guides were added, moved or removed. */
   guidesChanged(): void;
+  /** A shape layer's objects changed. */
+  vectorChanged(layer: VectorLayer): void;
 }
 
 /** Pixel edit of one layer, stored as a tile delta (swap on undo/redo). */
@@ -64,6 +67,8 @@ export interface DocState {
   selection: Selection | null;
   saved: SavedSelection[];
   guides: Guide[];
+  /** Objects and size of every shape layer. */
+  vectors: Map<VectorLayer, { objects: readonly VectorNode[]; width: number; height: number }>;
 }
 
 export function captureDocState(doc: PaintDocument): DocState {
@@ -76,6 +81,7 @@ export function captureDocState(doc: PaintDocument): DocState {
     selection: doc.selection,
     saved: doc.savedSelections,
     guides: doc.guides,
+    vectors: new Map(doc.vectorLayers().map((l) => [l, { objects: l.objects, width: l.width, height: l.height }])),
   };
 }
 
@@ -88,6 +94,10 @@ export function applyDocState(doc: PaintDocument, s: DocState): void {
   doc.selection = s.selection;
   doc.savedSelections = s.saved;
   doc.guides = s.guides;
+  for (const [layer, v] of s.vectors) {
+    layer.resize(v.width, v.height);
+    layer.setObjects(v.objects);
+  }
 }
 
 /**
@@ -137,6 +147,43 @@ export class SavedSelectionsCommand implements Command {
   redo(): void {
     this.host.doc.savedSelections = this.after;
     this.host.savedSelectionsChanged();
+  }
+}
+
+/** How long consecutive nudges of the same shapes merge into one step. */
+const NUDGE_MERGE_MS = 1000;
+
+/** Editing a shape layer's objects (both lists are immutable; nothing is copied). */
+export class VectorEditCommand implements Command {
+  readonly bytes = 512;
+  private at = Date.now();
+
+  constructor(
+    readonly label: I18nKey,
+    private readonly host: CommandHost,
+    private readonly layer: VectorLayer,
+    private readonly before: readonly VectorNode[],
+    private after: readonly VectorNode[],
+    /** Consecutive commands with the same key merge (arrow-key nudges). */
+    private readonly mergeKey: string | null = null,
+  ) {}
+
+  mergeWith(next: Command): boolean {
+    if (!(next instanceof VectorEditCommand) || !this.mergeKey || next.mergeKey !== this.mergeKey || next.layer !== this.layer) return false;
+    if (next.at - this.at > NUDGE_MERGE_MS) return false;
+    this.after = next.after;
+    this.at = next.at;
+    return true;
+  }
+
+  undo(): void {
+    this.layer.setObjects(this.before);
+    this.host.vectorChanged(this.layer);
+  }
+
+  redo(): void {
+    this.layer.setObjects(this.after);
+    this.host.vectorChanged(this.layer);
   }
 }
 

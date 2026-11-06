@@ -1,4 +1,4 @@
-import { toCss, type RGBA } from '../core/color';
+import type { RGBA } from '../core/color';
 import {
   boundsOfPoints,
   distToSegment,
@@ -31,6 +31,8 @@ import {
   type BoxHandle,
 } from './BoxGeom';
 import type { LiveObject } from './LiveObject';
+import { buildShapePath, hardenEdges, paintShape } from '../vector/render';
+import type { VectorNode } from '../vector/model';
 
 export type ShapeKind = 'line' | 'curve' | 'rect' | 'roundRect' | 'ellipse' | 'polygon';
 export type FillMode = 'outline' | 'fill' | 'both';
@@ -108,39 +110,7 @@ export class ShapeObject implements LiveObject {
 
   /** Path in document coordinates. */
   private buildPath(): Path2D {
-    const p = new Path2D();
-    const { style } = this;
-    if (this.box) {
-      const g = this.box;
-      const inset = style.mode === 'fill' ? 0 : style.width / 2;
-      const hw = Math.max(0, Math.abs(g.w) / 2 - inset);
-      const hh = Math.max(0, Math.abs(g.h) / 2 - inset);
-      const local = new Path2D();
-      if (this.shape === 'ellipse') {
-        local.ellipse(0, 0, Math.max(0.01, hw), Math.max(0.01, hh), 0, 0, Math.PI * 2);
-      } else if (this.shape === 'roundRect') {
-        const r = Math.max(0, Math.min(style.radius - inset, hw, hh));
-        local.roundRect(-hw, -hh, hw * 2, hh * 2, r);
-      } else {
-        local.rect(-hw, -hh, hw * 2, hh * 2);
-      }
-      const c = Math.cos(g.angle);
-      const s = Math.sin(g.angle);
-      p.addPath(local, new DOMMatrix([c, s, -s, c, g.cx, g.cy]));
-      return p;
-    }
-    const pts = this.points;
-    if (pts.length === 0) return p;
-    if (this.shape === 'curve' && pts.length === 4) {
-      p.moveTo(pts[0].x, pts[0].y);
-      p.bezierCurveTo(pts[1].x, pts[1].y, pts[2].x, pts[2].y, pts[3].x, pts[3].y);
-      return p;
-    }
-    p.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) p.lineTo(pts[i].x, pts[i].y);
-    if (this.open && this.rubber) p.lineTo(this.rubber.x, this.rubber.y);
-    if (this.shape === 'polygon' && !this.open) p.closePath();
-    return p;
+    return buildShapePath(this, this.open, this.rubber);
   }
 
   private geometryBounds(): Rect | null {
@@ -168,29 +138,11 @@ export class ShapeObject implements LiveObject {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, area.w, area.h);
     ctx.translate(-area.x, -area.y);
-    const path = this.buildPath();
-    const { style } = this;
-    const isLine = this.shape === 'line' || this.shape === 'curve' || this.open;
-    const fill = !isLine && (style.mode === 'fill' || style.mode === 'both');
-    const stroke = isLine || style.mode === 'outline' || style.mode === 'both';
-    if (fill) {
-      ctx.fillStyle = toCss(style.fill);
-      ctx.fill(path);
-    }
-    if (stroke && style.width > 0) {
-      ctx.strokeStyle = toCss(style.outline);
-      ctx.lineWidth = style.width;
-      ctx.lineJoin = this.shape === 'rect' ? 'miter' : 'round';
-      ctx.lineCap = isLine ? 'round' : 'butt';
-      ctx.stroke(path);
-    }
-    if (!style.antialias) {
+    paintShape(ctx, this, this.buildPath(), this.open);
+    if (!this.style.antialias) {
       // Hard edges: threshold coverage so every pixel is fully on or off.
-      const img = ctx.getImageData(0, 0, area.w, area.h);
-      const d = img.data;
-      for (let i = 3; i < d.length; i += 4) d[i] = d[i] >= 128 ? 255 : 0;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.putImageData(img, 0, 0);
+      hardenEdges(ctx, area.w, area.h);
     }
   }
 
@@ -326,6 +278,19 @@ export class ShapeObject implements LiveObject {
 
   get dragging(): boolean {
     return this.dragStart !== null;
+  }
+
+  /** Set when this shape is an object of a shape layer being edited in place. */
+  vectorEdit: { layerId: string; id: string; index: number; before: readonly VectorNode[] } | null = null;
+
+  /** Finish a polygon that's still being drawn. Returns false if it has too few corners. */
+  close(): boolean {
+    if (!this.open) return true;
+    if (this.points.length < 3) return false;
+    this.open = false;
+    this.rubber = null;
+    this.update();
+    return true;
   }
 
   /** What the current drag moves, and the shape's bounds when it started (for snapping). */

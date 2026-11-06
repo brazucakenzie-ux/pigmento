@@ -41,7 +41,7 @@ function locate(nodes: LayerNode[], id: string, parent: string | null = null): {
 }
 
 export function displayName(n: LayerNode): string {
-  return n.name || t(n.kind === 'group' ? 'layer.group' : 'layer.default', { n: 1 });
+  return n.name || t(n.kind === 'group' ? 'layer.group' : n.kind === 'vector' ? 'layer.shapes' : 'layer.default', { n: 1 });
 }
 
 function Thumbnail({ id, kind }: { id: string; kind: LayerNode['kind'] }) {
@@ -66,6 +66,7 @@ function Thumbnail({ id, kind }: { id: string; kind: LayerNode['kind'] }) {
     <span className="layer-thumb" aria-hidden="true">
       <canvas ref={ref} style={{ width: w, height: h }} />
       {kind === 'group' ? <Icon name="folder" size={14} className="layer-thumb-badge" /> : null}
+      {kind === 'vector' ? <Icon name="shapes" size={14} className="layer-thumb-badge" /> : null}
     </span>
   );
 }
@@ -313,6 +314,7 @@ export function LayersPanel() {
       </ul>
       <div className="layer-toolbar" role="toolbar" aria-label={t('panel.layers')}>
         <ToolbarButton action="layerNew" icon="layer-add" label="action.layerNew" />
+        <ToolbarButton action="newShapeLayer" icon="shapes" label="action.newShapeLayer" />
         <ToolbarButton action="layerGroup" icon="folder" label="action.layerGroup" />
         <ToolbarButton action="layerDuplicate" icon="copy" label="action.layerDuplicate" />
         <ToolbarButton action="layerMergeDown" icon="merge" label="action.layerMergeDown" />

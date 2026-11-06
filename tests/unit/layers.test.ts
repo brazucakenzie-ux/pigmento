@@ -112,6 +112,7 @@ function setup() {
     structureChanged() {},
     savedSelectionsChanged() {},
     guidesChanged() {},
+    vectorChanged() {},
     layersChanged() {
       changes++;
     },

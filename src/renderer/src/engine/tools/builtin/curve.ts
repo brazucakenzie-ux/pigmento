@@ -3,7 +3,7 @@ import { ShapeObject } from '../../live/ShapeObject';
 import type { ToolContext } from '../Tool';
 import {
   ANTIALIAS_OPTION,
-  WIDTH_OPTION,
+  WIDTH_OPTION, DRAW_AS_OPTION,
   beginShapeEdit,
   dragShapeEdit,
   endShapeEdit,
@@ -44,7 +44,7 @@ export default registerTool({
   group: 'shapes',
   order: 110,
   paints: true,
-  options: [WIDTH_OPTION, ANTIALIAS_OPTION],
+  options: [DRAW_AS_OPTION, WIDTH_OPTION, ANTIALIAS_OPTION],
   cursor: () => 'crosshair',
 
   activate() {

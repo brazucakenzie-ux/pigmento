@@ -96,6 +96,7 @@ describe('selection history', () => {
     layersChanged() {},
     savedSelectionsChanged() {},
     guidesChanged() {},
+    vectorChanged() {},
     setSelection(s) {
       this.sel = s;
     },

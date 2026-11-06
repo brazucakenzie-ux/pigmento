@@ -3,7 +3,7 @@ import { ShapeObject } from '../../live/ShapeObject';
 import type { ToolContext, ToolPointerEvent } from '../Tool';
 import {
   ANTIALIAS_OPTION,
-  FILL_MODE_OPTION,
+  FILL_MODE_OPTION, DRAW_AS_OPTION,
   SHAPE_COLORS_HINT,
   WIDTH_OPTION,
   beginShapeEdit,
@@ -58,7 +58,7 @@ export default registerTool({
   group: 'shapes',
   order: 150,
   paints: true,
-  options: [FILL_MODE_OPTION, WIDTH_OPTION, ANTIALIAS_OPTION, SHAPE_COLORS_HINT],
+  options: [DRAW_AS_OPTION, FILL_MODE_OPTION, WIDTH_OPTION, ANTIALIAS_OPTION, SHAPE_COLORS_HINT],
   cursor: () => 'crosshair',
 
   pointerDown(ctx, e) {

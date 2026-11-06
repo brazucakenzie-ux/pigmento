@@ -1,4 +1,5 @@
 import { Selection } from '@engine/doc/Selection';
+import type { VectorNode } from '@engine/vector/model';
 import { engine } from '../state/engine';
 import { useUi } from '../state/store';
 import { openPath } from '../services/files';
@@ -36,6 +37,19 @@ export function installTestHook(): void {
     savedSelections: () => engine.savedSelectionsInfo(),
     transformInfo: () => engine.transformInfo(),
     guides: () => engine.doc.guides.map((g) => ({ axis: g.axis, pos: g.pos })),
+    /** Objects of a shape layer (default: the active one), summarised. */
+    vectorObjects: (id?: string) => {
+      const l = id ? engine.doc.layerById(id) : engine.doc.activeLayer;
+      if (l?.kind !== 'vector') return null;
+      const summary = (n: VectorNode): Record<string, unknown> =>
+        n.type === 'group'
+          ? { type: 'group', id: n.id, children: n.children.map(summary) }
+          : { type: 'shape', id: n.id, shape: n.shape, box: n.box, points: n.points, mode: n.style.mode, width: n.style.width, outline: n.style.outline, fill: n.style.fill };
+      return l.objects.map(summary);
+    },
+    vectorSelection: () => [...engine.vectorSelection],
+    setVectorSelection: (ids: string[]) => engine.setVectorSelection(ids),
+    activeLayerKind: () => engine.doc.activeLayer.kind,
     addGuide: (axis: 'x' | 'y', pos: number) => engine.addGuide(axis, pos),
     snapLines: () => engine.activeSnapLines.map((m) => ({ ...m })),
     /** Destination corners of the free transform in progress (TL, TR, BR, BL). */

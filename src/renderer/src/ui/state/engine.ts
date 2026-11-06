@@ -10,7 +10,9 @@ export const engine = new Engine();
 
 // The engine stores user-visible names but never English text: the UI provides them.
 engine.layers.namer = (kind, arg) =>
-  kind === 'copy' ? t('layer.copy', { name: String(arg) }) : t(kind === 'group' ? 'layer.group' : 'layer.default', { n: arg });
+  kind === 'copy'
+    ? t('layer.copy', { name: String(arg) })
+    : t(kind === 'group' ? 'layer.group' : kind === 'shapes' ? 'layer.shapes' : 'layer.default', { n: arg });
 // The start-up document was created before the namer existed.
 for (const l of engine.doc.layers) if (!l.name) l.name = engine.layers.namer('layer', 1);
 
@@ -57,6 +59,7 @@ export function bindEngine(settings: Settings): void {
     transform: engine.transformInfo(),
     patterns: engine.patternsInfo(),
     guides: engine.doc.guides.length,
+    vectorSelection: engine.vectorSelectionInfo(),
   });
 
   engine.on('doc', (doc) => useUi.setState({ doc }));
@@ -74,6 +77,7 @@ export function bindEngine(settings: Settings): void {
   engine.on('transform', (transform) => useUi.setState({ transform }));
   engine.on('patterns', (patterns) => useUi.setState({ patterns }));
   engine.on('guides', (guides) => useUi.setState({ guides }));
+  engine.on('vectorSelection', (vectorSelection) => useUi.setState({ vectorSelection }));
 
   engine.on('tool', ({ id }) => {
     useUi.setState({ tool: id });

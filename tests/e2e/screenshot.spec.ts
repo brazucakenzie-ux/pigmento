@@ -154,6 +154,31 @@ test('capture UI states', async () => {
     await page.keyboard.press('Escape');
     await page.getByRole('tab', { name: 'Home' }).click();
 
+    // Shape layer: two editable shapes, selected with Move.
+    await page.keyboard.press('r');
+    await page.getByRole('radio', { name: 'Shape layer (stays editable)' }).click();
+    await page.getByRole('radio', { name: 'Outline and fill' }).click();
+    await drag(page, [
+      [620, 560],
+      [820, 700],
+    ]);
+    await page.keyboard.press('Enter');
+    await shot('shape-tool-options');
+    await page.keyboard.press('o');
+    await drag(page, [
+      [860, 560],
+      [1000, 700],
+    ]);
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('v');
+    await page.evaluate(() => {
+      const k = window.__pigmentoTest!;
+      k.setVectorSelection((k.vectorObjects() ?? []).map((o) => o.id));
+    });
+    await page.waitForTimeout(150);
+    await shot('move-shapes');
+    await page.keyboard.press('Escape');
+
     await page.getByRole('button', { name: 'File' }).click();
     await page.waitForTimeout(250);
     await shot('file-menu');
