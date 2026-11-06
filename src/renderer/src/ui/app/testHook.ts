@@ -26,6 +26,7 @@ export function installTestHook(): void {
     filePath: () => useUi.getState().file.path,
     layers: () => engine.layers.info(),
     addLayer: () => engine.layers.add(),
+    groupLayers: (ids: string[]) => engine.layers.group(ids),
     setLayerProps: (id: string, p: Record<string, unknown>) => engine.layers.setProps(id, p),
     /** The on-screen (GPU) composite at a pixel, for comparing against `pixel` (JS). */
     screenPixel: async (x: number, y: number) => {

@@ -15,6 +15,7 @@ export interface PigmentoTestHook {
   screenPixel(x: number, y: number): Promise<{ r: number; g: number; b: number; a: number }>;
   fillLayer(id: string, c: { r: number; g: number; b: number; a: number }): void;
   addLayer(): string;
+  groupLayers(ids: string[]): string | null;
   setLayerProps(id: string, p: Record<string, unknown>): void;
 }
 
