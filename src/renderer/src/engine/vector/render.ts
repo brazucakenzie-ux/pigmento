@@ -3,6 +3,9 @@ import { rectInflate, rectIntersect, rectRoundOut, type Point } from '../core/ge
 import type { BoxGeom } from '../live/BoxGeom';
 import type { ShapeKind, ShapeStyle } from '../live/ShapeObject';
 import { Surface } from '../raster/Surface';
+import { shapePath, shapeRegistry, type ShapeDef } from '../shapes/ShapeRegistry';
+import { toPath2D } from '../shapes/path';
+import '../shapes/library';
 import { shapeBounds, walkShapes, type VectorNode, type VectorShape } from './model';
 
 /** What's needed to draw a shape (a live ShapeObject or a vector object). */
@@ -11,6 +14,8 @@ export interface ShapeGeom {
   readonly box: BoxGeom | null;
   readonly points: readonly Point[];
   readonly style: ShapeStyle;
+  readonly shapeId?: string | null;
+  readonly params?: Readonly<Record<string, number>>;
 }
 
 type Ctx = OffscreenCanvasRenderingContext2D;
@@ -20,17 +25,42 @@ export function isLineShape(shape: ShapeKind, open = false): boolean {
   return shape === 'line' || shape === 'curve' || open;
 }
 
+/** The library definition of a parametric shape (undefined for other kinds or unknown ids). */
+export function shapeDefOf(g: Pick<ShapeGeom, 'shape' | 'shapeId'>): ShapeDef | undefined {
+  return g.shape === 'parametric' && g.shapeId ? shapeRegistry.get(g.shapeId) : undefined;
+}
+
+/** Drawn with the outline only: lines, curves, open polygons and line-only library shapes. */
+export function isStrokeOnly(g: Pick<ShapeGeom, 'shape' | 'shapeId'>, open = false): boolean {
+  return isLineShape(g.shape, open) || shapeDefOf(g)?.strokeOnly === true;
+}
+
+function fillRuleOf(g: ShapeGeom): CanvasFillRule {
+  return shapeDefOf(g)?.fillRule ?? 'nonzero';
+}
+
 /** Path in document coordinates. Outlines are inset so the stroke stays inside the box. */
 export function buildShapePath(g: ShapeGeom, open = false, rubber: Point | null = null): Path2D {
   const p = new Path2D();
   const { style } = g;
   if (g.box) {
     const b = g.box;
-    const inset = style.mode === 'fill' ? 0 : style.width / 2;
+    const def = shapeDefOf(g);
+    const inset = style.mode === 'fill' && !def?.strokeOnly ? 0 : style.width / 2;
     const hw = Math.max(0, Math.abs(b.w) / 2 - inset);
     const hh = Math.max(0, Math.abs(b.h) / 2 - inset);
-    const local = new Path2D();
-    if (g.shape === 'ellipse') {
+    let local = new Path2D();
+    let sx = 1;
+    let sy = 1;
+    if (g.shape === 'parametric') {
+      // Library shapes are drawn into their box; a negative side mirrors them (flips).
+      const w = hw * 2;
+      const h = hh * 2;
+      local = def ? toPath2D(shapePath(def, w, h, g.params), -hw, -hh) : local;
+      if (!def) local.rect(-hw, -hh, w, h);
+      sx = Math.sign(b.w) || 1;
+      sy = Math.sign(b.h) || 1;
+    } else if (g.shape === 'ellipse') {
       local.ellipse(0, 0, Math.max(0.01, hw), Math.max(0.01, hh), 0, 0, Math.PI * 2);
     } else if (g.shape === 'roundRect') {
       const r = Math.max(0, Math.min(style.radius - inset, hw, hh));
@@ -40,7 +70,7 @@ export function buildShapePath(g: ShapeGeom, open = false, rubber: Point | null 
     }
     const c = Math.cos(b.angle);
     const s = Math.sin(b.angle);
-    p.addPath(local, new DOMMatrix([c, s, -s, c, b.cx, b.cy]));
+    p.addPath(local, new DOMMatrix([c * sx, s * sx, -s * sy, c * sy, b.cx, b.cy]));
     return p;
   }
   const pts = g.points;
@@ -60,17 +90,18 @@ export function buildShapePath(g: ShapeGeom, open = false, rubber: Point | null 
 /** Fill and/or stroke a shape's path with its style. */
 export function paintShape(ctx: Ctx, g: ShapeGeom, path: Path2D, open = false): void {
   const { style } = g;
-  const line = isLineShape(g.shape, open);
+  const line = isStrokeOnly(g, open);
   const fill = !line && (style.mode === 'fill' || style.mode === 'both');
   const stroke = line || style.mode === 'outline' || style.mode === 'both';
   if (fill) {
     ctx.fillStyle = toCss(style.fill);
-    ctx.fill(path);
+    ctx.fill(path, fillRuleOf(g));
   }
   if (stroke && style.width > 0) {
     ctx.strokeStyle = toCss(style.outline);
     ctx.lineWidth = style.width;
-    ctx.lineJoin = g.shape === 'rect' ? 'miter' : 'round';
+    ctx.lineJoin = g.shape === 'rect' || (g.shape === 'parametric' && !line) ? 'miter' : 'round';
+    ctx.miterLimit = 2;
     ctx.lineCap = line ? 'round' : 'butt';
     ctx.stroke(path);
   }
@@ -135,8 +166,8 @@ export function hitTestNodes(nodes: readonly VectorNode[], p: Point, tolerance: 
   const ctx = hitCtx;
   const hitShape = (s: VectorShape): boolean => {
     const path = buildShapePath(s);
-    const line = isLineShape(s.shape);
-    if (!line && (s.style.mode === 'fill' || s.style.mode === 'both') && ctx.isPointInPath(path, p.x, p.y)) return true;
+    const line = isStrokeOnly(s);
+    if (!line && (s.style.mode === 'fill' || s.style.mode === 'both') && ctx.isPointInPath(path, p.x, p.y, fillRuleOf(s))) return true;
     ctx.lineWidth = Math.max(s.style.width, 0) + tolerance * 2;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';

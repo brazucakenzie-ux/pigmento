@@ -1,3 +1,5 @@
+import { shapesEn } from './shapes.en';
+
 /** English strings. Keys are grouped by area; placeholders use {name}. */
 export const en = {
   'app.name': 'Pigmento',
@@ -679,4 +681,28 @@ export const en = {
   'a11y.resizeCanvas': 'Drag to resize the canvas',
   'a11y.panelResize': 'Resize panels',
   'a11y.navigatorView': 'Visible area',
+  // Shape library (2.11)
+  'tab.shapes': 'Shapes',
+  'tool.shape': 'Shape',
+  'tool.shape.hint': 'Drag to draw the shape picked in the Shapes tab. Shift keeps it in proportion, Alt draws from the centre.',
+  'history.shape': 'Shape',
+  'history.shapeParams': 'Change shape settings',
+  'opt.shape': 'Shape',
+  'opt.shapeParams': 'Shape settings',
+  'opt.shapePick': 'Pick another shape in the Shapes tab',
+  'group.findShapes': 'Find',
+  'group.shapeGallery': 'Gallery',
+  'group.shapeCurrent': 'Shape',
+  'shapes.search': 'Search shapes',
+  'shapes.category': 'Category',
+  'shapes.none': 'No shapes match.',
+  'shapes.noFavorites': 'No favourites yet. Star a shape to add it.',
+  'shapes.favorite': 'Add to favourites',
+  'shapes.unfavorite': 'Remove from favourites',
+  'shapes.expand': 'Show all shapes',
+  'shapes.gallery': 'Shape gallery',
+  'shapes.draw': 'Draw',
+  'a11y.scrollLeft': 'Scroll the options left',
+  'a11y.scrollRight': 'Scroll the options right',
+  ...shapesEn,
 } as const;

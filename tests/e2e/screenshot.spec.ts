@@ -1,6 +1,6 @@
 import { test } from '@playwright/test';
 import path from 'node:path';
-import { drag, launchApp, ready } from './harness';
+import { clickDoc, drag, launchApp, ready } from './harness';
 
 // Captures screenshots of key UI states for visual review (not an assertion test).
 test('capture UI states', async () => {
@@ -228,6 +228,62 @@ test('capture UI states', async () => {
     await page.keyboard.press('Control+=');
     await page.keyboard.press('Control+=');
     await shot('dark-zoomed');
+    console.warn('errors:', JSON.stringify(h.errors));
+  } finally {
+    await h.close();
+  }
+});
+
+// The Shapes tab, the full gallery and library shapes on the canvas (light and dark).
+test('capture shape library', async () => {
+  test.skip(!process.env.PIGMENTO_SCREENSHOT, 'Set PIGMENTO_SCREENSHOT=1 to capture screenshots');
+  const out = process.env.PIGMENTO_SCREENSHOT_DIR ?? path.resolve('test-results');
+  const h = await launchApp();
+  const { page } = h;
+  const shot = (name: string) => page.screenshot({ path: path.join(out, `${name}.png`) });
+  try {
+    await ready(page);
+    await page.getByRole('tab', { name: 'View' }).click();
+    await page.getByRole('button', { name: 'Light' }).click();
+    await page.getByRole('tab', { name: 'Shapes' }).click();
+    const gallery = page.getByRole('listbox', { name: 'Shape gallery' });
+    const names = ['5-point star', 'Heart', 'Right arrow', 'Speech bubble', 'Decision', 'Gear', 'Ribbon banner', 'Left brace', 'Flower', 'Cloud', 'Lightning bolt', 'Cube'];
+    await page.getByRole('button', { name: /Colour #4B4BE0/ }).click();
+    await page.getByRole('button', { name: /Colour #FFC914/ }).click({ button: 'right' });
+    for (let i = 0; i < names.length; i++) {
+      await gallery.getByRole('option', { name: names[i], exact: true }).click();
+      if (i === 0) await page.getByRole('radio', { name: 'Outline and fill' }).click();
+      const x = 60 + (i % 6) * 190;
+      const y = 60 + Math.floor(i / 6) * 220;
+      await drag(page, [
+        [x, y],
+        [x + 160, y + 170],
+      ]);
+      if (i < names.length - 1) await page.keyboard.press('Enter');
+    }
+    await shot('shapes-tab');
+    await page.keyboard.press('Enter');
+    await page.getByRole('button', { name: 'Show all shapes' }).click();
+    await page.waitForTimeout(200);
+    await shot('shapes-menu');
+    await page.keyboard.press('Escape');
+    await gallery.getByRole('option', { name: 'Right arrow', exact: true }).click();
+    await page.getByRole('radio', { name: 'Shape layer (stays editable)' }).click();
+    await drag(page, [
+      [300, 560],
+      [700, 700],
+    ]);
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('v');
+    await clickDoc(page, 500, 630);
+    await page.waitForTimeout(150);
+    await shot('shapes-move');
+    await page.getByRole('combobox', { name: 'Category' }).selectOption('callouts');
+    await page.getByRole('tab', { name: 'View' }).click();
+    await page.getByRole('button', { name: 'Dark', exact: true }).click();
+    await page.getByRole('tab', { name: 'Shapes' }).click();
+    await page.waitForTimeout(150);
+    await shot('shapes-tab-dark');
     console.warn('errors:', JSON.stringify(h.errors));
   } finally {
     await h.close();

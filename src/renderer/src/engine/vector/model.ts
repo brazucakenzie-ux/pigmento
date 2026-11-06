@@ -16,6 +16,9 @@ export interface VectorShape {
   /** …point shapes (line, curve, polygon) their points. */
   readonly points: readonly Point[];
   readonly style: ShapeStyle;
+  /** Library shape and its slider values (parametric shapes only). */
+  readonly shapeId?: string;
+  readonly params?: Readonly<Record<string, number>>;
 }
 
 export interface VectorGroup {
@@ -196,6 +199,12 @@ export function arrangeNodes(list: readonly VectorNode[], ids: ReadonlySet<strin
 export function cloneNode(n: VectorNode): VectorNode {
   if (n.type === 'group') return { ...n, id: vectorId(), children: n.children.map(cloneNode) };
   return { ...n, id: vectorId() };
+}
+
+/** New slider values for a parametric shape (other nodes unchanged). */
+export function reparamNode(n: VectorNode, params: Readonly<Record<string, number>>): VectorNode {
+  if (n.type !== 'shape' || n.shape !== 'parametric') return n;
+  return { ...n, params: { ...n.params, ...params } };
 }
 
 /** New style on every shape in a node. */

@@ -1,3 +1,4 @@
+import { useCallback, useLayoutEffect, useRef, useState, type ReactNode, type WheelEvent } from 'react';
 import type { OptionSpec } from '@engine/tools/Tool';
 import type { LayerNode } from '@engine/doc/LayerController';
 import { toolRegistry } from '@engine/tools/ToolRegistry';
@@ -8,6 +9,7 @@ import { engine } from '../state/engine';
 import { useUi } from '../state/store';
 import { actions, runAction } from '../actions/actions';
 import { GradientButton, PatternPicker } from './PaintOptions';
+import { SelectedShapeParams, ShapeOption, ShapeToolParams } from './ShapeGallery';
 
 const FALLBACK_FONTS = ['Segoe UI', 'Arial', 'Calibri', 'Cambria', 'Comic Sans MS', 'Consolas', 'Georgia', 'Impact', 'Segoe Print', 'Times New Roman', 'Trebuchet MS', 'Verdana'];
 
@@ -87,6 +89,10 @@ function OptionControl({ toolId, spec, values }: { toolId: string; spec: OptionS
       return <GradientButton value={values[spec.key] ?? spec.default} label={label} />;
     case 'pattern':
       return <PatternPicker value={String(values[spec.key] ?? spec.default)} onChange={set} label={label} />;
+    case 'shape':
+      return <ShapeOption value={values[spec.key] ?? spec.default} />;
+    case 'shapeParams':
+      return <ShapeToolParams values={values} />;
     case 'hint':
       return (
         <span className="opt-hint" data-tip={label}>
@@ -94,6 +100,57 @@ function OptionControl({ toolId, spec, values }: { toolId: string; spec: OptionS
         </span>
       );
   }
+}
+
+/** A mouse wheel over the options scrolls them sideways. */
+function scrollSideways(e: WheelEvent<HTMLDivElement>): void {
+  const el = e.currentTarget;
+  if (el.scrollWidth <= el.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+  el.scrollLeft += e.deltaY;
+}
+
+/** Options that don't fit scroll sideways, with arrow buttons at the clipped ends. */
+function OptionScroller({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ left: false, right: false });
+  const update = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    const left = el.scrollLeft > 1;
+    const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
+    setEdges((e) => (e.left === left && e.right === right ? e : { left, right }));
+  }, []);
+  // Options come and go with the tool and its values, so watch every child's size.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    for (const c of el.children) ro.observe(c);
+    return () => ro.disconnect();
+  });
+  const scrollBy = (d: number) => {
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    ref.current?.scrollBy({ left: d, behavior: reduce ? 'auto' : 'smooth' });
+  };
+  return (
+    <>
+      {edges.left ? (
+        <button type="button" className="opt-scroll-btn" tabIndex={-1} aria-label={t('a11y.scrollLeft')} onClick={() => scrollBy(-240)}>
+          <Icon name="chevron-left" size={14} />
+        </button>
+      ) : null}
+      <div ref={ref} className="opt-scroll" onScroll={update} onWheel={scrollSideways}>
+        {children}
+      </div>
+      {edges.right ? (
+        <button type="button" className="opt-scroll-btn" tabIndex={-1} aria-label={t('a11y.scrollRight')} onClick={() => scrollBy(240)}>
+          <Icon name="chevron-right" size={14} />
+        </button>
+      ) : null}
+    </>
+  );
 }
 
 /** Kind of a layer in the tree (the Layers info the store mirrors). */
@@ -202,20 +259,23 @@ export function OptionsBar() {
         <Icon name={tool.icon} size={18} />
         {t(tool.labelKey)}
       </span>
-      {tool.group === 'selection' && !tool.hidden && tool.id !== 'move' ? (
-        <label className="check opt">
-          <input type="checkbox" checked={transparent} onChange={() => runAction('transparentSelection')} />
-          {t('action.transparentSelection')}
-        </label>
-      ) : null}
-      {visible.map((spec) => (
-        <OptionControl key={spec.key} toolId={toolId} spec={spec} values={values} />
-      ))}
-      {toolId === 'transform' ? <TransformFields /> : null}
-      {toolId === 'move' ? <VectorBar /> : null}
-      <span className="grow" />
+      {/* Options scroll sideways when they don't fit; Apply and Cancel always stay in view. */}
+      <OptionScroller>
+        {tool.group === 'selection' && !tool.hidden && tool.id !== 'move' ? (
+          <label className="check opt">
+            <input type="checkbox" checked={transparent} onChange={() => runAction('transparentSelection')} />
+            {t('action.transparentSelection')}
+          </label>
+        ) : null}
+        {visible.map((spec) => (
+          <OptionControl key={spec.key} toolId={toolId} spec={spec} values={values} />
+        ))}
+        {toolId === 'transform' ? <TransformFields /> : null}
+        {toolId === 'move' && shapeLayer ? <SelectedShapeParams /> : null}
+        {toolId === 'move' ? <VectorBar /> : null}
+      </OptionScroller>
       {live ? (
-        <>
+        <span className="opt-live">
           <button type="button" className="btn small" onClick={() => engine.cancelLive()}>
             {t('action.cancel')}
           </button>
@@ -223,7 +283,7 @@ export function OptionsBar() {
             <Icon name="check" size={15} />
             {t('action.commit')}
           </button>
-        </>
+        </span>
       ) : null}
     </div>
   );

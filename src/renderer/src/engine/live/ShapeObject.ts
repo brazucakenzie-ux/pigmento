@@ -34,7 +34,8 @@ import type { LiveObject } from './LiveObject';
 import { buildShapePath, hardenEdges, paintShape } from '../vector/render';
 import type { VectorNode } from '../vector/model';
 
-export type ShapeKind = 'line' | 'curve' | 'rect' | 'roundRect' | 'ellipse' | 'polygon';
+/** `parametric` shapes come from the shape library (`shapeId`), drawn into their box. */
+export type ShapeKind = 'line' | 'curve' | 'rect' | 'roundRect' | 'ellipse' | 'polygon' | 'parametric';
 export type FillMode = 'outline' | 'fill' | 'both';
 
 export interface ShapeStyle {
@@ -53,6 +54,7 @@ const LABELS: Record<ShapeKind, I18nKey> = {
   roundRect: 'history.roundRect',
   ellipse: 'history.ellipse',
   polygon: 'history.polygon',
+  parametric: 'history.shape',
 };
 
 export type ShapeHit =
@@ -72,6 +74,9 @@ export class ShapeObject implements LiveObject {
   readonly kind = 'shape' as const;
   box: BoxGeom | null;
   points: Point[];
+  /** Library shape and its slider values (parametric shapes only). */
+  shapeId: string | null;
+  params: Record<string, number>;
   /** Polygon still being drawn (rubber band to the pointer). */
   open = false;
   rubber: Point | null = null;
@@ -84,10 +89,12 @@ export class ShapeObject implements LiveObject {
     public style: ShapeStyle,
     private readonly docW: number,
     private readonly docH: number,
-    geom: { box?: BoxGeom; points?: Point[] },
+    geom: { box?: BoxGeom; points?: Point[]; shapeId?: string | null; params?: Readonly<Record<string, number>> },
   ) {
     this.box = geom.box ?? null;
     this.points = geom.points ?? [];
+    this.shapeId = geom.shapeId ?? null;
+    this.params = { ...(geom.params ?? {}) };
     this.update();
   }
 
@@ -101,6 +108,14 @@ export class ShapeObject implements LiveObject {
 
   setStyle(style: ShapeStyle): void {
     this.style = style;
+    this.update();
+  }
+
+  /** Another library shape, or new slider values, in the same box. */
+  setShape(shapeId: string, params: Readonly<Record<string, number>>): void {
+    if (this.shape !== 'parametric') return;
+    this.shapeId = shapeId;
+    this.params = { ...params };
     this.update();
   }
 

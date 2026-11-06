@@ -426,12 +426,50 @@
   padding: 0 14px;
   background: var(--bg-ribbon);
   border-top: 1px solid var(--border);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.optionsbar .opt-scroll {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
   overflow-x: auto;
   overflow-y: hidden;
-  white-space: nowrap;
   scrollbar-width: none;
 }
+.optionsbar .opt-scroll > * {
+  flex-shrink: 0;
+}
+.optionsbar .opt-scroll > .opt-hint {
+  flex-shrink: 1;
+}
+.opt-scroll-btn {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 26px;
+  margin: 0 -8px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+}
+.opt-scroll-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.optionsbar .opt-live {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
 .optionsbar .tool-name {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -459,17 +497,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.optionsbar > .btn {
-  flex-shrink: 0;
-}
 .optionsbar .tf-field {
   gap: 4px;
 }
 .optionsbar .tf-num {
   width: 64px;
-}
-.optionsbar .grow {
-  flex: 1;
 }
 .chips {
   display: flex;
@@ -1814,4 +1846,146 @@ kbd {
   padding: 8px 10px;
   border-radius: var(--radius-sm);
   background: var(--danger-soft);
+}
+
+/* Shapes tab: gallery strip, popover of every shape, thumbnails. */
+.shape-thumb {
+  display: block;
+  flex-shrink: 0;
+}
+.shape-thumb path {
+  fill: color-mix(in srgb, var(--accent) 22%, transparent);
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.shape-thumb.stroke-only path {
+  fill: none;
+}
+.shape-find {
+  gap: 6px;
+  padding-top: 4px;
+}
+.shape-find .text-input,
+.shape-find .select {
+  width: 176px;
+}
+.ribbon-group.shape-gallery-group {
+  flex: 1 1 auto;
+  flex-shrink: 1;
+  min-width: 260px;
+  max-width: 980px;
+}
+.shape-gallery-group .ribbon-group-body {
+  gap: 0;
+  min-width: 0;
+}
+.shape-gallery {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 30px);
+  grid-auto-rows: 28px;
+  gap: 1px;
+  height: 87px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  align-content: start;
+  padding: 1px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  background: var(--bg-input);
+}
+.shape-tile {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+}
+.shape-tile:hover {
+  background: var(--bg-hover);
+}
+.shape-tile:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.shape-tile[aria-selected='true'],
+.menu-item.shape-tile[aria-checked='true'] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.shape-gallery-empty {
+  grid-column: 1 / -1;
+  padding: 8px;
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+}
+.shape-expand {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 87px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--bg-input);
+  color: var(--text-muted);
+}
+.shape-expand:hover,
+.shape-expand[aria-expanded='true'] {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.menu.shape-menu {
+  max-width: min(560px, 94vw);
+  max-height: min(70vh, 640px);
+  overflow-y: auto;
+}
+.shape-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 36px);
+  gap: 2px;
+  padding: 0 4px 6px;
+}
+.menu-item.shape-tile {
+  width: 36px;
+  height: 34px;
+  justify-content: center;
+}
+.rb.shape-current {
+  max-width: 96px;
+}
+.rb.shape-current .rb-label {
+  overflow-wrap: anywhere;
+}
+.shape-favorite[aria-pressed='true'] svg {
+  fill: var(--accent-2);
+  stroke: var(--accent-2);
+}
+.btn.shape-pick {
+  gap: 6px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (forced-colors: active) {
+  .shape-thumb path {
+    fill: Canvas;
+    stroke: CanvasText;
+  }
+  .shape-tile[aria-selected='true'],
+  .menu-item.shape-tile[aria-checked='true'] {
+    border-color: Highlight;
+  }
+  .shape-favorite[aria-pressed='true'] svg {
+    fill: Highlight;
+    stroke: Highlight;
+  }
 }

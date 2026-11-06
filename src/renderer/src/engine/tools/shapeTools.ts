@@ -142,13 +142,17 @@ export function shapeKeys(ctx: ToolContext, e: KeyboardEvent): boolean {
 
 interface BoxShapeConfig {
   id: string;
-  kind: Extract<ShapeKind, 'rect' | 'roundRect' | 'ellipse'>;
+  kind: Extract<ShapeKind, 'rect' | 'roundRect' | 'ellipse' | 'parametric'>;
   labelKey: I18nKey;
   hintKey: I18nKey;
   icon: string;
   shortcut: string;
   order: number;
   extraOptions?: OptionSpec[];
+  /** Options shown before the drawing options (the library shape picker). */
+  leadOptions?: OptionSpec[];
+  /** Library shape to draw (parametric tools). */
+  library?: (ctx: ToolContext) => { shapeId: string; params: Record<string, number> };
 }
 
 /** Rectangle, rounded rectangle and ellipse: drag a box, then adjust with handles. */
@@ -165,7 +169,7 @@ export function createBoxShapeTool(cfg: BoxShapeConfig): Tool {
     group: 'shapes',
     order: cfg.order,
     paints: true,
-    options: [DRAW_AS_OPTION, FILL_MODE_OPTION, WIDTH_OPTION, ...(cfg.extraOptions ?? []), ANTIALIAS_OPTION, SHAPE_COLORS_HINT],
+    options: [...(cfg.leadOptions ?? []), DRAW_AS_OPTION, FILL_MODE_OPTION, WIDTH_OPTION, ...(cfg.extraOptions ?? []), ANTIALIAS_OPTION, SHAPE_COLORS_HINT],
     cursor: () => 'crosshair',
 
     pointerDown(ctx, e) {
@@ -184,7 +188,7 @@ export function createBoxShapeTool(cfg: BoxShapeConfig): Tool {
       const live = liveShape(ctx);
       if (!live) {
         const doc = ctx.doc;
-        ctx.setLive(new ShapeObject(cfg.kind, shapeStyle(ctx, cfg.id, swapped), doc.width, doc.height, { box: boxFromRect(r) }));
+        ctx.setLive(new ShapeObject(cfg.kind, shapeStyle(ctx, cfg.id, swapped), doc.width, doc.height, { box: boxFromRect(r), ...cfg.library?.(ctx) }));
         ctx.setHint('opt.liveHint');
         return;
       }
@@ -201,7 +205,17 @@ export function createBoxShapeTool(cfg: BoxShapeConfig): Tool {
 
     hover: hoverCursor,
     keyDown: shapeKeys,
-    optionsChanged: (ctx) => restyleLive(ctx, cfg.id, swapped),
+    optionsChanged: (ctx) => {
+      restyleLive(ctx, cfg.id, swapped);
+      // A shape still being placed follows the gallery and the sliders.
+      const live = liveShape(ctx);
+      if (live && cfg.library && live.shape === 'parametric' && !live.vectorEdit) {
+        const before = live.bounds();
+        const { shapeId, params } = cfg.library(ctx);
+        live.setShape(shapeId, params);
+        ctx.invalidate(rectUnion(before, live.bounds()));
+      }
+    },
     colorsChanged: (ctx) => restyleLive(ctx, cfg.id, swapped),
     deactivate: () => {
       creating = null;

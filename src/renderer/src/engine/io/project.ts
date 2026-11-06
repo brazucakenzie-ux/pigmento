@@ -86,10 +86,16 @@ const ShapeStyleJson = z.object({
 const ShapeNodeJson = z.object({
   type: z.literal('shape'),
   id: z.string().min(1).max(100),
-  shape: z.enum(['line', 'curve', 'rect', 'roundRect', 'ellipse', 'polygon']),
+  shape: z.enum(['line', 'curve', 'rect', 'roundRect', 'ellipse', 'polygon', 'parametric']),
   box: z.object({ cx: num, cy: num, w: num, h: num, angle: num }).nullable(),
   points: z.array(PointJson).max(100000),
   style: ShapeStyleJson,
+  /** Library shape id and slider values (parametric shapes). */
+  shapeId: z.string().regex(/^[a-z0-9-]{1,100}$/i).optional(),
+  params: z
+    .record(z.string().regex(/^[a-z][a-z0-9]{0,39}$/i), num)
+    .refine((r) => Object.keys(r).length <= 32)
+    .optional(),
 });
 type VectorNodeJson = z.infer<typeof ShapeNodeJson> | { type: 'group'; id: string; children: VectorNodeJson[] };
 const VectorNodeSchema: z.ZodType<VectorNodeJson> = z.lazy(() =>
@@ -107,6 +113,7 @@ function nodeToJson(n: VectorNode): VectorNodeJson {
     box: n.box ? { ...n.box } : null,
     points: n.points.map((p) => ({ x: p.x, y: p.y })),
     style: { mode: s.mode, width: s.width, outline: toHex8(s.outline), fill: toHex8(s.fill), radius: s.radius, antialias: s.antialias },
+    ...(n.shapeId ? { shapeId: n.shapeId, params: { ...n.params } } : {}),
   };
 }
 
@@ -116,7 +123,10 @@ function nodeFromJson(n: VectorNodeJson, depth: number, counter: { n: number }):
   const outline = parseHex(n.style.outline);
   const fill = parseHex(n.style.fill);
   if (!outline || !fill) throw new ProjectError('error.projectInvalid', 'Bad colour');
-  return { type: 'shape', id: n.id, shape: n.shape, box: n.box ? { ...n.box } : null, points: n.points, style: { ...n.style, outline, fill } };
+  // A library shape needs its box and id.
+  if (n.shape === 'parametric' && (!n.box || !n.shapeId)) throw new ProjectError('error.projectInvalid', 'Bad shape');
+  const library = n.shape === 'parametric' ? { shapeId: n.shapeId!, params: { ...n.params } } : {};
+  return { type: 'shape', id: n.id, shape: n.shape, box: n.box ? { ...n.box } : null, points: n.points, style: { ...n.style, outline, fill }, ...library };
 }
 
 type LayerJson = z.infer<typeof RasterJson> | z.infer<typeof VectorJson> | GroupJson;

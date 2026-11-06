@@ -41,6 +41,7 @@ import {
   groupNodes,
   nodeBounds,
   removeNodes,
+  reparamNode,
   restyleNode,
   transformNode,
   translateNode,
@@ -127,6 +128,20 @@ export interface VectorSelectionInfo {
   /** How many of them are groups (for Ungroup). */
   groups: number;
   bounds: Rect | null;
+  /** One library shape selected: which, and its slider values (for the options bar). */
+  shape: { shapeId: string; params: Record<string, number> } | null;
+}
+
+/** Saved per-shape slider values: a small table of finite numbers. */
+function isShapeParamTable(v: unknown): v is Record<string, Record<string, number>> {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return false;
+  const rows = Object.entries(v as Record<string, unknown>);
+  if (rows.length > 500) return false;
+  return rows.every(([, row]) => {
+    if (typeof row !== 'object' || row === null || Array.isArray(row)) return false;
+    const cells = Object.values(row as Record<string, unknown>);
+    return cells.length <= 32 && cells.every((c) => typeof c === 'number' && Number.isFinite(c));
+  });
 }
 
 /** A fill pattern as the pattern picker lists it. */
@@ -623,6 +638,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
           } else if (spec.type === 'font' && typeof v === 'string' && v.length < 200) merged[spec.key] = v;
           else if (spec.type === 'pattern' && typeof v === 'string' && /^[a-z0-9-]{1,64}$/i.test(v)) merged[spec.key] = v;
           else if (spec.type === 'gradient' && (v === null || isStopList(v))) merged[spec.key] = v;
+          else if (spec.type === 'shape' && typeof v === 'string' && /^[a-z0-9-]{1,100}$/i.test(v)) merged[spec.key] = v;
+          else if (spec.type === 'shapeParams' && isShapeParamTable(v)) merged[spec.key] = v;
         }
       }
       this.toolValues[tool.id] = merged;
@@ -1199,7 +1216,13 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
 
   vectorSelectionInfo(): VectorSelectionInfo {
     const nodes = this.selectedVectorNodes();
-    return { count: nodes.length, groups: nodes.filter((n) => n.type === 'group').length, bounds: boundsOf(nodes) };
+    const one = nodes.length === 1 && nodes[0].type === 'shape' && nodes[0].shape === 'parametric' && nodes[0].shapeId ? nodes[0] : null;
+    return {
+      count: nodes.length,
+      groups: nodes.filter((n) => n.type === 'group').length,
+      bounds: boundsOf(nodes),
+      shape: one ? { shapeId: one.shapeId!, params: { ...one.params } } : null,
+    };
   }
 
   setVectorSelection(ids: readonly string[]): void {
@@ -1322,6 +1345,18 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     );
   }
 
+  /** New slider values for the selected library shape (a drag merges into one step). */
+  setVectorShapeParams(params: Readonly<Record<string, number>>): void {
+    if (!this.vectorSel.length) return;
+    const changed = this.editVector(
+      'history.shapeParams',
+      (list, sel) => list.map((n) => (sel.has(n.id) ? reparamNode(n, params) : n)),
+      undefined,
+      `params:${this.vectorSel.join(',')}`,
+    );
+    if (changed) this.emit('vectorSelection', this.vectorSelectionInfo());
+  }
+
   /** Style of the first selected shape (the options bar shows it). */
   selectedVectorStyle(): ShapeStyle | null {
     for (const s of walkShapes(this.selectedVectorNodes())) return s.style;
@@ -1346,7 +1381,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     const node = layer.objects[index];
     if (!node || node.type !== 'shape') return false;
     this.commitLive();
-    const s = new ShapeObject(node.shape, { ...node.style }, this.doc.width, this.doc.height, node.box ? { box: { ...node.box } } : { points: node.points.map((p) => ({ ...p })) });
+    const geom = node.box ? { box: { ...node.box } } : { points: node.points.map((p) => ({ ...p })) };
+    const s = new ShapeObject(node.shape, { ...node.style }, this.doc.width, this.doc.height, { ...geom, shapeId: node.shapeId ?? null, params: node.params });
     s.vectorEdit = { layerId: layer.id, id, index, before: layer.objects };
     // The original is hidden while it's edited (nothing recorded until the edit is applied).
     this.previewVector(layer, layer.objects.filter((n) => n.id !== id));
@@ -1382,6 +1418,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       box: s.box ? { ...s.box } : null,
       points: s.points.map((p) => ({ ...p })),
       style: { ...s.style, outline: { ...s.style.outline }, fill: { ...s.style.fill } },
+      ...(s.shape === 'parametric' && s.shapeId ? { shapeId: s.shapeId, params: { ...s.params } } : {}),
     };
     let layer: VectorLayer | null = target === 'new' ? null : target;
     this.history.group(label, () => {

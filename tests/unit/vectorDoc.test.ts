@@ -5,7 +5,7 @@ import { applyLossless } from '@engine/history/TransformCommand';
 import { loadProject, saveProject, type PngCodec } from '@engine/io/project';
 import type { ShapeStyle } from '@engine/live/ShapeObject';
 import { Surface } from '@engine/raster/Surface';
-import { groupNodes, nodeBounds, type VectorNode, type VectorShape } from '@engine/vector/model';
+import { groupNodes, nodeBounds, reparamNode, type VectorNode, type VectorShape } from '@engine/vector/model';
 
 const rawCodec: PngCodec = {
   async encode(data, w, h) {
@@ -66,6 +66,24 @@ describe('shape layers', () => {
     if (l.kind !== 'vector') return;
     expect([l.name, l.opacity, l.blend, l.width, l.height]).toEqual(['Shapes 1', 0.5, 'multiply', 100, 80]);
     expect(l.objects).toEqual(objects);
+  });
+
+  it('keep library shapes (id and slider values) through .pigm, flips included', async () => {
+    const star: VectorShape = { type: 'shape', id: 's1', shape: 'parametric', box: { cx: 50, cy: 40, w: -60, h: 50, angle: 0.3 }, points: [], style, shapeId: 'star-5', params: { inner: 30 } };
+    const doc = new PaintDocument({ width: 100, height: 80 }, [new VectorLayer('S', 100, 80, [star])]);
+    const back = await loadProject(await saveProject(doc, rawCodec), rawCodec);
+    const l = back.layers[0];
+    if (l.kind !== 'vector') throw new Error('not a shape layer');
+    expect(l.objects).toEqual([star]);
+    expect(reparamNode(l.objects[0], { inner: 70 })).toMatchObject({ shapeId: 'star-5', params: { inner: 70 } });
+    // Other kinds ignore slider values.
+    expect(reparamNode(line, { inner: 70 })).toBe(line);
+  });
+
+  it('refuse a library shape without a box or id', async () => {
+    const bad: VectorShape = { type: 'shape', id: 'x', shape: 'parametric', box: null, points: [{ x: 0, y: 0 }], style, shapeId: 'star-5' };
+    const doc = new PaintDocument({ width: 10, height: 10 }, [new VectorLayer('S', 10, 10, [bad])]);
+    await expect(loadProject(await saveProject(doc, rawCodec), rawCodec)).rejects.toThrow();
   });
 
   it('turn their objects with the image', () => {

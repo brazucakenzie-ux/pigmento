@@ -85,6 +85,13 @@ Any other entries are ignored.
 ```
 `shape` is `rect`, `roundRect` or `ellipse` (with an oriented `box`: centre, size, angle in radians; a negative size is a flip) or `line`, `curve` (four points: start, two controls, end) or `polygon` (with `points`). Objects are listed bottom to top. All shape layers together may hold at most 50,000 objects.
 
+A shape from the shape library is `"shape": "parametric"` with a `box`, the library id in `shapeId` and its slider values in `params` (at most 32 numbers; missing values use the shape's defaults and out-of-range values are clamped when drawn):
+```json
+{ "type": "shape", "id": "v4-lx2", "shape": "parametric", "shapeId": "star-5", "params": { "inner": 45 },
+  "box": { "cx": 300, "cy": 200, "w": 160, "h": 160, "angle": 0 }, "points": [], "style": { /* as above */ } }
+```
+An unknown `shapeId` (for example from a newer version) is kept as is and drawn as its box until that shape is available.
+
 **Saved selection** (Select → Save selection)
 ```json
 { "id": "selection-4-lx1", "name": "Window", "mask": { "file": "selections/0001.png", "x": 90, "y": 90, "w": 220, "h": 220 } }

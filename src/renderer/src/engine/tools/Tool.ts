@@ -47,6 +47,10 @@ export type OptionSpec =
   | (OptionBase & { type: 'gradient'; default: GradientStopValue[] | null })
   /** A fill pattern id (built-in or saved). */
   | (OptionBase & { type: 'pattern'; default: string })
+  /** A shape from the shape library (its id). */
+  | (OptionBase & { type: 'shape'; default: string })
+  /** Slider values per library shape: { shapeId: { param: value } }; `shapeKey` names the shape option. */
+  | (OptionBase & { type: 'shapeParams'; shapeKey: string; default: Record<string, Record<string, number>> })
   | (OptionBase & { type: 'hint' });
 
 export type ToolOptions = Record<string, unknown>;

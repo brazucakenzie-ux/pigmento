@@ -13,7 +13,7 @@ import type { ViewState } from '@engine/render/View';
 import type { TextEditState, ToolOptions } from '@engine/tools/Tool';
 import type { I18nKey } from '../../i18n';
 
-export type RibbonTab = 'home' | 'image' | 'view';
+export type RibbonTab = 'home' | 'shapes' | 'image' | 'view';
 
 export type DialogState =
   | { kind: 'new' }
@@ -108,7 +108,7 @@ export const useUi = create<UiState>(() => ({
   transform: null,
   patterns: [],
   guides: 0,
-  vectorSelection: { count: 0, groups: 0, bounds: null },
+  vectorSelection: { count: 0, groups: 0, bounds: null, shape: null },
 }));
 
 let pendingPatch: Partial<Settings> = {};

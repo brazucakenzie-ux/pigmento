@@ -10,9 +10,11 @@ import { ActionMenuItem } from './ActionMenuItem';
 import { ActionButton, MenuButton, RibbonGroup, SplitButton } from './RibbonButton';
 import { ColorsGroup } from './ColorsGroup';
 import { ThemePicker } from './ThemePicker';
+import { ShapesTab } from './ShapeGallery';
 
 const TABS: { id: RibbonTab; labelKey: I18nKey }[] = [
   { id: 'home', labelKey: 'tab.home' },
+  { id: 'shapes', labelKey: 'tab.shapes' },
   { id: 'image', labelKey: 'tab.image' },
   { id: 'view', labelKey: 'tab.view' },
 ];
@@ -364,7 +366,7 @@ export function Ribbon() {
         <HelpMenu />
       </div>
       <div className="ribbon-panel" id="ribbon-panel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
-        {tab === 'home' ? <HomeTab /> : tab === 'image' ? <ImageTab /> : <ViewTab />}
+        {tab === 'home' ? <HomeTab /> : tab === 'shapes' ? <ShapesTab /> : tab === 'image' ? <ImageTab /> : <ViewTab />}
       </div>
     </div>
   );

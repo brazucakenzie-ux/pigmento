@@ -72,6 +72,10 @@ export const SettingsSchema = z.object({
     })
     .default({ primary: '#000000ff', secondary: '#ffffffff', recent: [], custom: [] }),
   tools: z.record(z.string(), z.record(z.string(), z.unknown())).default({}),
+  /** Shape library: starred shapes, in the order they were starred. */
+  shapes: z
+    .object({ favorites: z.array(z.string().regex(/^[a-z0-9-]{1,100}$/i)).max(500).default([]) })
+    .default({ favorites: [] }),
   activeTool: z.string().default('pencil'),
   newImage: z
     .object({
