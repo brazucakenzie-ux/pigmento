@@ -174,7 +174,23 @@ Theme families, each with a light and a dark variant: Pigmento, GitHub, VS Code,
 - [x] 1.15c Tests: contrast checks for every theme (unit), switching and persistence (e2e); palette credits in LICENSES.md
 
 ### Milestone 2 — Layers, selections, shapes system
-Layers and the Layers panel (blend modes, groups, thumbnails); advanced selection (ellipse, lasso variants, magic wand, colour range, boolean modes, feather, grow/shrink, save/load); transform handles with numeric input (including distort); gradient and pattern fill; guides and snapping; `.pigm` project format, autosave and crash recovery; export dialog; `ShapeRegistry` with 150+ shapes, parametric sliders, vector shape objects, fills and outline styles; Shape Editor, custom shape library, selection-to-shape, SVG import, shape packs (`docs/shape-format.md`); palette files; SVG export. Tests per the brief.
+Each item is ticked in the same commit as its work.
+- [ ] 2.1 Layers core: add/delete/duplicate/reorder/rename/show/hide/lock/opacity/blend as undoable commands; all 15 blend modes in JS for flatten, sampling and export, matching the Canvas 2D compositor; merge down, flatten; layer thumbnails (+ blend-mode unit tests)
+- [ ] 2.2 Layers panel: thumbnails, drag to reorder, inline rename, visibility/lock toggles, opacity and blend controls, add/duplicate/delete/merge/flatten; Layers ribbon group; a single-layer image still works without opening the panel
+- [ ] 2.3 Layer groups: nested groups with their own opacity, blend and visibility, collapse/expand, group/ungroup, composited as isolated groups
+- [ ] 2.4 Project file `.pigm` (zip: JSON + per-layer PNGs + vector objects + guides + saved selections) with open/save; autosave to `%APPDATA%\Pigmento\autosave` and a crash-recovery prompt (+ round-trip unit test, e2e save/reopen with layers)
+- [ ] 2.5 Export dialog (format, quality, 1×/2×/3×, transparency, whole image or selected layer); copy image as PNG; trim transparent edges; resize canvas to fit contents
+- [ ] 2.6 Selection tools and modes: ellipse select, polygonal lasso, magic wand (tolerance, connected, all layers), select colour range; replace/add/subtract/intersect (options bar + Shift/Alt); feather, grow, shrink, border; save/load selections; ants traced from any mask (+ selection-math tests)
+- [ ] 2.7 Free transform for layers and selections: move, scale, rotate, skew, perspective distort, flip, with on-canvas handles and numeric fields; non-destructive until applied (+ warp tests)
+- [ ] 2.8 Gradient tool (linear, radial, angular, diamond; multi-stop editor; reverse, repeat) and pattern fill (built-in patterns or from the selection) for the Fill tool
+- [ ] 2.9 Guides and snapping: drag guides from rulers, move/delete/clear guides, snap to grid, guides, canvas and object edges/centres; smart alignment guides while dragging
+- [ ] 2.10 Vector layers: shapes stay vector objects on a shape layer (select, move, resize, rotate, recolour any time); Shift/Alt modifiers; align/distribute; group/ungroup; bring forward/send backward; rasterise layer
+- [ ] 2.11 `ShapeRegistry` with 150+ original parametric shapes in 11 categories; Shapes ribbon tab with gallery, search and favourites; per-shape parameter sliders (+ path-generation unit tests)
+- [ ] 2.12 Fill and outline styles: solid, linear/radial/angular gradient (multi-stop), pattern, image and no fill; outline width, dashes, caps/joins, gradient strokes, arrowheads
+- [ ] 2.13 Pen tool and Shape Editor: click for corners, drag for curves, add/delete/move points, smooth/corner conversion, open/closed paths; save to the personal shape library with name, category and thumbnail; rename/duplicate/delete/favourite
+- [ ] 2.14 Selection to shape (mask tracing and simplification); SVG import (sanitised, paths and basic shapes); shape packs import/export with a Zod schema documented in `docs/shape-format.md` (+ schema tests)
+- [ ] 2.15 Palette files: import/export `.json`, import `.gpl` and `.ase`; SVG export (vector layers as real paths, raster layers as embedded PNG)
+- [ ] 2.16 Golden-image tests for every built-in shape; e2e for creating and using a custom shape and for project save/reopen; `npm run check` green; report
 
 ### Milestone 3 — Brushes, effects, drawing aids
 Full brush engine and dynamics, stabiliser, symmetry; `BrushRegistry` with 40+ brushes; Brush Designer; brush packs (`docs/brush-format.md`); smudge, blur, sharpen, clone, dodge/burn; brush along outline and path stroking; adjustments and filters in workers (`FilterRegistry`); reference image; view rotation; performance budgets. Tests per the brief.
