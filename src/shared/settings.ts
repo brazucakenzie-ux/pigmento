@@ -23,14 +23,14 @@ export const SettingsSchema = z.object({
     .object({
       side: z.enum(['left', 'right']).default('right'),
       open: z.boolean().default(true),
-      width: z.number().min(180).max(600).default(260),
+      width: z.number().min(180).max(600).default(290),
       collapsed: z.record(z.string(), z.boolean()).default({}),
       visible: z.record(z.string(), z.boolean()).default({ history: true, navigator: true }),
     })
     .default({
       side: 'right',
       open: true,
-      width: 260,
+      width: 290,
       collapsed: {},
       visible: { history: true, navigator: true },
     }),

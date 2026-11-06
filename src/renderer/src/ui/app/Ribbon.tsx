@@ -216,6 +216,19 @@ function ImageTab() {
       <RibbonGroup label={t('group.adjust')}>
         <ActionButton id="invertColors" />
       </RibbonGroup>
+      <RibbonGroup label={t('group.layers')}>
+        <ActionButton id="layerNew" />
+        <div className="rb-stack">
+          <ActionButton id="layerDuplicate" variant="small" />
+          <ActionButton id="layerDelete" variant="small" />
+          <ActionButton id="layerGroup" variant="small" />
+        </div>
+        <div className="rb-stack">
+          <ActionButton id="layerMergeDown" variant="small" />
+          <ActionButton id="layerFlatten" variant="small" />
+          <ActionButton id="layerUngroup" variant="small" />
+        </div>
+      </RibbonGroup>
       <RibbonGroup label={t('group.canvas')}>
         <ActionButton id="properties" label={t('action.properties')} />
       </RibbonGroup>
@@ -245,8 +258,11 @@ function ViewTab() {
       <RibbonGroup label={t('group.panels')}>
         <ActionButton id="panels" />
         <div className="rb-stack">
+          <ActionButton id="layersPanel" variant="small" />
           <ActionButton id="historyPanel" variant="small" />
           <ActionButton id="navigatorPanel" variant="small" />
+        </div>
+        <div className="rb-stack">
           <ActionButton id="panelSide" variant="small" />
         </div>
       </RibbonGroup>

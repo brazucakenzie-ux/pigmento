@@ -3,8 +3,9 @@ import { t, type I18nKey } from '../../i18n';
 import { Icon } from '../icons/Icon';
 import { engine } from '../state/engine';
 import { updateSettings, useUi } from '../state/store';
+import { LayersPanel } from './LayersPanel';
 
-function Section({ id, title, icon, children, grow }: { id: string; title: string; icon: string; children: ReactNode; grow?: boolean }) {
+export function Section({ id, title, icon, children, grow }: { id: string; title: string; icon: string; children: ReactNode; grow?: boolean }) {
   const collapsed = useUi((s) => s.settings.panels.collapsed[id] === true);
   const toggle = () => {
     const p = useUi.getState().settings.panels;
@@ -12,7 +13,7 @@ function Section({ id, title, icon, children, grow }: { id: string; title: strin
   };
   const bodyId = `panel-${id}`;
   return (
-    <section className={`panel-section ${grow && !collapsed ? 'grow' : ''}`} aria-label={title}>
+    <section className={`panel-section panel-section-${id} ${grow && !collapsed ? 'grow' : ''}`} aria-label={title}>
       <button
         type="button"
         className="panel-section-head"
@@ -38,7 +39,13 @@ function HistoryList() {
   const h = useUi((s) => s.history);
   const listRef = useRef<HTMLOListElement>(null);
   useEffect(() => {
-    listRef.current?.querySelector('.current')?.scrollIntoView({ block: 'nearest' });
+    // Scroll only the panel body holding the list (scrollIntoView would move the whole panel).
+    const row = listRef.current?.querySelector<HTMLElement>('.current');
+    const body = listRef.current?.parentElement;
+    if (!row || !body) return;
+    const top = row.offsetTop;
+    if (top < body.scrollTop) body.scrollTop = top;
+    else if (top + row.offsetHeight > body.scrollTop + body.clientHeight) body.scrollTop = top + row.offsetHeight - body.clientHeight;
   }, [h.index, h.length]);
   const rows: { label: I18nKey; index: number }[] = [{ label: h.initialLabel, index: 0 }, ...h.entries.map((e, i) => ({ label: e.label, index: i + 1 }))];
   return (
@@ -71,7 +78,7 @@ function Navigator() {
   const view = useUi((s) => s.view);
   const [tick, setTick] = useState(0);
   const maxW = Math.max(120, width - 24);
-  const maxH = 170;
+  const maxH = 130;
   const scale = Math.min(maxW / doc.width, maxH / doc.height, 1);
   const w = Math.max(1, Math.round(doc.width * scale));
   const h = Math.max(1, Math.round(doc.height * scale));
@@ -130,7 +137,8 @@ export function SidePanel() {
   if (!panels.open) return null;
   const showHistory = panels.visible.history !== false;
   const showNav = panels.visible.navigator !== false;
-  if (!showHistory && !showNav) return null;
+  const showLayers = panels.visible.layers !== false;
+  if (!showHistory && !showNav && !showLayers) return null;
 
   const onResize = (e: ReactPointerEvent<HTMLDivElement>) => {
     const startX = e.clientX;
@@ -183,6 +191,11 @@ export function SidePanel() {
       {showNav ? (
         <Section id="navigator" title={t('panel.navigator')} icon="navigator">
           <Navigator />
+        </Section>
+      ) : null}
+      {showLayers ? (
+        <Section id="layers" title={t('panel.layers')} icon="layers" grow>
+          <LayersPanel />
         </Section>
       ) : null}
       {showHistory ? (

@@ -44,7 +44,7 @@ function toggleView(key: 'rulers' | 'gridlines' | 'pixelGrid' | 'statusBar'): vo
   engine.setViewOptions({ pixelGrid: next.pixelGrid, gridlines: next.gridlines, gridSize: next.gridSize });
 }
 
-function togglePanel(id: 'history' | 'navigator'): void {
+function togglePanel(id: 'history' | 'navigator' | 'layers'): void {
   const p = useUi.getState().settings.panels;
   const visible = { ...p.visible, [id]: !(p.visible[id] ?? true) };
   updateSettings({ panels: { ...p, open: true, visible } });
@@ -149,6 +149,7 @@ const base: Action[] = [
     },
     checked: (s) => s.settings.panels.side === 'left',
   },
+  { id: 'layersPanel', labelKey: 'action.layersPanel', icon: 'layers', group: 'view', run: () => togglePanel('layers'), checked: (s) => s.settings.panels.open && s.settings.panels.visible.layers !== false },
   { id: 'historyPanel', labelKey: 'action.historyPanel', icon: 'history', group: 'view', run: () => togglePanel('history'), checked: (s) => s.settings.panels.open && s.settings.panels.visible.history !== false },
   { id: 'navigatorPanel', labelKey: 'action.navigatorPanel', icon: 'navigator', group: 'view', run: () => togglePanel('navigator'), checked: (s) => s.settings.panels.open && s.settings.panels.visible.navigator !== false },
   { id: 'themeSystem', labelKey: 'action.themeSystem', icon: 'system', group: 'view', run: () => setThemeMode('system'), checked: (s) => s.settings.themeMode === 'system' },
@@ -162,6 +163,16 @@ const base: Action[] = [
     run: () => updateSettings({ useWindowsAccent: !useUi.getState().settings.useWindowsAccent }),
     checked: (s) => s.settings.useWindowsAccent,
   },
+  // Layers
+  { id: 'layerNew', labelKey: 'action.layerNew', icon: 'layer-add', group: 'image', shortcut: ['Ctrl+Shift+L'], run: () => void engine.layers.add() },
+  { id: 'layerDuplicate', labelKey: 'action.layerDuplicate', icon: 'copy', group: 'image', shortcut: ['Ctrl+J'], run: () => void engine.layers.duplicate() },
+  { id: 'layerDelete', labelKey: 'action.layerDelete', icon: 'delete', group: 'image', run: () => void engine.layers.remove(), enabled: (s) => s.layers.count > 0 && engine.layers.canRemove() },
+  { id: 'layerMergeDown', labelKey: 'action.layerMergeDown', icon: 'merge', group: 'image', shortcut: ['Ctrl+Shift+E'], run: () => void engine.layers.mergeDown(), enabled: (s) => s.layers.count > 0 && engine.layers.canMergeDown() },
+  { id: 'layerFlatten', labelKey: 'action.layerFlatten', icon: 'flatten', group: 'image', run: () => void engine.layers.flatten(), enabled: (s) => s.layers.count > 1 },
+  { id: 'layerGroup', labelKey: 'action.layerGroup', icon: 'folder', group: 'image', shortcut: ['Ctrl+Alt+G'], run: () => void engine.layers.group() },
+  { id: 'layerUngroup', labelKey: 'action.layerUngroup', icon: 'ungroup', group: 'image', shortcut: ['Ctrl+Shift+Alt+G'], run: () => void engine.layers.ungroup(), enabled: (s) => s.layers.count > 0 && engine.doc.activeLayer.kind === 'group' },
+  { id: 'layerUp', labelKey: 'action.layerUp', icon: 'arrow-up', group: 'image', shortcut: ['Ctrl+]'], run: () => void engine.layers.step(engine.doc.activeId, 1) },
+  { id: 'layerDown', labelKey: 'action.layerDown', icon: 'arrow-down', group: 'image', shortcut: ['Ctrl+['], run: () => void engine.layers.step(engine.doc.activeId, -1) },
   // Colours
   { id: 'swapColors', labelKey: 'action.swapColors', icon: 'swap', group: 'colors', shortcut: ['X'], run: () => engine.swapColors() },
   { id: 'resetColors', labelKey: 'action.resetColors', group: 'colors', shortcut: ['D'], run: () => engine.resetColors() },

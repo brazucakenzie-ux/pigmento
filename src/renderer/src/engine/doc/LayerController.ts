@@ -158,6 +158,12 @@ export class LayerController {
     return copy.id;
   }
 
+  /** False for the last top-level layer (an image always keeps one). */
+  canRemove(id = this.doc.activeId): boolean {
+    const slot = this.doc.slotOf(id);
+    return slot !== null && (slot.parent !== null || this.doc.layers.length > 1);
+  }
+
   /** Delete a layer (or group with its contents). The last remaining layer can't be deleted. */
   remove(id = this.doc.activeId): boolean {
     const slot = this.doc.slotOf(id);

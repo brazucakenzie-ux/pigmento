@@ -176,7 +176,7 @@ Theme families, each with a light and a dark variant: Pigmento, GitHub, VS Code,
 ### Milestone 2 — Layers, selections, shapes system
 Each item is ticked in the same commit as its work.
 - [x] 2.1 Layers core: add/delete/duplicate/reorder/rename/show/hide/lock/opacity/blend as undoable commands; all 15 blend modes in JS for flatten, sampling and export, matching the Canvas 2D compositor; merge down, flatten; layer thumbnails (+ blend-mode unit tests)
-- [ ] 2.2 Layers panel: thumbnails, drag to reorder, inline rename, visibility/lock toggles, opacity and blend controls, add/duplicate/delete/merge/flatten; Layers ribbon group; a single-layer image still works without opening the panel
+- [x] 2.2 Layers panel: thumbnails, drag to reorder, inline rename, visibility/lock toggles, opacity and blend controls, add/duplicate/delete/merge/flatten; Layers ribbon group; a single-layer image still works without opening the panel
 - [ ] 2.3 Layer groups: nested groups with their own opacity, blend and visibility, collapse/expand, group/ungroup, composited as isolated groups
 - [ ] 2.4 Project file `.pigm` (zip: JSON + per-layer PNGs + vector objects + guides + saved selections) with open/save; autosave to `%APPDATA%\Pigmento\autosave` and a crash-recovery prompt (+ round-trip unit test, e2e save/reopen with layers)
 - [ ] 2.5 Export dialog (format, quality, 1×/2×/3×, transparency, whole image or selected layer); copy image as PNG; trim transparent edges; resize canvas to fit contents
