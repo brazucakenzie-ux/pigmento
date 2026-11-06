@@ -141,8 +141,11 @@ export function createStrokeTool(cfg: StrokeToolConfig): Tool {
       if (!s) return;
       ctx.removeLayerFilter(s.filter);
       const b = s.buffer.bounds;
-      if (!b) return;
-      const layer = ctx.doc.activeLayer;
+      const layer = ctx.doc.activeRaster;
+      if (!b || !layer) {
+        s.buffer.reset();
+        return;
+      }
       const surf = layer.surface;
       surf.beginEdit();
       surf.compositeColor(b, s.color, s.buffer.view(), cfg.op, s.opacity, ctx.doc.selection?.maskView() ?? null);

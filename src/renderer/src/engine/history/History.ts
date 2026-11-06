@@ -10,6 +10,11 @@ export interface Command {
   redo(): void;
   /** Release resources when the command falls off the history. */
   dispose?(): void;
+  /**
+   * Absorb an immediately following command into this one (e.g. one opacity slider drag
+   * becomes one step). Return true if merged; `next` is then discarded.
+   */
+  mergeWith?(next: Command): boolean;
 }
 
 export interface HistoryEntry {
@@ -74,6 +79,13 @@ export class History extends Emitter<HistoryEvents> {
   /** Record a command whose effect has already been applied. */
   push(cmd: Command): void {
     if (this.busy) throw new Error('Cannot push while undoing/redoing');
+    const top = this._index === this.items.length ? this.items[this._index - 1] : undefined;
+    if (top?.mergeWith?.(cmd)) {
+      // The merged step no longer matches a save made right after it.
+      if (this.savedIndex === this._index) this.savedIndex = null;
+      this.changed();
+      return;
+    }
     for (const c of this.items.splice(this._index)) c.dispose?.();
     if (this.savedIndex !== null && this.savedIndex > this._index) this.savedIndex = null;
     this.items.push(cmd);

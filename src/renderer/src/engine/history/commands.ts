@@ -1,6 +1,6 @@
 import type { RGBA } from '../core/color';
 import type { Rect } from '../core/geometry';
-import type { Layer, PaintDocument } from '../doc/Document';
+import type { PaintDocument, RasterLayer } from '../doc/Document';
 import type { Selection } from '../doc/Selection';
 import type { Surface, TileDelta } from '../raster/Surface';
 import type { I18nKey } from '../../i18n';
@@ -10,9 +10,11 @@ import type { Command } from './History';
 export interface CommandHost {
   readonly doc: PaintDocument;
   /** Pixels of `layer` changed inside r (null = everywhere). */
-  layerChanged(layer: Layer, r: Rect | null): void;
-  /** Document size, paper or layer list changed. */
+  layerChanged(layer: RasterLayer, r: Rect | null): void;
+  /** Document size or paper changed (every canvas is rebuilt). */
   structureChanged(): void;
+  /** Layer tree or layer properties changed (recomposite, refresh the Layers panel). */
+  layersChanged(): void;
   setSelection(sel: Selection | null): void;
 }
 
@@ -21,7 +23,7 @@ export class PixelCommand implements Command {
   constructor(
     readonly label: I18nKey,
     private readonly host: CommandHost,
-    private readonly layer: Layer,
+    private readonly layer: RasterLayer,
     private readonly delta: TileDelta,
     private readonly selBefore: Selection | null = null,
     private readonly selAfter: Selection | null = null,
@@ -52,7 +54,8 @@ export interface DocState {
   height: number;
   dpi: number;
   paper: RGBA | null;
-  surfaces: Surface[];
+  /** Surface of every raster layer (including inside groups) at capture time. */
+  surfaces: Map<RasterLayer, Surface>;
   selection: Selection | null;
 }
 
@@ -62,7 +65,7 @@ export function captureDocState(doc: PaintDocument): DocState {
     height: doc.height,
     dpi: doc.dpi,
     paper: doc.paper ? { ...doc.paper } : null,
-    surfaces: doc.layers.map((l) => l.surface),
+    surfaces: new Map(doc.rasterLayers().map((l) => [l, l.surface])),
     selection: doc.selection,
   };
 }
@@ -72,9 +75,7 @@ export function applyDocState(doc: PaintDocument, s: DocState): void {
   doc.height = s.height;
   doc.dpi = s.dpi;
   doc.paper = s.paper ? { ...s.paper } : null;
-  doc.layers.forEach((l, i) => {
-    l.surface = s.surfaces[i];
-  });
+  for (const [layer, surface] of s.surfaces) layer.surface = surface;
   doc.selection = s.selection;
 }
 
@@ -88,10 +89,11 @@ export class DocStateCommand implements Command {
   ) {}
 
   get bytes(): number {
-    const sizeOf = (s: DocState) => s.surfaces.reduce((n, sf) => n + sf.bytes, 0);
     // Surfaces shared by both states are counted once.
-    const shared = this.before.surfaces.filter((s) => this.after.surfaces.includes(s));
-    return sizeOf(this.before) + sizeOf(this.after) - shared.reduce((n, s) => n + s.bytes, 0);
+    const all = new Set([...this.before.surfaces.values(), ...this.after.surfaces.values()]);
+    let n = 0;
+    for (const sf of all) n += sf.bytes;
+    return n;
   }
 
   undo(): void {

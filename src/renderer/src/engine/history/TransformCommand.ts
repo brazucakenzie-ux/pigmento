@@ -14,14 +14,14 @@ function applyToImage(op: LosslessOp, img: ImageBuf, inverse: boolean): ImageBuf
 
 /** Apply a lossless whole-image op to every layer (and the document size). */
 export function applyLossless(doc: PaintDocument, op: LosslessOp, inverse: boolean): void {
-  let nw = doc.width;
-  let nh = doc.height;
-  for (const layer of doc.layers) {
+  // A quarter turn swaps the document's width and height.
+  const swap = op.kind === 'rotate' && op.quarterTurns % 2 !== 0;
+  const nw = swap ? doc.height : doc.width;
+  const nh = swap ? doc.width : doc.height;
+  for (const layer of doc.rasterLayers()) {
     const s = layer.surface;
     const out = applyToImage(op, { w: s.width, h: s.height, data: s.toRGBA() }, inverse);
     layer.surface = Surface.fromRGBA(out.w, out.h, out.data);
-    nw = out.w;
-    nh = out.h;
   }
   doc.width = nw;
   doc.height = nh;

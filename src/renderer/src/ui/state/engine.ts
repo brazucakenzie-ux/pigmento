@@ -2,10 +2,15 @@ import '@engine/tools/builtin';
 import { Engine } from '@engine/Engine';
 import { parseHex, toHex8 } from '@engine/core/color';
 import type { Settings } from '@shared/settings';
+import { t } from '../../i18n';
 import { showToast, updateSettings, useUi } from './store';
 
 /** The single engine instance for this window. */
 export const engine = new Engine();
+
+// The engine stores user-visible names but never English text: the UI provides them.
+engine.layers.namer = (kind, arg) =>
+  kind === 'copy' ? t('layer.copy', { name: String(arg) }) : t(kind === 'group' ? 'layer.group' : 'layer.default', { n: arg });
 
 let bound = false;
 
@@ -33,6 +38,7 @@ export function bindEngine(settings: Settings): void {
     tool: engine.activeToolIdValue,
     toolOptions: { ...engine.allToolOptions() },
     colors: { primary: engine.primary, secondary: engine.secondary },
+    layers: engine.layers.info(),
   });
 
   engine.on('doc', (doc) => useUi.setState({ doc }));
@@ -45,6 +51,7 @@ export function bindEngine(settings: Settings): void {
   engine.on('hint', ({ key }) => useUi.setState({ hint: key }));
   engine.on('canvasDrag', (canvasDrag) => useUi.setState({ canvasDrag }));
   engine.on('notice', (n) => showToast(n));
+  engine.on('layers', (layers) => useUi.setState({ layers }));
 
   engine.on('tool', ({ id }) => {
     useUi.setState({ tool: id });

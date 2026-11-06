@@ -215,6 +215,22 @@ export const en = {
   'history.properties': 'Image properties',
   'history.paper': 'Paper colour',
   'history.transform': 'Transform selection',
+  'history.layerAdd': 'New layer',
+  'layer.default': 'Layer {n}',
+  'layer.group': 'Group {n}',
+  'layer.copy': '{name} copy',
+  'history.layerDelete': 'Delete layer',
+  'history.layerDuplicate': 'Duplicate layer',
+  'history.layerMove': 'Move layer',
+  'history.layerRename': 'Rename layer',
+  'history.layerOpacity': 'Layer opacity',
+  'history.layerBlend': 'Blend mode',
+  'history.layerVisibility': 'Show/hide layer',
+  'history.layerLock': 'Lock/unlock layer',
+  'history.mergeDown': 'Merge down',
+  'history.flatten': 'Flatten image',
+  'history.group': 'Group layers',
+  'history.ungroup': 'Ungroup layers',
 
   // Panels
   'panel.title': 'Panels',
@@ -351,6 +367,9 @@ export const en = {
   'notice.saving': 'Saving {name}…',
   'notice.dismiss': 'Dismiss',
   'notice.layerLocked': 'This layer is locked.',
+  'notice.notRaster': 'Select a pixel layer to paint on.',
+  'notice.layerHidden': 'This layer is hidden. Show it to paint on it.',
+  'notice.lastLayer': 'An image needs at least one layer.',
 
   // Help
   'help.menu': 'Help',

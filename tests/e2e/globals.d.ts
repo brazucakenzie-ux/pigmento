@@ -11,6 +11,24 @@ export interface PigmentoTestHook {
   selection(): { x: number; y: number; w: number; h: number } | null;
   openPath(path: string): Promise<boolean>;
   filePath(): string | null;
+  layers(): { tree: LayerNode[]; activeId: string; count: number };
+  screenPixel(x: number, y: number): Promise<{ r: number; g: number; b: number; a: number }>;
+  fillLayer(id: string, c: { r: number; g: number; b: number; a: number }): void;
+  addLayer(): string;
+  setLayerProps(id: string, p: Record<string, unknown>): void;
+}
+
+export interface LayerNode {
+  id: string;
+  kind: 'raster' | 'group';
+  name: string;
+  opacity: number;
+  blend: string;
+  visible: boolean;
+  locked: boolean;
+  collapsed: boolean;
+  depth: number;
+  children: LayerNode[];
 }
 
 declare global {

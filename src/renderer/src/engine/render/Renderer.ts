@@ -1,6 +1,7 @@
 import { toCss } from '../core/color';
 import { rectIntersect, rectUnion, type Rect } from '../core/geometry';
-import type { Layer, PaintDocument } from '../doc/Document';
+import { walkLayers, type GroupLayer, type Layer, type PaintDocument, type RasterLayer } from '../doc/Document';
+import type { Surface } from '../raster/Surface';
 import { TILE_SIZE } from '../raster/Surface';
 import type { PixelView } from '../raster/pixels';
 import type { View } from './View';
@@ -11,6 +12,14 @@ interface Mirror {
   canvas: OffscreenCanvas;
   ctx: Ctx2D;
   tileImages: Map<number, ImageData>;
+  /** The surface last uploaded; a different one (merge, undo of a resize) forces a full sync. */
+  surface: Surface | null;
+}
+
+/** Off-screen canvas a group's children are composited into before it is blended as one. */
+interface GroupCanvas {
+  canvas: OffscreenCanvas;
+  ctx: Ctx2D;
 }
 
 /** Display-only adjustment of the active layer's pixels (stroke preview, floating hole). */
@@ -39,6 +48,7 @@ function ctx2d(c: OffscreenCanvas, opts?: CanvasRenderingContext2DSettings): Ctx
  */
 export class Renderer {
   private mirrors = new Map<string, Mirror>();
+  private groups = new Map<string, GroupCanvas>();
   private composite: OffscreenCanvas;
   private compositeCtx: Ctx2D;
   private dirty: Rect | null = null;
@@ -78,30 +88,93 @@ export class Renderer {
   resetDocument(doc: PaintDocument): void {
     this.doc = doc;
     this.mirrors.clear();
+    this.groups.clear();
     if (this.composite.width !== doc.width || this.composite.height !== doc.height) {
       this.composite = new OffscreenCanvas(doc.width, doc.height);
       this.compositeCtx = ctx2d(this.composite);
     }
-    for (const layer of doc.layers) this.syncLayer(layer, null);
+    this.syncTree();
+  }
+
+  /**
+   * After the layer tree changed: upload layers that are new or whose surface was replaced,
+   * drop canvases of removed layers, and recomposite everything.
+   */
+  syncTree(): void {
+    const live = new Set<string>();
+    for (const layer of walkLayers(this.doc.layers)) {
+      live.add(layer.id);
+      if (layer.kind !== 'raster') continue;
+      const m = this.mirrors.get(layer.id);
+      if (!m || m.surface !== layer.surface || m.canvas.width !== this.doc.width || m.canvas.height !== this.doc.height) {
+        this.syncLayer(layer, null);
+      }
+    }
+    for (const id of [...this.mirrors.keys()]) if (!live.has(id)) this.mirrors.delete(id);
+    for (const id of [...this.groups.keys()]) if (!live.has(id)) this.groups.delete(id);
     this.invalidate(null);
   }
 
-  private mirrorFor(layer: Layer): Mirror {
+  private mirrorFor(layer: RasterLayer): Mirror {
     let m = this.mirrors.get(layer.id);
     if (!m || m.canvas.width !== this.doc.width || m.canvas.height !== this.doc.height) {
       const canvas = new OffscreenCanvas(this.doc.width, this.doc.height);
-      m = { canvas, ctx: ctx2d(canvas), tileImages: new Map() };
+      m = { canvas, ctx: ctx2d(canvas), tileImages: new Map(), surface: null };
       this.mirrors.set(layer.id, m);
     }
     return m;
   }
 
+  private groupCanvas(group: GroupLayer): GroupCanvas {
+    let g = this.groups.get(group.id);
+    if (!g || g.canvas.width !== this.doc.width || g.canvas.height !== this.doc.height) {
+      const canvas = new OffscreenCanvas(this.doc.width, this.doc.height);
+      g = { canvas, ctx: ctx2d(canvas) };
+      this.groups.set(group.id, g);
+    }
+    return g;
+  }
+
+  /** Mirror canvas of a raster layer, if it exists. */
+  layerCanvas(id: string): OffscreenCanvas | null {
+    return this.mirrors.get(id)?.canvas ?? null;
+  }
+
+  /**
+   * Scaled preview of one layer for the Layers panel (a group shows its children composited,
+   * ignoring the group's own opacity so the thumbnail stays readable).
+   */
+  drawLayerThumbnail(layer: Layer, target: CanvasRenderingContext2D, w: number, h: number): void {
+    target.save();
+    target.clearRect(0, 0, w, h);
+    target.imageSmoothingEnabled = true;
+    target.imageSmoothingQuality = 'medium';
+    const draw = (l: Layer, top: boolean): void => {
+      if (!top && !l.visible) return;
+      if (l.kind === 'raster') {
+        const m = this.mirrors.get(l.id);
+        if (!m) return;
+        target.globalAlpha = top ? 1 : l.opacity;
+        target.globalCompositeOperation = top || l.blend === 'normal' ? 'source-over' : l.blend;
+        target.drawImage(m.canvas, 0, 0, this.doc.width, this.doc.height, 0, 0, w, h);
+      } else {
+        for (const c of l.children) draw(c, false);
+      }
+    };
+    draw(layer, true);
+    target.restore();
+  }
+
   /** Upload a layer's tiles inside r (null = all) to its mirror canvas. */
-  syncLayer(layer: Layer, r: Rect | null): void {
+  syncLayer(layer: RasterLayer, r: Rect | null): void {
     const docRect = { x: 0, y: 0, w: this.doc.width, h: this.doc.height };
     const area = r ? rectIntersect(r, docRect) : docRect;
     if (!area) return;
     const m = this.mirrorFor(layer);
+    if (m.surface !== layer.surface) {
+      m.tileImages.clear();
+      m.surface = layer.surface;
+    }
     const isActive = layer === this.doc.activeLayer;
     if (isActive && this.activeFilters.length > 0) {
       // Filtered path: read tiles, apply display filters, upload one rect.
@@ -161,19 +234,38 @@ export class Renderer {
       ctx.fillStyle = toCss(this.doc.paper);
       ctx.fillRect(r.x, r.y, r.w, r.h);
     }
+    this.drawLayers(ctx, this.doc.layers, r);
+    ctx.restore();
+  }
+
+  /** Draw a layer list into ctx inside r. Groups render into their own canvas first. */
+  private drawLayers(ctx: Ctx2D, layers: Layer[], r: Rect): void {
     const active = this.doc.activeLayer;
-    for (const layer of this.doc.layers) {
+    for (const layer of layers) {
       if (layer.visible) {
-        const m = this.mirrorFor(layer);
+        let source: OffscreenCanvas;
+        if (layer.kind === 'raster') {
+          source = this.mirrorFor(layer).canvas;
+        } else {
+          const g = this.groupCanvas(layer);
+          g.ctx.save();
+          g.ctx.beginPath();
+          g.ctx.rect(r.x, r.y, r.w, r.h);
+          g.ctx.clip();
+          g.ctx.clearRect(r.x, r.y, r.w, r.h);
+          this.drawLayers(g.ctx, layer.children, r);
+          g.ctx.restore();
+          source = g.canvas;
+        }
         ctx.globalAlpha = layer.opacity;
         ctx.globalCompositeOperation = layer.blend === 'normal' ? 'source-over' : layer.blend;
-        ctx.drawImage(m.canvas, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
+        ctx.drawImage(source, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
         ctx.globalAlpha = 1;
         ctx.globalCompositeOperation = 'source-over';
       }
+      // Live objects (shape being drawn, floating pixels) sit right above the active layer.
       if (layer === active && this.liveDrawer) this.liveDrawer(ctx, r);
     }
-    ctx.restore();
   }
 
   resizeView(cssW: number, cssH: number, dpr: number): void {

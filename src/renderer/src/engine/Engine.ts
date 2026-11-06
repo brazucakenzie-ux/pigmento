@@ -2,7 +2,9 @@ import { BLACK, WHITE, colorEquals, type RGBA } from './core/color';
 import { Emitter } from './core/emitter';
 import { rectCorners, rectIntersect, rectUnion, type Point, type Rect } from './core/geometry';
 import { matApplyPoints, matAround, matRotate, matSkew, matTranslate, matChain } from './core/matrix';
-import { PaintDocument, RasterLayer, type Layer } from './doc/Document';
+import { PaintDocument, RasterLayer } from './doc/Document';
+import { LayerController, type LayersInfo } from './doc/LayerController';
+import { compositeLayers } from './raster/blend';
 import { Selection } from './doc/Selection';
 import { History, type HistoryEntry } from './history/History';
 import { DocStateCommand, PixelCommand, captureDocState, type CommandHost, type DocState } from './history/commands';
@@ -12,7 +14,7 @@ import { MAX_DIMENSION, MAX_PIXELS } from './io/protocol';
 import { FloatObject, rectOutline } from './live/FloatObject';
 import type { LiveKind, LiveObject } from './live/LiveObject';
 import type { TextObject } from './live/TextObject';
-import { applyImage, flattenOnto, hasTransparency, invertView, type MaskView } from './raster/pixels';
+import { flattenOnto, hasTransparency, invertView, type MaskView } from './raster/pixels';
 import { Surface } from './raster/Surface';
 import { affineTransform, placeImage, resample, type ImageBuf, type Resample } from './raster/transform';
 import { Overlay } from './render/Overlay';
@@ -76,6 +78,8 @@ export interface EngineEvents {
   pixels: null;
   /** A canvas-resize drag is in progress (preview size), or ended (null). */
   canvasDrag: { w: number; h: number } | null;
+  /** Layer tree, properties or the active layer changed. */
+  layers: LayersInfo;
 }
 
 export type Anchor = 'nw' | 'n' | 'ne' | 'w' | 'c' | 'e' | 'sw' | 's' | 'se';
@@ -113,6 +117,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   readonly overlay: Overlay;
   readonly codecs = new CodecClient();
   readonly tools: ToolRegistry = toolRegistry;
+  /** Layer operations (add, delete, reorder, merge, properties…). */
+  readonly layers = new LayerController(this);
   private input: InputController | null = null;
   private host: HTMLElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
@@ -305,7 +311,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
 
   // ---- CommandHost ----------------------------------------------------------------------
 
-  layerChanged(layer: Layer, r: Rect | null): void {
+  layerChanged(layer: RasterLayer, r: Rect | null): void {
     this.renderer.syncLayer(layer, r);
     this.requestRender();
     this.notifyPixels();
@@ -317,6 +323,15 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.emit('doc', this.docInfo());
     this.emitView();
     this.emitSelectionInfo();
+    this.emit('layers', this.layers.info());
+    this.requestRender();
+    this.notifyPixels();
+  }
+
+  layersChanged(): void {
+    if (!this.doc.layerById(this.doc.activeId)) this.doc.activeId = this.doc.layers[this.doc.layers.length - 1].id;
+    this.renderer.syncTree();
+    this.emit('layers', this.layers.info());
     this.requestRender();
     this.notifyPixels();
   }
@@ -536,12 +551,12 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     const text = obj.kind === 'text' ? (obj as TextObject) : null;
     const selAfter = float ? (keepSelection ? obj.selectionAfterCommit?.() ?? null : null) : this.doc.selection;
     const skip = (text && text.isEmpty) || (float && float.isIdentityPlacement);
-    const layer = this.doc.activeLayer;
-    if (skip || layer.locked) {
+    const layer = this.doc.activeRaster;
+    if (skip || !layer || layer.locked) {
       this.detachLive();
       obj.dispose();
       if (float) this.setSelection(selAfter);
-      if (layer.locked && !skip) this.notify('info', 'notice.layerLocked');
+      if (!skip) this.notify('info', layer ? 'notice.layerLocked' : 'notice.notRaster');
       this.emitLive();
       return;
     }
@@ -580,7 +595,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   }
 
   syncActiveLayer(r: Rect | null): void {
-    this.renderer.syncLayer(this.doc.activeLayer, r);
+    const layer = this.doc.activeRaster;
+    if (layer) this.renderer.syncLayer(layer, r);
     this.requestRender();
     this.notifyPixels();
   }
@@ -589,7 +605,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
 
   pushPixels(
     label: I18nKey,
-    layer: Layer,
+    layer: RasterLayer,
     delta: TileDelta | null,
     selBefore: Selection | null = this.doc.selection,
     selAfter: Selection | null = this.doc.selection,
@@ -604,12 +620,20 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   }
 
   canPaint(): boolean {
-    const l = this.doc.activeLayer;
+    const l = this.doc.activeRaster;
+    if (!l) {
+      this.notify('info', 'notice.notRaster');
+      return false;
+    }
     if (l.locked) {
       this.notify('info', 'notice.layerLocked');
       return false;
     }
-    return l.visible;
+    if (!this.doc.isEffectivelyVisible(l.id)) {
+      this.notify('info', 'notice.layerHidden');
+      return false;
+    }
+    return true;
   }
 
   undo(): void {
@@ -640,6 +664,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   private replaceDocument(doc: PaintDocument, initial: I18nKey): void {
     this.cancelLive();
     this.activeTool.deactivate?.(this);
+    for (const l of doc.layers) if (l.name === '') l.name = this.layers.namer('layer', 1);
     this.doc = doc;
     this.history.reset(initial);
     this.view.setDocSize(doc.width, doc.height);
@@ -650,6 +675,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.emitView();
     this.emitSelectionInfo();
     this.emitHistory();
+    this.emit('layers', this.layers.info());
     this.requestRender();
     this.notifyPixels();
   }
@@ -667,13 +693,15 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.replaceDocument(new PaintDocument({ width: img.w, height: img.h, dpi: img.dpi ?? 96, paper }, [layer]), 'history.initial.open');
   }
 
-  /** Flattened image (paper + visible layers). `opaque` composites onto paper or white. */
-  flatten(opaque = false): ImageBuf {
-    const { width: w, height: h } = this.doc;
-    const out = new Uint8ClampedArray(w * h * 4);
-    const view = { data: out, stride: w, ox: 0, oy: 0 };
-    if (this.doc.paper) {
-      const p = this.doc.paper;
+  /**
+   * Flattened pixels of r (default: the whole image): paper, then visible layers with their
+   * blend modes. `opaque` composites onto the paper or white (for JPEG/BMP).
+   */
+  flatten(opaque = false, r: Rect = this.doc.bounds, withPaper = true): ImageBuf {
+    const out = new Uint8ClampedArray(r.w * r.h * 4);
+    const view = { data: out, stride: r.w, ox: r.x, oy: r.y };
+    const p = this.doc.paper;
+    if (p && withPaper) {
       for (let i = 0; i < out.length; i += 4) {
         out[i] = p.r;
         out[i + 1] = p.g;
@@ -681,29 +709,17 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
         out[i + 3] = p.a;
       }
     }
-    for (const layer of this.doc.layers) {
-      if (!layer.visible || layer.opacity <= 0) continue;
-      layer.surface.forEachTile(this.doc.bounds, (tile, sub) => applyImage(view, sub, tile, 'over', layer.opacity), false, true);
-    }
-    if (opaque) flattenOnto(out, this.doc.paper && this.doc.paper.a === 255 ? this.doc.paper : WHITE);
-    return { w, h, data: out };
+    compositeLayers(this.doc.layers, r, view);
+    if (opaque) flattenOnto(out, p && p.a === 255 ? p : WHITE);
+    return { w: r.w, h: r.h, data: out };
   }
 
   sampleColor(x: number, y: number): RGBA {
     const px = Math.floor(x);
     const py = Math.floor(y);
     if (px < 0 || py < 0 || px >= this.doc.width || py >= this.doc.height) return { ...this._primary };
-    const buf = new Uint8ClampedArray(4);
-    if (this.doc.paper) buf.set([this.doc.paper.r, this.doc.paper.g, this.doc.paper.b, this.doc.paper.a]);
-    const dst = { data: buf, stride: 1, ox: px, oy: py };
-    const r = { x: px, y: py, w: 1, h: 1 };
-    for (const layer of this.doc.layers) {
-      if (!layer.visible) continue;
-      const c = layer.surface.getPixel(px, py);
-      const src = { data: new Uint8ClampedArray([c.r, c.g, c.b, c.a]), stride: 1, ox: px, oy: py };
-      applyImage(dst, r, src, 'over', layer.opacity);
-    }
-    return { r: buf[0], g: buf[1], b: buf[2], a: buf[3] };
+    const d = this.flatten(false, { x: px, y: py, w: 1, h: 1 }).data;
+    return { r: d[0], g: d[1], b: d[2], a: d[3] };
   }
 
   async floodFill(x: number, y: number, color: RGBA, tolerance: number, contiguous: boolean): Promise<void> {
@@ -712,9 +728,10 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     const py = Math.floor(y);
     const { width: w, height: h } = this.doc;
     if (px < 0 || py < 0 || px >= w || py >= h) return;
+    const layer = this.doc.activeRaster;
+    if (!layer) return;
     this.fillBusy = true;
     try {
-      const layer = this.doc.activeLayer;
       const sel = this.doc.selection;
       let clip: Uint8Array | null = null;
       if (sel) {
@@ -723,7 +740,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
         for (let yy = 0; yy < b.h; yy++) clip.set(sel.mask.subarray(yy * b.w, (yy + 1) * b.w), (b.y + yy) * w + b.x);
       }
       const { mask, bounds } = await this.codecs.fill(layer.surface.toRGBA(), w, h, px, py, tolerance, contiguous, clip);
-      if (!bounds || layer !== this.doc.activeLayer) return;
+      if (!bounds || layer !== this.doc.activeRaster) return;
       const s = layer.surface;
       s.beginEdit();
       s.compositeColor(bounds, color, { data: mask, stride: w, ox: 0, oy: 0, w, h }, 'over', 1);
@@ -795,7 +812,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   /** Pixels inside the selection (alpha masked), relative to its bounds. */
   private selectionPixels(sel: Selection): ImageBuf {
     const b = sel.bounds;
-    const data = this.doc.activeLayer.surface.readRect(b);
+    const layer = this.doc.activeRaster;
+    const data = layer ? layer.surface.readRect(b) : new Uint8ClampedArray(b.w * b.h * 4);
     for (let p = 0; p < sel.mask.length; p++) {
       const m = sel.mask[p];
       if (m !== 255) data[p * 4 + 3] = (data[p * 4 + 3] * m) / 255;
@@ -808,6 +826,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     if (!sel) return null;
     if (this._live?.kind === 'float') return this._live as FloatObject;
     this.commitLive();
+    if (!this.canPaint()) return null;
     const b = sel.bounds;
     const img = this.selectionPixels(sel);
     const outline = sel.outlines.map((o) => o.map((p) => ({ x: p.x - b.x, y: p.y - b.y })));
@@ -863,11 +882,11 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
 
   deleteSelection(label: I18nKey = 'history.delete'): void {
     const f = this.floating;
-    const layer = this.doc.activeLayer;
+    const layer = this.doc.activeRaster;
     if (f) {
       this.detachLive();
       const selBefore = this.doc.selection;
-      if (f.hole && !layer.locked) {
+      if (f.hole && layer && !layer.locked) {
         const s = layer.surface;
         s.beginEdit();
         s.clearRect({ x: f.hole.ox, y: f.hole.oy, w: f.hole.w, h: f.hole.h }, f.hole);
@@ -880,7 +899,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       return;
     }
     const sel = this.doc.selection;
-    if (!sel || !this.canPaint()) return;
+    if (!sel || !layer || !this.canPaint()) return;
     const s = layer.surface;
     s.beginEdit();
     s.clearRect(sel.bounds, sel.maskView());
@@ -998,13 +1017,14 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     const { width: w, height: h } = this.doc;
     const centered = matAround(m, { x: w / 2, y: h / 2 });
     // Every layer has the same size, so they share the warped bounds (the new canvas).
-    const results = this.doc.layers.map((layer) =>
+    const rasters = this.doc.rasterLayers();
+    const results = rasters.map((layer) =>
       affineTransform({ w, h, data: layer.surface.toRGBA() }, centered, true),
     );
     const nw = results[0].w;
     const nh = results[0].h;
     checkSize(nw, nh);
-    this.doc.layers.forEach((layer, i) => {
+    rasters.forEach((layer, i) => {
       layer.surface = Surface.fromRGBA(nw, nh, results[i].data);
     });
     this.doc.width = nw;
@@ -1028,7 +1048,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     checkSize(w, h);
     this.commitLive();
     const before = captureDocState(this.doc);
-    for (const layer of this.doc.layers) {
+    for (const layer of this.doc.rasterLayers()) {
       const s = layer.surface;
       const out = resample({ w: s.width, h: s.height, data: s.toRGBA() }, w, h, method);
       layer.surface = Surface.fromRGBA(w, h, out.data);
@@ -1051,7 +1071,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     const dy = h - this.doc.height;
     const ax = anchor.includes('w') ? 0 : anchor.includes('e') ? dx : Math.round(dx / 2);
     const ay = anchor.startsWith('n') ? 0 : anchor.startsWith('s') ? dy : Math.round(dy / 2);
-    for (const layer of this.doc.layers) {
+    for (const layer of this.doc.rasterLayers()) {
       const s = layer.surface;
       const out = placeImage({ w: s.width, h: s.height, data: s.toRGBA() }, w, h, ax, ay);
       layer.surface = Surface.fromRGBA(w, h, out.data);
@@ -1070,7 +1090,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     const b = rectIntersect(sel.bounds, this.doc.bounds);
     if (!b) return;
     const before = captureDocState(this.doc);
-    for (const layer of this.doc.layers) {
+    for (const layer of this.doc.rasterLayers()) {
       const data = layer.surface.readRect(b);
       if (!sel.isRect) {
         for (let p = 0; p < sel.mask.length; p++) data[p * 4 + 3] = (data[p * 4 + 3] * sel.mask[p]) / 255;
@@ -1092,8 +1112,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       this.invalidate(f.bounds());
       return;
     }
-    if (!this.canPaint()) return;
-    const layer = this.doc.activeLayer;
+    const layer = this.doc.activeRaster;
+    if (!layer || !this.canPaint()) return;
     const sel = this.doc.selection;
     const area = sel ? sel.bounds : this.doc.bounds;
     const s = layer.surface;

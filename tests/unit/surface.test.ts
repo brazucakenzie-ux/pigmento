@@ -13,6 +13,7 @@ function host(doc: PaintDocument): CommandHost & { changes: number } {
       this.changes++;
     },
     structureChanged() {},
+    layersChanged() {},
     setSelection(sel) {
       doc.selection = sel;
     },
@@ -105,7 +106,7 @@ describe('History with tile-delta commands', () => {
     const doc = new PaintDocument({ width: 300, height: 300 }, [new RasterLayer('', new Surface(300, 300))]);
     const h = new History();
     const hh = host(doc);
-    const layer = doc.layers[0];
+    const layer = doc.rasterLayers()[0];
     const s = layer.surface;
     const step = (color: number) => {
       s.beginEdit();
@@ -137,7 +138,7 @@ describe('History with tile-delta commands', () => {
 
   it('evicts the oldest entries beyond the memory budget', () => {
     const doc = new PaintDocument({ width: 600, height: 600 });
-    const layer = doc.layers[0];
+    const layer = doc.rasterLayers()[0];
     const h = new History({ maxBytes: TILE_SIZE * TILE_SIZE * 4 * 3 + 1000, maxEntries: 1000 });
     const hh = host(doc);
     for (let i = 0; i < 6; i++) {
@@ -152,7 +153,7 @@ describe('History with tile-delta commands', () => {
 
   it('survives 500 undo/redo cycles without growing', () => {
     const doc = new PaintDocument({ width: 512, height: 512 });
-    const layer = doc.layers[0];
+    const layer = doc.rasterLayers()[0];
     const h = new History();
     const hh = host(doc);
     for (let i = 0; i < 20; i++) {
