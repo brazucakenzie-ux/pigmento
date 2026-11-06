@@ -1,6 +1,6 @@
 import type { RGBA } from '../core/color';
 import type { Rect } from '../core/geometry';
-import type { PaintDocument, RasterLayer } from '../doc/Document';
+import type { PaintDocument, RasterLayer, SavedSelection } from '../doc/Document';
 import type { Selection } from '../doc/Selection';
 import type { Surface, TileDelta } from '../raster/Surface';
 import type { I18nKey } from '../../i18n';
@@ -16,6 +16,8 @@ export interface CommandHost {
   /** Layer tree or layer properties changed (recomposite, refresh the Layers panel). */
   layersChanged(): void;
   setSelection(sel: Selection | null): void;
+  /** The list of saved selections changed. */
+  savedSelectionsChanged(): void;
 }
 
 /** Pixel edit of one layer, stored as a tile delta (swap on undo/redo). */
@@ -57,6 +59,7 @@ export interface DocState {
   /** Surface of every raster layer (including inside groups) at capture time. */
   surfaces: Map<RasterLayer, Surface>;
   selection: Selection | null;
+  saved: SavedSelection[];
 }
 
 export function captureDocState(doc: PaintDocument): DocState {
@@ -67,6 +70,7 @@ export function captureDocState(doc: PaintDocument): DocState {
     paper: doc.paper ? { ...doc.paper } : null,
     surfaces: new Map(doc.rasterLayers().map((l) => [l, l.surface])),
     selection: doc.selection,
+    saved: doc.savedSelections,
   };
 }
 
@@ -77,6 +81,57 @@ export function applyDocState(doc: PaintDocument, s: DocState): void {
   doc.paper = s.paper ? { ...s.paper } : null;
   for (const [layer, surface] of s.surfaces) layer.surface = surface;
   doc.selection = s.selection;
+  doc.savedSelections = s.saved;
+}
+
+/**
+ * A selection change (marquee, wand, modify…). Undoable, but it doesn't make the document
+ * "unsaved": the active selection isn't part of the file.
+ */
+export class SelectionCommand implements Command {
+  readonly keepsSaved = true;
+  readonly bytes: number;
+
+  constructor(
+    readonly label: I18nKey,
+    private readonly host: CommandHost,
+    private readonly before: Selection | null,
+    private readonly after: Selection | null,
+  ) {
+    this.bytes = 64 + (before?.mask.length ?? 0) + (after?.mask.length ?? 0);
+  }
+
+  undo(): void {
+    this.host.setSelection(this.before);
+  }
+
+  redo(): void {
+    this.host.setSelection(this.after);
+  }
+}
+
+/** Saving or deleting a named selection (these are stored in the project). */
+export class SavedSelectionsCommand implements Command {
+  readonly bytes: number;
+
+  constructor(
+    readonly label: I18nKey,
+    private readonly host: CommandHost,
+    private readonly before: SavedSelection[],
+    private readonly after: SavedSelection[],
+  ) {
+    this.bytes = 64 + after.reduce((n, s) => n + s.selection.mask.length, 0);
+  }
+
+  undo(): void {
+    this.host.doc.savedSelections = this.before;
+    this.host.savedSelectionsChanged();
+  }
+
+  redo(): void {
+    this.host.doc.savedSelections = this.after;
+    this.host.savedSelectionsChanged();
+  }
 }
 
 /** Whole-document change (crop, resize, canvas size, rotate, properties): swaps states. */

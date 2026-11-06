@@ -83,6 +83,33 @@ export class Overlay {
     c.restore();
   }
 
+  /** Marching ants along many closed doc-space outlines (traced masks), stroked as one path. */
+  antsMany(outlines: readonly (readonly Point[])[]): void {
+    const c = this.ctx;
+    c.save();
+    c.beginPath();
+    for (const pts of outlines) {
+      if (pts.length < 2) continue;
+      for (let i = 0; i < pts.length; i++) {
+        const s = this.view.toScreen(pts[i].x, pts[i].y);
+        const x = Math.round(s.x) + 0.5;
+        const y = Math.round(s.y) + 0.5;
+        if (i === 0) c.moveTo(x, y);
+        else c.lineTo(x, y);
+      }
+      c.closePath();
+    }
+    c.lineWidth = 1;
+    c.setLineDash([]);
+    c.strokeStyle = this.theme.antsB;
+    c.stroke();
+    c.setLineDash([4, 4]);
+    c.lineDashOffset = -this.antsOffset;
+    c.strokeStyle = this.theme.antsA;
+    c.stroke();
+    c.restore();
+  }
+
   /** Thin accent outline along screen-space points. */
   outlineScreen(points: readonly Point[], closed = true, dashed = false): void {
     if (points.length < 2) return;

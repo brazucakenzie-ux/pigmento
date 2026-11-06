@@ -19,6 +19,7 @@ import {
   flipH,
   flipV,
   keyOutColor,
+  resample,
   rotate90,
   type ImageBuf,
   type TransformedImage,
@@ -67,6 +68,8 @@ export class FloatObject implements LiveObject {
     label: I18nKey,
     private docW: number,
     private docH: number,
+    /** Coverage of a soft or multi-part selection, as an image whose alpha is the mask (same size as src). */
+    private maskImg: ImageBuf | null = null,
   ) {
     this.src = src;
     this.outline = outline;
@@ -193,9 +196,24 @@ export class FloatObject implements LiveObject {
     return this.outline.map((poly) => matApplyPoints(m, poly));
   }
 
+  /** The travelling mask placed in document space (like `rendered(false)`), or null. */
+  renderedMask(): TransformedImage | null {
+    if (!this.maskImg) return null;
+    const m = this.matrix();
+    if (matIsIntegerTranslation(m)) return { x: Math.round(m[4]), y: Math.round(m[5]), ...this.maskImg };
+    return affineTransform(this.maskImg, m, true);
+  }
+
   selectionAfterCommit(): Selection | null {
     const outlines = this.transformedOutline();
     const m = this.matrix();
+    const placed = this.renderedMask();
+    if (placed) {
+      const mask = new Uint8Array(placed.w * placed.h);
+      for (let i = 0; i < mask.length; i++) mask[i] = placed.data[i * 4 + 3];
+      const sel = Selection.fromMask({ x: placed.x, y: placed.y, w: placed.w, h: placed.h }, mask, outlines, 'mask');
+      return sel ? sel.clipped(this.docW, this.docH) : null;
+    }
     if (matIsIntegerTranslation(m) && this.outline.length === 1 && this.outline[0].length === 4) {
       const b = rectRoundOut(matApplyRect(m, { x: 0, y: 0, w: this.src.w, h: this.src.h }));
       return Selection.fromRect(b, this.docW, this.docH);
@@ -247,6 +265,7 @@ export class FloatObject implements LiveObject {
 
   flip(axis: 'h' | 'v'): void {
     this.src = axis === 'h' ? flipH(this.src) : flipV(this.src);
+    if (this.maskImg) this.maskImg = axis === 'h' ? flipH(this.maskImg) : flipV(this.maskImg);
     const W = this.src.w;
     const H = this.src.h;
     this.outline = this.outline.map((poly) => poly.map((q) => (axis === 'h' ? { x: W - q.x, y: q.y } : { x: q.x, y: H - q.y })));
@@ -259,6 +278,7 @@ export class FloatObject implements LiveObject {
     const W = this.src.w;
     const H = this.src.h;
     this.src = rotate90(this.src, turns);
+    if (this.maskImg) this.maskImg = rotate90(this.maskImg, turns);
     this.outline = this.outline.map((poly) =>
       poly.map((p) => (turns === 1 ? { x: H - p.y, y: p.x } : turns === 2 ? { x: W - p.x, y: H - p.y } : turns === 3 ? { x: p.y, y: W - p.x } : p)),
     );
@@ -275,8 +295,9 @@ export class FloatObject implements LiveObject {
    * Replace the float with already-transformed document-space pixels (used by skew and free
    * rotation). `outline` is in document coordinates.
    */
-  resetTo(img: TransformedImage, outline: Point[][]): void {
+  resetTo(img: TransformedImage, outline: Point[][], mask: ImageBuf | null = null): void {
     this.src = { w: img.w, h: img.h, data: img.data };
+    if (this.maskImg) this.maskImg = mask;
     this.outline = outline.map((poly) => poly.map((p) => ({ x: p.x - img.x, y: p.y - img.y })));
     this.geom = { cx: img.x + img.w / 2, cy: img.y + img.h / 2, w: img.w, h: img.h, angle: 0 };
     this.forceCommit = true;
@@ -289,6 +310,7 @@ export class FloatObject implements LiveObject {
     const sx = img.w / this.src.w;
     const sy = img.h / this.src.h;
     this.outline = this.outline.map((poly) => poly.map((p) => ({ x: p.x * sx, y: p.y * sy })));
+    if (this.maskImg) this.maskImg = resample(this.maskImg, img.w, img.h, 'bilinear');
     this.src = img;
     this.geom = { cx: tl.x + img.w / 2, cy: tl.y + img.h / 2, w: img.w, h: img.h, angle: this.geom.angle };
     this.forceCommit = true;
@@ -297,7 +319,7 @@ export class FloatObject implements LiveObject {
 
   drawOverlay(ov: Overlay): void {
     const screen = (q: Point) => ov.toScreen(q);
-    for (const poly of this.transformedOutline()) ov.ants(poly, true);
+    ov.antsMany(this.transformedOutline());
     const zoom = ov.view.zoom;
     ov.outlineScreen(boxCorners(this.geom).map(screen), true, true);
     const top = screen(handlePosition(this.geom, 'n', zoom));

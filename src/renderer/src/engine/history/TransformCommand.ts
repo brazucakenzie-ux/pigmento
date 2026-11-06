@@ -1,6 +1,7 @@
 import type { PaintDocument } from '../doc/Document';
 import { Surface } from '../raster/Surface';
 import { flipH, flipV, rotate90, type ImageBuf } from '../raster/transform';
+import { transformSaved } from '../doc/savedSelections';
 import type { I18nKey } from '../../i18n';
 import type { CommandHost } from './commands';
 import type { Command } from './History';
@@ -23,6 +24,7 @@ export function applyLossless(doc: PaintDocument, op: LosslessOp, inverse: boole
     const out = applyToImage(op, { w: s.width, h: s.height, data: s.toRGBA() }, inverse);
     layer.surface = Surface.fromRGBA(out.w, out.h, out.data);
   }
+  doc.savedSelections = transformSaved(doc.savedSelections, doc.width, doc.height, (img) => applyToImage(op, img, inverse));
   doc.width = nw;
   doc.height = nh;
   doc.selection = null;

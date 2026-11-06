@@ -47,13 +47,24 @@ export function displayCombo(combo: string): string {
     .replace(' +  + ', ' + +');
 }
 
-let comboMap: Map<string, string> | null = null;
+let comboMap: Map<string, string[]> | null = null;
 
-function map(): Map<string, string> {
+/** Shortcut → action ids. Tools of one family share a letter (S: rectangle/ellipse select). */
+function map(): Map<string, string[]> {
   if (comboMap) return comboMap;
   comboMap = new Map();
-  for (const a of actions().values()) for (const s of a.shortcut ?? []) comboMap.set(s, a.id);
+  for (const a of actions().values()) {
+    for (const s of a.shortcut ?? []) comboMap.set(s, [...(comboMap.get(s) ?? []), a.id]);
+  }
   return comboMap;
+}
+
+/** The action a shortcut runs: pressing a shared tool letter again moves to the next tool. */
+export function actionForCombo(combo: string, currentTool: string): string | undefined {
+  const ids = map().get(combo);
+  if (!ids || ids.length === 0) return undefined;
+  const i = ids.indexOf(`tool.${currentTool}`);
+  return i < 0 ? ids[0] : ids[(i + 1) % ids.length];
 }
 
 export function shortcutFor(actionId: string): string | undefined {
@@ -109,7 +120,7 @@ export function handleGlobalKey(e: KeyboardEvent): void {
     return;
   }
 
-  const id = map().get(comboOf(e));
+  const id = actionForCombo(comboOf(e), state.tool);
   if (!id) return;
   // Brush-size keys repeat; everything else fires once per press.
   e.preventDefault();

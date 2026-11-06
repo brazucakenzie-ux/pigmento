@@ -2,12 +2,22 @@ import { BLACK, WHITE, colorEquals, type RGBA } from './core/color';
 import { Emitter } from './core/emitter';
 import { rectCorners, rectEquals, rectIntersect, rectUnion, type Point, type Rect } from './core/geometry';
 import { matApplyPoints, matAround, matRotate, matSkew, matTranslate, matChain } from './core/matrix';
-import { PaintDocument, RasterLayer, type Layer } from './doc/Document';
+import { PaintDocument, RasterLayer, newId, type Layer } from './doc/Document';
+import { transformSaved } from './doc/savedSelections';
+import { colorRangeMask } from './doc/selectionMath';
 import { LayerController, type LayersInfo } from './doc/LayerController';
 import { compositeLayers } from './raster/blend';
-import { Selection } from './doc/Selection';
+import { Selection, type SelectionMode, type SelectionModify } from './doc/Selection';
 import { History, type HistoryEntry } from './history/History';
-import { DocStateCommand, PixelCommand, captureDocState, type CommandHost, type DocState } from './history/commands';
+import {
+  DocStateCommand,
+  PixelCommand,
+  SavedSelectionsCommand,
+  SelectionCommand,
+  captureDocState,
+  type CommandHost,
+  type DocState,
+} from './history/commands';
 import { LosslessCommand, applyLossless } from './history/TransformCommand';
 import { CodecClient, type DecodedImage } from './io/CodecClient';
 import { MAX_DIMENSION, MAX_PIXELS } from './io/protocol';
@@ -55,6 +65,29 @@ export interface SelectionInfo {
   floating: boolean;
 }
 
+/** A saved selection as the UI lists it. */
+export interface SavedSelectionInfo {
+  id: string;
+  name: string;
+  w: number;
+  h: number;
+}
+
+/** Magic wand settings (the tool's options). */
+export interface WandOptions {
+  tolerance: number;
+  contiguous: boolean;
+  /** Look at the whole visible image instead of the active layer. */
+  sampleAll: boolean;
+}
+
+const MODIFY_LABEL: Record<SelectionModify, I18nKey> = {
+  feather: 'history.feather',
+  grow: 'history.grow',
+  shrink: 'history.shrink',
+  border: 'history.border',
+};
+
 export interface Notice {
   kind: 'info' | 'error';
   key: I18nKey;
@@ -80,6 +113,8 @@ export interface EngineEvents {
   canvasDrag: { w: number; h: number } | null;
   /** Layer tree, properties or the active layer changed. */
   layers: LayersInfo;
+  /** Named selections saved with the document. */
+  savedSelections: SavedSelectionInfo[];
 }
 
 export type Anchor = 'nw' | 'n' | 'ne' | 'w' | 'c' | 'e' | 'sw' | 's' | 'se';
@@ -253,7 +288,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     ov.begin();
     if (this.viewOptions.gridlines) ov.gridlines(this.viewOptions.gridSize);
     const sel = this.doc.selection;
-    if (sel && this._live?.kind !== 'float') for (const o of sel.outlines) ov.ants(o, true);
+    if (sel && this._live?.kind !== 'float') ov.antsMany(sel.outlines);
     this._live?.drawOverlay(ov);
     this.activeTool.drawOverlay?.(this, ov, this.hover);
     this.input?.drawOverlay(ov);
@@ -339,8 +374,17 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.emitView();
     this.emitSelectionInfo();
     this.emit('layers', this.layers.info());
+    this.savedSelectionsChanged();
     this.requestRender();
     this.notifyPixels();
+  }
+
+  savedSelectionsChanged(): void {
+    this.emit('savedSelections', this.savedSelectionsInfo());
+  }
+
+  savedSelectionsInfo(): SavedSelectionInfo[] {
+    return this.doc.savedSelections.map((s) => ({ id: s.id, name: s.name, w: s.selection.bounds.w, h: s.selection.bounds.h }));
   }
 
   layersChanged(): void {
@@ -351,10 +395,26 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.notifyPixels();
   }
 
+  /** Show a selection without recording it (previews, and history replaying it). */
   setSelection(sel: Selection | null): void {
     this.doc.selection = sel;
     this.emitSelectionInfo();
     this.requestRender();
+  }
+
+  /** Change the selection as one undoable step (it never makes the document unsaved). */
+  changeSelection(sel: Selection | null, label: I18nKey): void {
+    const before = this.doc.selection;
+    if (before === sel) return;
+    this.setSelection(sel);
+    this.history.push(new SelectionCommand(label, this, before, sel));
+  }
+
+  /** Combine `next` with the current selection (Replace/Add/Subtract/Intersect) as one step. */
+  applySelection(next: Selection | null, mode: SelectionMode, label: I18nKey): void {
+    const cur = this.doc.selection;
+    const result = cur ? cur.combine(next, mode) : mode === 'replace' || mode === 'add' ? next : null;
+    this.changeSelection(result, label);
   }
 
   // ---- colours --------------------------------------------------------------------------
@@ -891,7 +951,13 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     const img = this.selectionPixels(sel);
     const outline = sel.outlines.map((o) => o.map((p) => ({ x: p.x - b.x, y: p.y - b.y })));
     const hole: MaskView | null = copy ? null : sel.maskView();
-    const f = new FloatObject(img, { x: b.x, y: b.y }, outline, hole, 'history.move', this.doc.width, this.doc.height);
+    // Soft or multi-part selections carry their mask, so the moved selection keeps its shape.
+    let maskImg: ImageBuf | null = null;
+    if (sel.kind === 'mask') {
+      maskImg = { w: b.w, h: b.h, data: new Uint8ClampedArray(b.w * b.h * 4) };
+      for (let i = 0; i < sel.mask.length; i++) maskImg.data[i * 4 + 3] = sel.mask[i];
+    }
+    const f = new FloatObject(img, { x: b.x, y: b.y }, outline, hole, 'history.move', this.doc.width, this.doc.height, maskImg);
     if (this._transparentSelection) f.setKeyColor(this._secondary);
     this.setLive(f);
     return f;
@@ -908,19 +974,106 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   selectAll(): void {
     this.commitLive();
     if (this.activeTool.group !== 'selection') this.setTool('select');
-    this.setSelection(Selection.all(this.doc.width, this.doc.height));
+    this.changeSelection(Selection.all(this.doc.width, this.doc.height), 'history.selectAll');
   }
 
   deselect(): void {
     this.commitLive();
-    this.setSelection(null);
+    this.changeSelection(null, 'history.deselect');
   }
 
   invertSelection(): void {
     this.commitLive(true);
     const sel = this.doc.selection;
     if (this.activeTool.group !== 'selection') this.setTool('select');
-    this.setSelection(sel ? sel.inverted(this.doc.width, this.doc.height) : Selection.all(this.doc.width, this.doc.height));
+    this.changeSelection(
+      sel ? sel.inverted(this.doc.width, this.doc.height) : Selection.all(this.doc.width, this.doc.height),
+      'history.invertSelection',
+    );
+  }
+
+  /** Feather, grow, shrink or border the selection. Returns false if nothing would stay selected. */
+  modifySelection(op: SelectionModify, amount: number, edges = false): boolean {
+    this.commitLive(true);
+    const sel = this.doc.selection;
+    if (!sel) return false;
+    const next = sel.modified(op, amount, this.doc.width, this.doc.height, edges);
+    if (!next) {
+      this.notify('info', 'notice.selectionEmpty');
+      return false;
+    }
+    this.changeSelection(next, MODIFY_LABEL[op]);
+    return true;
+  }
+
+  /** Pixels the magic wand and colour range look at: the active layer, or everything visible. */
+  private samplePixels(sampleAll: boolean): Uint8ClampedArray {
+    if (sampleAll) return this.flatten(false).data;
+    const layer = this.doc.activeLayer;
+    return layer.kind === 'raster' ? layer.surface.toRGBA() : this.renderLayerAlone(layer).data;
+  }
+
+  private wandBusy = false;
+
+  /** Select the area of similar colour around (x, y), combined by `mode`. */
+  async magicWand(x: number, y: number, o: WandOptions, mode: SelectionMode): Promise<void> {
+    const px = Math.floor(x);
+    const py = Math.floor(y);
+    const { width: w, height: h } = this.doc;
+    if (this.wandBusy || px < 0 || py < 0 || px >= w || py >= h) return;
+    this.commitLive(true);
+    const doc = this.doc;
+    const data = this.samplePixels(o.sampleAll);
+    this.wandBusy = true;
+    try {
+      const { mask, bounds } = await this.codecs.fill(data, w, h, px, py, o.tolerance, o.contiguous, null);
+      // The document may have changed while the worker ran.
+      if (doc !== this.doc || w !== doc.width || h !== doc.height) return;
+      const sel = bounds ? Selection.fromPlaced({ bounds: { x: 0, y: 0, w, h }, mask }) : null;
+      this.applySelection(sel, mode, 'history.magicWand');
+    } finally {
+      this.wandBusy = false;
+    }
+  }
+
+  /**
+   * Select → Colour range: returns a function that computes the selection of colours near a
+   * target, reading the pixels once (so a slider can preview cheaply).
+   */
+  colorRange(sampleAll: boolean): (color: RGBA, tolerance: number) => Selection | null {
+    const data = this.samplePixels(sampleAll);
+    const { width: w, height: h } = this.doc;
+    return (color, tolerance) => Selection.fromPlaced(colorRangeMask(data, w, h, color, tolerance));
+  }
+
+  /** Keep the current selection with the document under `name`. */
+  saveSelection(name: string): boolean {
+    this.commitLive(true);
+    const sel = this.doc.selection;
+    if (!sel) return false;
+    const before = this.doc.savedSelections;
+    const after = [...before, { id: newId('selection'), name, selection: sel }];
+    this.doc.savedSelections = after;
+    this.history.push(new SavedSelectionsCommand('history.saveSelection', this, before, after));
+    this.savedSelectionsChanged();
+    return true;
+  }
+
+  loadSelection(id: string, mode: SelectionMode): void {
+    const saved = this.doc.savedSelections.find((s) => s.id === id);
+    if (!saved) return;
+    this.commitLive(true);
+    if (this.activeTool.group !== 'selection') this.setTool('select');
+    this.applySelection(saved.selection.clipped(this.doc.width, this.doc.height), mode, 'history.loadSelection');
+  }
+
+  deleteSavedSelection(id: string): void {
+    const before = this.doc.savedSelections;
+    const after = before.filter((s) => s.id !== id);
+    if (after.length === before.length) return;
+    this.doc.savedSelections = after;
+    this.history.push(new SavedSelectionsCommand('history.deleteSelection', this, before, after));
+    this.savedSelectionsChanged();
   }
 
   /** Copy the selection (or floating pixels). Returns null when nothing is selected. */
@@ -1064,7 +1217,9 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       const around = matAround(m, c);
       const warped = affineTransform(img, matChain(matTranslate(img.x, img.y), around), true);
       const outline = f.transformedOutline().map((poly) => matApplyPoints(around, poly));
-      f.resetTo(warped, outline);
+      const mask = f.renderedMask();
+      const warpedMask = mask ? affineTransform(mask, matChain(matTranslate(mask.x, mask.y), around), true) : null;
+      f.resetTo(warped, outline, warpedMask);
       this.refreshFloat(f, before);
       return;
     }
@@ -1087,6 +1242,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     rasters.forEach((layer, i) => {
       layer.surface = Surface.fromRGBA(nw, nh, results[i].data);
     });
+    this.doc.savedSelections = transformSaved(this.doc.savedSelections, w, h, (img) => affineTransform(img, centered, true));
     this.doc.width = nw;
     this.doc.height = nh;
     this.doc.selection = null;
@@ -1113,6 +1269,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       const out = resample({ w: s.width, h: s.height, data: s.toRGBA() }, w, h, method);
       layer.surface = Surface.fromRGBA(w, h, out.data);
     }
+    this.doc.savedSelections = transformSaved(this.doc.savedSelections, this.doc.width, this.doc.height, (img) => resample(img, w, h, method));
     this.doc.width = w;
     this.doc.height = h;
     this.doc.selection = null;
@@ -1145,6 +1302,9 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       const out = placeImage({ w: s.width, h: s.height, data: s.toRGBA() }, r.w, r.h, -r.x, -r.y);
       layer.surface = Surface.fromRGBA(r.w, r.h, out.data);
     }
+    this.doc.savedSelections = transformSaved(this.doc.savedSelections, this.doc.width, this.doc.height, (img) =>
+      placeImage(img, r.w, r.h, -r.x, -r.y),
+    );
     this.doc.width = r.w;
     this.doc.height = r.h;
     this.doc.selection = null;
@@ -1214,6 +1374,9 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       }
       layer.surface = Surface.fromRGBA(b.w, b.h, data);
     }
+    this.doc.savedSelections = transformSaved(this.doc.savedSelections, this.doc.width, this.doc.height, (img) =>
+      placeImage(img, b.w, b.h, -b.x, -b.y),
+    );
     this.doc.width = b.w;
     this.doc.height = b.h;
     this.doc.selection = null;

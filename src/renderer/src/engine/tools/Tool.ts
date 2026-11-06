@@ -1,7 +1,7 @@
 import type { RGBA } from '../core/color';
 import type { Point, Rect } from '../core/geometry';
 import type { PaintDocument, Layer } from '../doc/Document';
-import type { Selection } from '../doc/Selection';
+import type { Selection, SelectionMode } from '../doc/Selection';
 import type { History } from '../history/History';
 import type { LiveObject } from '../live/LiveObject';
 import type { Overlay } from '../render/Overlay';
@@ -96,7 +96,14 @@ export interface ToolContext {
   pushPixels(label: I18nKey, layer: Layer, delta: TileDelta | null, selBefore?: Selection | null, selAfter?: Selection | null): void;
   /** True if the active layer can be painted (visible and unlocked); notifies otherwise. */
   canPaint(): boolean;
+  /** Show a selection without recording it (e.g. while a new one is being drawn). */
   setSelection(sel: Selection | null): void;
+  /** Change the selection as an undoable step. */
+  changeSelection(sel: Selection | null, label: I18nKey): void;
+  /** Combine a new selection with the current one by `mode`, as an undoable step. */
+  applySelection(next: Selection | null, mode: SelectionMode, label: I18nKey): void;
+  /** Select similar colour around (x, y). */
+  magicWand(x: number, y: number, o: { tolerance: number; contiguous: boolean; sampleAll: boolean }, mode: SelectionMode): Promise<void>;
   /** Re-report selection size/position (after moving a floating selection). */
   emitSelectionInfo(): void;
   /** Lift the current selection into a floating object (copy = leave the original). */

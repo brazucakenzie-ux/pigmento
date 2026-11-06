@@ -7,8 +7,9 @@ export default registerTool(
     kind: 'lasso',
     labelKey: 'tool.lasso',
     hintKey: 'tool.lasso.hint',
+    historyKey: 'history.selectLasso',
     icon: 'lasso',
     shortcut: 'Q',
-    order: 2,
+    order: 3,
   }),
 );

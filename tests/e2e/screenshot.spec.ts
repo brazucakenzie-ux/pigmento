@@ -55,6 +55,48 @@ test('capture UI states', async () => {
     await shot('floating-selection');
     await page.keyboard.press('Escape');
 
+    // Selection modes: an ellipse added to a rectangle, then a hole subtracted.
+    await drag(page, [
+      [600, 450],
+      [900, 650],
+    ]);
+    await page.keyboard.press('s');
+    await page.keyboard.down('Shift');
+    await drag(page, [
+      [820, 400],
+      [1050, 600],
+    ]);
+    await page.keyboard.up('Shift');
+    await page.keyboard.down('Alt');
+    await drag(page, [
+      [650, 500],
+      [720, 560],
+    ]);
+    await page.keyboard.up('Alt');
+    await shot('selection-modes');
+    await page.locator('.rb-split', { has: page.getByRole('button', { name: 'Select', exact: true }) }).locator('[aria-haspopup="menu"]').click();
+    await page.getByRole('menuitem', { name: 'Modify selection' }).hover();
+    await page.waitForTimeout(250);
+    await shot('select-menu');
+    await page.getByRole('menuitem', { name: 'Feather…' }).click();
+    await page.waitForTimeout(200);
+    await shot('feather-dialog');
+    await page.keyboard.press('Escape');
+    await page.locator('.rb-split', { has: page.getByRole('button', { name: 'Select', exact: true }) }).locator('[aria-haspopup="menu"]').click();
+    await page.getByRole('menuitem', { name: 'Colour range…' }).click();
+    await page.waitForTimeout(300);
+    await shot('color-range-dialog');
+    await page.keyboard.press('Escape');
+    await page.locator('.rb-split', { has: page.getByRole('button', { name: 'Select', exact: true }) }).locator('[aria-haspopup="menu"]').click();
+    await page.getByRole('menuitem', { name: 'Save selection…' }).click();
+    await page.keyboard.press('Enter');
+    await page.locator('.rb-split', { has: page.getByRole('button', { name: 'Select', exact: true }) }).locator('[aria-haspopup="menu"]').click();
+    await page.getByRole('menuitem', { name: 'Load selection…' }).click();
+    await page.waitForTimeout(200);
+    await shot('load-selection-dialog');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+d');
+
     await page.getByRole('button', { name: 'File' }).click();
     await page.waitForTimeout(250);
     await shot('file-menu');

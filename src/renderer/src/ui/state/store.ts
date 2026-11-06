@@ -4,7 +4,8 @@ import type { AutosaveEntry, RecentFile, SystemTheme } from '@shared/ipc';
 import { defaultSettings, type Settings } from '@shared/settings';
 import type { RGBA } from '@engine/core/color';
 import type { Point } from '@engine/core/geometry';
-import type { DocInfo, HistoryInfo, Notice, SelectionInfo } from '@engine/Engine';
+import type { DocInfo, HistoryInfo, Notice, SavedSelectionInfo, SelectionInfo } from '@engine/Engine';
+import type { SelectionModify } from '@engine/doc/Selection';
 import type { LayersInfo } from '@engine/doc/LayerController';
 import type { LiveKind } from '@engine/live/LiveObject';
 import type { ViewState } from '@engine/render/View';
@@ -20,9 +21,13 @@ export type DialogState =
   | { kind: 'rotate' }
   | { kind: 'properties' }
   | { kind: 'editColors'; target: 'primary' | 'secondary' }
-  | { kind: 'quality'; format: ImageFormat; transparent: boolean; layers: boolean; resolve: (q: number | null) => void }
+  | { kind: 'quality'; format: ImageFormat; transparent: boolean; layers: boolean; selections: boolean; resolve: (q: number | null) => void }
   | { kind: 'recover'; items: AutosaveEntry[] }
   | { kind: 'export' }
+  | { kind: 'modifySelection'; op: SelectionModify }
+  | { kind: 'colorRange' }
+  | { kind: 'saveSelection' }
+  | { kind: 'loadSelection' }
   | { kind: 'pasteLarger'; w: number; h: number; resolve: (r: 'enlarge' | 'keep' | null) => void }
   | { kind: 'shortcuts' }
   | { kind: 'about' };
@@ -63,6 +68,7 @@ export interface UiState {
   transparentSelection: boolean;
   canvasDrag: { w: number; h: number } | null;
   layers: LayersInfo;
+  savedSelections: SavedSelectionInfo[];
 }
 
 export const useUi = create<UiState>(() => ({
@@ -90,6 +96,7 @@ export const useUi = create<UiState>(() => ({
   transparentSelection: false,
   canvasDrag: null,
   layers: { tree: [], activeId: '', count: 0 },
+  savedSelections: [],
 }));
 
 let pendingPatch: Partial<Settings> = {};

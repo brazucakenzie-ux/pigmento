@@ -15,6 +15,8 @@ export interface Command {
    * becomes one step). Return true if merged; `next` is then discarded.
    */
   mergeWith?(next: Command): boolean;
+  /** Doesn't change what a save would write (e.g. the active selection), so it never makes the document unsaved. */
+  readonly keepsSaved?: boolean;
 }
 
 export interface HistoryEntry {
@@ -65,7 +67,11 @@ export class History extends Emitter<HistoryEvents> {
   }
 
   get isDirty(): boolean {
-    return this.savedIndex !== this._index;
+    if (this.savedIndex === null) return true;
+    const lo = Math.min(this.savedIndex, this._index);
+    const hi = Math.max(this.savedIndex, this._index);
+    for (let i = lo; i < hi; i++) if (!this.items[i].keepsSaved) return true;
+    return false;
   }
 
   get bytes(): number {

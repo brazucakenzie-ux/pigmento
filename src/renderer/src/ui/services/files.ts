@@ -79,6 +79,11 @@ export const pngCodec: PngCodec = {
 };
 
 /** More than one layer (or a group): a flat image format can't hold it. */
+/** Saved selections live only in projects. */
+function hasSavedSelections(): boolean {
+  return engine.doc.savedSelections.length > 0;
+}
+
 export function isLayered(): boolean {
   const l = engine.doc.layers;
   return l.length > 1 || l[0].kind !== 'raster';
@@ -147,10 +152,10 @@ export async function open(): Promise<void> {
  * Ask for JPEG/WebP quality and warn about anything the format loses (transparency, layers).
  * Resolves the quality, or null when cancelled.
  */
-async function askQuality(format: ImageFormat, transparent: boolean, layers: boolean): Promise<number | null> {
-  const needsDialog = FORMATS[format].lossy || (transparent && !FORMATS[format].alpha) || layers;
+async function askQuality(format: ImageFormat, transparent: boolean, layers: boolean, selections: boolean): Promise<number | null> {
+  const needsDialog = FORMATS[format].lossy || (transparent && !FORMATS[format].alpha) || layers || selections;
   if (!needsDialog) return 100;
-  return new Promise((resolve) => openDialog({ kind: 'quality', format, transparent, layers, resolve }));
+  return new Promise((resolve) => openDialog({ kind: 'quality', format, transparent, layers, selections, resolve }));
 }
 
 async function encodeFlattened(format: ImageFormat, quality: number): Promise<Uint8Array> {
@@ -169,15 +174,16 @@ async function writeTo(path: string, format: FileFormat, fromSaveAs: boolean): P
       bytes = await saveProject(engine.doc, pngCodec, await makeThumbnail());
     } else {
       const layers = isLayered();
+      const selections = hasSavedSelections();
       const transparent = hasTransparency(engine.flatten(false).data);
       const settings = useUi.getState().settings.export;
       let quality = format === 'jpeg' ? settings.jpegQuality : settings.webpQuality;
-      if (fromSaveAs || layers) {
-        const q = await askQuality(format, transparent, layers);
+      if (fromSaveAs || layers || selections) {
+        const q = await askQuality(format, transparent, layers, selections);
         if (q === null) return false;
         quality = q;
       }
-      complete = !layers;
+      complete = !layers && !selections;
       bytes = await encodeFlattened(format, quality);
     }
     await window.pigmento.files.write(path, bytes);
@@ -201,8 +207,8 @@ export async function save(): Promise<boolean> {
 
 export async function saveAs(preferred?: FileFormat): Promise<boolean> {
   const f = useUi.getState().file;
-  // Layered work defaults to the project format so nothing is lost by accident.
-  const format = preferred ?? (isLayered() ? 'pigm' : (f.format ?? 'png'));
+  // Layered work (or saved selections) defaults to the project format so nothing is lost by accident.
+  const format = preferred ?? (isLayered() || hasSavedSelections() ? 'pigm' : (f.format ?? 'png'));
   const res = await window.pigmento.files.showSaveDialog({
     defaultName: `${baseName()}.${FILE_FORMATS[format].extensions[0]}`,
     format,

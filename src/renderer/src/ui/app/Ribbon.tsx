@@ -145,6 +145,20 @@ function HomeTab() {
               <ActionMenuItem id="deselect" close={close} />
               <ActionMenuItem id="delete" close={close} />
               <MenuSeparator />
+              <ActionMenuItem id="colorRange" close={close} />
+              <SubMenu label={t('menu.modifySelection')} icon="feather">
+                {(closeAll) => (
+                  <>
+                    <ActionMenuItem id="feather" close={closeAll} />
+                    <ActionMenuItem id="grow" close={closeAll} />
+                    <ActionMenuItem id="shrink" close={closeAll} />
+                    <ActionMenuItem id="border" close={closeAll} />
+                  </>
+                )}
+              </SubMenu>
+              <ActionMenuItem id="saveSelection" close={close} />
+              <ActionMenuItem id="loadSelection" close={close} />
+              <MenuSeparator />
               <ActionMenuItem id="transparentSelection" close={close} />
             </>
           )}

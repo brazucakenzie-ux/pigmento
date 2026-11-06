@@ -132,6 +132,7 @@ export function QualityDialog({ d }: { d: Extract<DialogState, { kind: 'quality'
       ) : null}
       {d.transparent && !FORMATS[d.format].alpha ? <p className="dialog-note">{t('dialog.quality.flatten', { format: name })}</p> : null}
       {d.layers ? <p className="dialog-note warn">{t('dialog.quality.layers', { format: name })}</p> : null}
+      {d.selections ? <p className="dialog-note warn">{t('dialog.quality.selections', { format: name })}</p> : null}
     </Dialog>
   );
 }

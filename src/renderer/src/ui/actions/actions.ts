@@ -23,6 +23,12 @@ export interface Action {
 
 const hasSelection = (s: UiState) => s.selection.bounds !== null;
 
+/** Open a selection dialog with floating pixels put down first (their selection stays). */
+function selectionDialog(d: Parameters<typeof openDialog>[0]): void {
+  engine.commitLive(true);
+  openDialog(d);
+}
+
 function safe(fn: () => void): () => void {
   return () => {
     try {
@@ -93,6 +99,13 @@ const base: Action[] = [
   { id: 'selectAll', labelKey: 'action.selectAll', icon: 'select-all', group: 'edit', shortcut: ['Ctrl+A'], run: () => engine.selectAll() },
   { id: 'deselect', labelKey: 'action.selectNone', icon: 'deselect', group: 'edit', shortcut: ['Ctrl+D'], run: () => engine.deselect(), enabled: hasSelection },
   { id: 'invertSelection', labelKey: 'action.invertSelection', icon: 'invert-selection', group: 'edit', shortcut: ['Ctrl+Shift+A'], run: () => engine.invertSelection() },
+  { id: 'colorRange', labelKey: 'action.colorRange', icon: 'picker', group: 'edit', run: () => selectionDialog({ kind: 'colorRange' }) },
+  { id: 'feather', labelKey: 'action.feather', icon: 'feather', group: 'edit', shortcut: ['Shift+F6'], run: () => selectionDialog({ kind: 'modifySelection', op: 'feather' }), enabled: hasSelection },
+  { id: 'grow', labelKey: 'action.grow', icon: 'fit-canvas', group: 'edit', run: () => selectionDialog({ kind: 'modifySelection', op: 'grow' }), enabled: hasSelection },
+  { id: 'shrink', labelKey: 'action.shrink', icon: 'trim', group: 'edit', run: () => selectionDialog({ kind: 'modifySelection', op: 'shrink' }), enabled: hasSelection },
+  { id: 'border', labelKey: 'action.border', icon: 'select', group: 'edit', run: () => selectionDialog({ kind: 'modifySelection', op: 'border' }), enabled: hasSelection },
+  { id: 'saveSelection', labelKey: 'action.saveSelection', icon: 'save-selection', group: 'edit', run: () => selectionDialog({ kind: 'saveSelection' }), enabled: hasSelection },
+  { id: 'loadSelection', labelKey: 'action.loadSelection', icon: 'load-selection', group: 'edit', run: () => selectionDialog({ kind: 'loadSelection' }), enabled: (s) => s.savedSelections.length > 0 },
   { id: 'delete', labelKey: 'action.delete', icon: 'delete', group: 'edit', shortcut: ['Delete'], run: () => engine.deleteSelection(), enabled: hasSelection },
   {
     id: 'transparentSelection',

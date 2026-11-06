@@ -6,6 +6,7 @@ import { AboutDialog, EditColorsDialog, PasteLargerDialog, QualityDialog, Recove
 import { clearOwnAutosave, offerRecovery, startAutosave } from '../services/autosave';
 import { CanvasSizeDialog, NewImageDialog, PropertiesDialog, ResizeDialog, RotateDialog } from '../dialogs/ImageDialogs';
 import { ExportDialog } from '../dialogs/ExportDialog';
+import { ColorRangeDialog, LoadSelectionDialog, ModifySelectionDialog, SaveSelectionDialog } from '../dialogs/SelectionDialogs';
 import { confirmDiscard, openPath } from '../services/files';
 import { bindEngine, engine } from '../state/engine';
 import { updateSettings, useUi } from '../state/store';
@@ -115,6 +116,14 @@ function DialogHost() {
       return <RecoverDialog items={d.items} />;
     case 'export':
       return <ExportDialog />;
+    case 'modifySelection':
+      return <ModifySelectionDialog op={d.op} />;
+    case 'colorRange':
+      return <ColorRangeDialog />;
+    case 'saveSelection':
+      return <SaveSelectionDialog />;
+    case 'loadSelection':
+      return <LoadSelectionDialog />;
   }
 }
 

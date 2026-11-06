@@ -120,6 +120,13 @@ export interface LayerSlot {
  * The image being edited. `paper` is the canvas colour shown under all layers (null means
  * transparent). Layers form a tree (groups hold children); every list is bottom-to-top.
  */
+/** A named selection kept with the document (Select → Save selection). Immutable. */
+export interface SavedSelection {
+  readonly id: string;
+  readonly name: string;
+  readonly selection: Selection;
+}
+
 export class PaintDocument {
   width: number;
   height: number;
@@ -128,6 +135,8 @@ export class PaintDocument {
   layers: Layer[];
   activeId: string;
   selection: Selection | null = null;
+  /** Named selections saved in the project file. */
+  savedSelections: SavedSelection[] = [];
 
   constructor(init: DocumentInit, layers?: Layer[]) {
     this.width = init.width;

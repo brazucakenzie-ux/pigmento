@@ -7,6 +7,7 @@ export default registerTool(
     kind: 'rect',
     labelKey: 'tool.select',
     hintKey: 'tool.select.hint',
+    historyKey: 'history.selectRect',
     icon: 'select',
     shortcut: 'S',
     order: 1,

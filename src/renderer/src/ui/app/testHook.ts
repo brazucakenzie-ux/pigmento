@@ -24,6 +24,16 @@ export function installTestHook(): void {
     },
     liveKind: () => engine.live?.kind ?? null,
     selection: () => useUi.getState().selection.bounds,
+    /** Coverage (0–255) of the active selection at a pixel, and its "mostly selected" pixel count. */
+    selectionAt: (x: number, y: number) => {
+      const s = engine.doc.selection;
+      if (!s) return 0;
+      const lx = x - s.bounds.x;
+      const ly = y - s.bounds.y;
+      return lx < 0 || ly < 0 || lx >= s.bounds.w || ly >= s.bounds.h ? 0 : s.mask[ly * s.bounds.w + lx];
+    },
+    selectionArea: () => engine.doc.selection?.area() ?? 0,
+    savedSelections: () => engine.savedSelectionsInfo(),
     openPath: (p: string) => openPath(p, true),
     filePath: () => useUi.getState().file.path,
     autosaveNow: () => autosaveNow(),

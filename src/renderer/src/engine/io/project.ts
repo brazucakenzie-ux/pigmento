@@ -8,7 +8,9 @@ import {
   walkLayers,
   type BlendMode,
   type Layer,
+  type SavedSelection,
 } from '../doc/Document';
+import { Selection } from '../doc/Selection';
 import { Surface } from '../raster/Surface';
 import { MAX_DIMENSION, MAX_PIXELS } from './protocol';
 
@@ -21,6 +23,7 @@ export const PROJECT_VERSION = 1;
 
 const MAX_LAYERS = 2000;
 const MAX_DEPTH = 64;
+const MAX_SAVED_SELECTIONS = 200;
 const MAX_ENTRY_BYTES = 1024 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024;
 
@@ -49,6 +52,19 @@ const RasterJson = z.object({
       h: int.min(1).max(MAX_DIMENSION),
     })
     .nullable(),
+});
+
+/** A saved selection: its coverage as a greyscale PNG (white = selected) placed at x, y. */
+const SavedSelectionJson = z.object({
+  id: z.string().min(1).max(100),
+  name: z.string().max(200),
+  mask: z.object({
+    file: z.string().regex(/^selections\/\d{1,6}\.png$/),
+    x: int.min(0).max(MAX_DIMENSION),
+    y: int.min(0).max(MAX_DIMENSION),
+    w: int.min(1).max(MAX_DIMENSION),
+    h: int.min(1).max(MAX_DIMENSION),
+  }),
 });
 
 type LayerJson = z.infer<typeof RasterJson> | GroupJson;
@@ -85,6 +101,8 @@ export const DocumentJsonSchema = z.object({
   paper: Rgba.nullable(),
   activeId: z.string(),
   layers: z.array(LayerJsonSchema).min(1).max(MAX_LAYERS),
+  /** Optional: files without saved selections leave it out. */
+  selections: z.array(SavedSelectionJson).max(MAX_SAVED_SELECTIONS).optional(),
 });
 
 export type DocumentJson = z.infer<typeof DocumentJsonSchema>;
@@ -123,6 +141,21 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
   };
   const layers: LayerJson[] = [];
   for (const l of doc.layers) layers.push(await toJson(l));
+  const selections: NonNullable<DocumentJson['selections']> = [];
+  for (const [i, s] of doc.savedSelections.entries()) {
+    const b = s.selection.bounds;
+    const grey = new Uint8ClampedArray(b.w * b.h * 4);
+    for (let p = 0; p < s.selection.mask.length; p++) {
+      const v = s.selection.mask[p];
+      grey[p * 4] = v;
+      grey[p * 4 + 1] = v;
+      grey[p * 4 + 2] = v;
+      grey[p * 4 + 3] = 255;
+    }
+    const file = `selections/${String(i + 1).padStart(4, '0')}.png`;
+    files[file] = [await codec.encode(grey, b.w, b.h), { level: 0 }];
+    selections.push({ id: s.id, name: s.name, mask: { file, x: b.x, y: b.y, w: b.w, h: b.h } });
+  }
   const json: DocumentJson = {
     format: PROJECT_MAGIC,
     version: PROJECT_VERSION,
@@ -132,6 +165,7 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
     paper: doc.paper ? { ...doc.paper } : null,
     activeId: doc.activeId,
     layers,
+    ...(selections.length ? { selections } : {}),
   };
   files['document.json'] = [strToU8(JSON.stringify(json, null, 1)), { level: 6 }];
   if (thumbnail) files['thumbnail.png'] = [thumbnail, { level: 0 }];
@@ -151,10 +185,15 @@ function unzipSafely(bytes: Uint8Array): Record<string, Uint8Array> {
       filter: (f) => {
         entries++;
         total += f.originalSize;
-        if (entries > MAX_LAYERS + 16 || f.originalSize > MAX_ENTRY_BYTES || total > MAX_TOTAL_BYTES) {
+        if (entries > MAX_LAYERS + MAX_SAVED_SELECTIONS + 16 || f.originalSize > MAX_ENTRY_BYTES || total > MAX_TOTAL_BYTES) {
           throw new ProjectError('error.projectInvalid', 'Archive is too large');
         }
-        return f.name === 'document.json' || /^layers\/\d{1,6}\.png$/.test(f.name) || f.name === 'thumbnail.png';
+        return (
+          f.name === 'document.json' ||
+          /^layers\/\d{1,6}\.png$/.test(f.name) ||
+          /^selections\/\d{1,6}\.png$/.test(f.name) ||
+          f.name === 'thumbnail.png'
+        );
       },
     });
   } catch (err) {
@@ -218,6 +257,22 @@ export async function loadProject(bytes: Uint8Array, codec: PngCodec): Promise<P
   for (const l of json.layers) layers.push(await build(l, 0));
   const doc = new PaintDocument({ width: json.width, height: json.height, dpi: json.dpi, paper: json.paper }, layers);
   if ([...walkLayers(layers)].some((l) => l.id === json.activeId)) doc.activeId = json.activeId;
+  const saved: SavedSelection[] = [];
+  const savedIds = new Set<string>();
+  for (const s of json.selections ?? []) {
+    const png = files[s.mask.file];
+    if (!png) throw new ProjectError('error.projectInvalid', `${s.mask.file} missing`);
+    const img = await codec.decode(png);
+    if (img.w !== s.mask.w || img.h !== s.mask.h) throw new ProjectError('error.projectInvalid', `${s.mask.file} has the wrong size`);
+    const mask = new Uint8Array(img.w * img.h);
+    for (let p = 0; p < mask.length; p++) mask[p] = img.data[p * 4];
+    const placed = Selection.fromPlaced({ bounds: { x: s.mask.x, y: s.mask.y, w: img.w, h: img.h }, mask });
+    const sel = placed?.clipped(json.width, json.height) ?? null;
+    if (!sel || savedIds.has(s.id)) continue;
+    savedIds.add(s.id);
+    saved.push({ id: s.id, name: s.name, selection: sel });
+  }
+  doc.savedSelections = saved;
   return doc;
 }
 

@@ -41,6 +41,7 @@ export function bindEngine(settings: Settings): void {
     toolOptions: { ...engine.allToolOptions() },
     colors: { primary: engine.primary, secondary: engine.secondary },
     layers: engine.layers.info(),
+    savedSelections: engine.savedSelectionsInfo(),
   });
 
   engine.on('doc', (doc) => useUi.setState({ doc }));
@@ -54,6 +55,7 @@ export function bindEngine(settings: Settings): void {
   engine.on('canvasDrag', (canvasDrag) => useUi.setState({ canvasDrag }));
   engine.on('notice', (n) => showToast(n));
   engine.on('layers', (layers) => useUi.setState({ layers }));
+  engine.on('savedSelections', (savedSelections) => useUi.setState({ savedSelections }));
 
   engine.on('tool', ({ id }) => {
     useUi.setState({ tool: id });

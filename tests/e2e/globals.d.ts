@@ -9,6 +9,9 @@ export interface PigmentoTestHook {
   docToScreen(x: number, y: number): { x: number; y: number };
   liveKind(): string | null;
   selection(): { x: number; y: number; w: number; h: number } | null;
+  selectionAt(x: number, y: number): number;
+  selectionArea(): number;
+  savedSelections(): { id: string; name: string; w: number; h: number }[];
   openPath(path: string): Promise<boolean>;
   filePath(): string | null;
   autosaveNow(): Promise<boolean>;

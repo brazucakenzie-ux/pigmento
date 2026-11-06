@@ -6,6 +6,7 @@ A `.pigm` file is a ZIP archive. It holds everything needed to reopen an image w
 |---|---|
 | `document.json` | Document description (below), UTF-8 JSON |
 | `layers/0001.png` … | One PNG per raster layer, cropped to the layer's non-transparent pixels |
+| `selections/0001.png` … | One greyscale PNG per saved selection (white = selected, grey = partly selected) |
 | `thumbnail.png` | Optional preview of the flattened image (up to 256 px) |
 
 Any other entries are ignored.
@@ -21,7 +22,8 @@ Any other entries are ignored.
   "dpi": 96,
   "paper": { "r": 255, "g": 255, "b": 255, "a": 255 },
   "activeId": "layer-3-lx1",
-  "layers": [ /* bottom layer first */ ]
+  "layers": [ /* bottom layer first */ ],
+  "selections": [ /* optional, saved selections in the order they were saved */ ]
 }
 ```
 
@@ -58,10 +60,16 @@ Any other entries are ignored.
 }
 ```
 
+**Saved selection** (Select → Save selection)
+```json
+{ "id": "selection-4-lx1", "name": "Window", "mask": { "file": "selections/0001.png", "x": 90, "y": 90, "w": 220, "h": 220 } }
+```
+The PNG's red channel is the coverage (0–255) and is placed at (`x`, `y`). The active selection itself isn't saved.
+
 `blend` is one of `normal, multiply, screen, overlay, darken, lighten, color-dodge, color-burn, difference, soft-light, hard-light, hue, saturation, color, luminosity`. Groups composite their children in isolation, then blend the result as one layer.
 
 ## Limits and safety
-- Width and height are at most 30,000 px each and 250 megapixels in total. Files may hold at most 2,000 layers, nested at most 64 deep.
+- Width and height are at most 30,000 px each and 250 megapixels in total. Files may hold at most 2,000 layers, nested at most 64 deep, and 200 saved selections.
 - Each archive entry is capped at 1 GB uncompressed and the whole archive at 2 GB. PNG sizes must match `image.w`/`image.h`.
 - Duplicate layer ids are replaced with fresh ones. A file with a newer `version` is refused with a clear message instead of being half-read.
 

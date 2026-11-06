@@ -7,6 +7,24 @@ import {
   type Rect,
 } from '../core/geometry';
 import type { MaskView } from '../raster/pixels';
+import {
+  borderMask,
+  combineMasks,
+  ellipseMask,
+  ellipseOutline,
+  featherMask,
+  growMask,
+  shrinkMask,
+  tighten,
+  selectionOutlines,
+  type PlacedMask,
+  type SelectionMode,
+} from './selectionMath';
+
+export type { SelectionMode } from './selectionMath';
+
+/** Ways to change an existing selection's edge (Select → Modify). */
+export type SelectionModify = 'feather' | 'grow' | 'shrink' | 'border';
 
 export type SelectionKind = 'rect' | 'polygon' | 'mask';
 
@@ -52,6 +70,22 @@ export class Selection {
     if (!b) return null;
     const mask = new Uint8Array(b.w * b.h).fill(255);
     return new Selection(b, mask, [rectCorners(b)], 'rect');
+  }
+
+  /** Ellipse inscribed in r, anti-aliased. */
+  static fromEllipse(r: Rect, docW: number, docH: number): Selection | null {
+    const m = ellipseMask(r, docW, docH);
+    if (!m) return null;
+    const inside = r.x >= 0 && r.y >= 0 && r.x + r.w <= docW && r.y + r.h <= docH;
+    // A clipped ellipse is outlined from its mask, so the ants follow the canvas edge.
+    return inside ? new Selection(m.bounds, m.mask, [ellipseOutline(r)], 'mask') : Selection.fromPlaced(m);
+  }
+
+  /** Any coverage mask; the ants are traced from it. */
+  static fromPlaced(m: PlacedMask | null): Selection | null {
+    const t = m ? tighten(m) : null;
+    if (!t) return null;
+    return new Selection(t.bounds, t.mask, selectionOutlines(t), 'mask');
   }
 
   static all(docW: number, docH: number): Selection {
@@ -105,6 +139,39 @@ export class Selection {
 
   get isRect(): boolean {
     return this.kind === 'rect';
+  }
+
+  placed(): PlacedMask {
+    return { bounds: this.bounds, mask: this.mask };
+  }
+
+  /** Combine with a new selection (Replace/Add/Subtract/Intersect). */
+  combine(next: Selection | null, mode: SelectionMode): Selection | null {
+    if (mode === 'replace') return next;
+    if (mode === 'intersect' && next && this.isRect && next.isRect) {
+      const r = rectIntersect(this.bounds, next.bounds);
+      return r ? Selection.fromRect(r, r.x + r.w, r.y + r.h) : null;
+    }
+    if (mode === 'add' && !next) return this;
+    if (mode === 'subtract' && !next) return this;
+    return Selection.fromPlaced(combineMasks(this.placed(), next ? next.placed() : null, mode));
+  }
+
+  /**
+   * Feather, grow, shrink or border by `amount` px. `edges`: the canvas edge counts as a
+   * selection edge. Returns null when nothing would stay selected.
+   */
+  modified(op: SelectionModify, amount: number, docW: number, docH: number, edges = false): Selection | null {
+    const m = this.placed();
+    const out =
+      op === 'feather'
+        ? featherMask(m, amount, docW, docH, edges)
+        : op === 'grow'
+          ? growMask(m, amount, docW, docH)
+          : op === 'shrink'
+            ? shrinkMask(m, amount, docW, docH, edges)
+            : borderMask(m, amount, docW, docH, edges);
+    return Selection.fromPlaced(out);
   }
 
   maskView(): MaskView {

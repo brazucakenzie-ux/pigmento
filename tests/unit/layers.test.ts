@@ -110,6 +110,7 @@ function setup() {
     notify() {},
     layerChanged() {},
     structureChanged() {},
+    savedSelectionsChanged() {},
     layersChanged() {
       changes++;
     },

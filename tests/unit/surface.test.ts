@@ -13,6 +13,7 @@ function host(doc: PaintDocument): CommandHost & { changes: number } {
       this.changes++;
     },
     structureChanged() {},
+    savedSelectionsChanged() {},
     layersChanged() {},
     setSelection(sel) {
       doc.selection = sel;
