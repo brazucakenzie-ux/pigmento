@@ -97,6 +97,19 @@ test('capture UI states', async () => {
     await page.keyboard.press('Escape');
     await page.keyboard.press('Control+d');
 
+    // Free transform of the whole layer, with some perspective.
+    await page.keyboard.press('Control+t');
+    await page.getByRole('radio', { name: 'Perspective' }).click();
+    const c = await page.evaluate(() => window.__pigmentoTest!.transformCorners());
+    await drag(page, [
+      [c![0].x, c![0].y],
+      [c![0].x + 120, c![0].y],
+    ]);
+    await page.mouse.move(700, 700);
+    await page.waitForTimeout(150);
+    await shot('free-transform');
+    await page.keyboard.press('Escape');
+
     await page.getByRole('button', { name: 'File' }).click();
     await page.waitForTimeout(250);
     await shot('file-menu');

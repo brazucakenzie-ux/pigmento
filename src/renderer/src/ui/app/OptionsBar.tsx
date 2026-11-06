@@ -2,7 +2,7 @@ import type { OptionSpec } from '@engine/tools/Tool';
 import { toolRegistry } from '@engine/tools/ToolRegistry';
 import { t } from '../../i18n';
 import { Icon } from '../icons/Icon';
-import { Segmented, Slider } from '../components/Controls';
+import { NumberField, Segmented, Slider } from '../components/Controls';
 import { engine } from '../state/engine';
 import { useUi } from '../state/store';
 import { runAction } from '../actions/actions';
@@ -90,6 +90,53 @@ function OptionControl({ toolId, spec, values }: { toolId: string; spec: OptionS
   }
 }
 
+/** Free transform: position, scale, rotation and skew as numbers, plus flips. */
+function TransformFields() {
+  const info = useUi((s) => s.transform);
+  if (!info) return null;
+  const field = (key: 'x' | 'y' | 'w' | 'h' | 'angle' | 'skew', unit: string, min: number, max: number, decimals: number) => {
+    const label = t(`transform.${key}`);
+    return (
+      <span className="opt tf-field">
+        <span>{label}</span>
+        <NumberField
+          className="num tf-num"
+          value={Math.round(info[key] * 10 ** decimals) / 10 ** decimals}
+          decimals={decimals}
+          min={min}
+          max={max}
+          label={label}
+          onChange={(v) => engine.setTransformValues({ [key]: v })}
+          // Enter sets the value and returns to the canvas, so the next Enter applies.
+          onEnter={() => (document.activeElement as HTMLElement | null)?.blur()}
+        />
+        <span className="unit">{unit}</span>
+      </span>
+    );
+  };
+  return (
+    <>
+      {field('x', 'px', -100000, 100000, 0)}
+      {field('y', 'px', -100000, 100000, 0)}
+      {field('w', '%', -100000, 100000, 1)}
+      {field('h', '%', -100000, 100000, 1)}
+      {field('angle', '°', -3600, 3600, 1)}
+      {field('skew', '°', -85, 85, 1)}
+      <button type="button" className="icon-btn" aria-label={t('transform.flipH')} data-tip={t('transform.flipH')} onClick={() => engine.flip('h')}>
+        <Icon name="flip-h" size={16} />
+      </button>
+      <button type="button" className="icon-btn" aria-label={t('transform.flipV')} data-tip={t('transform.flipV')} onClick={() => engine.flip('v')}>
+        <Icon name="flip-v" size={16} />
+      </button>
+      {info.distorted ? (
+        <span className="opt-hint" data-tip={t('transform.perspective')}>
+          <Icon name="tf-perspective" size={16} />
+        </span>
+      ) : null}
+    </>
+  );
+}
+
 export function OptionsBar() {
   const toolId = useUi((s) => s.tool);
   const values = useUi((s) => s.toolOptions[toolId]) ?? engine.options(toolId);
@@ -104,7 +151,7 @@ export function OptionsBar() {
         <Icon name={tool.icon} size={18} />
         {t(tool.labelKey)}
       </span>
-      {tool.group === 'selection' ? (
+      {tool.group === 'selection' && !tool.hidden ? (
         <label className="check opt">
           <input type="checkbox" checked={transparent} onChange={() => runAction('transparentSelection')} />
           {t('action.transparentSelection')}
@@ -113,6 +160,7 @@ export function OptionsBar() {
       {visible.map((spec) => (
         <OptionControl key={spec.key} toolId={toolId} spec={spec} values={values} />
       ))}
+      {toolId === 'transform' ? <TransformFields /> : null}
       <span className="grow" />
       {live ? (
         <>

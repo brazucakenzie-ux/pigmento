@@ -462,6 +462,12 @@
 .optionsbar > .btn {
   flex-shrink: 0;
 }
+.optionsbar .tf-field {
+  gap: 4px;
+}
+.optionsbar .tf-num {
+  width: 64px;
+}
 .optionsbar .grow {
   flex: 1;
 }

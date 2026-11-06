@@ -12,6 +12,8 @@ export interface PigmentoTestHook {
   selectionAt(x: number, y: number): number;
   selectionArea(): number;
   savedSelections(): { id: string; name: string; w: number; h: number }[];
+  transformInfo(): { x: number; y: number; w: number; h: number; angle: number; skew: number; distorted: boolean } | null;
+  transformCorners(): { x: number; y: number }[] | null;
   openPath(path: string): Promise<boolean>;
   filePath(): string | null;
   autosaveNow(): Promise<boolean>;

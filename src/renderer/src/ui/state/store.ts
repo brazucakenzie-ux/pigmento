@@ -5,6 +5,7 @@ import { defaultSettings, type Settings } from '@shared/settings';
 import type { RGBA } from '@engine/core/color';
 import type { Point } from '@engine/core/geometry';
 import type { DocInfo, HistoryInfo, Notice, SavedSelectionInfo, SelectionInfo } from '@engine/Engine';
+import type { TransformInfo } from '@engine/live/TransformObject';
 import type { SelectionModify } from '@engine/doc/Selection';
 import type { LayersInfo } from '@engine/doc/LayerController';
 import type { LiveKind } from '@engine/live/LiveObject';
@@ -69,6 +70,7 @@ export interface UiState {
   canvasDrag: { w: number; h: number } | null;
   layers: LayersInfo;
   savedSelections: SavedSelectionInfo[];
+  transform: TransformInfo | null;
 }
 
 export const useUi = create<UiState>(() => ({
@@ -97,6 +99,7 @@ export const useUi = create<UiState>(() => ({
   canvasDrag: null,
   layers: { tree: [], activeId: '', count: 0 },
   savedSelections: [],
+  transform: null,
 }));
 
 let pendingPatch: Partial<Settings> = {};

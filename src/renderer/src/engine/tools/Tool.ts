@@ -149,6 +149,8 @@ export interface Tool {
   readonly shortcut?: string;
   readonly group: ToolGroup;
   readonly order: number;
+  /** Not shown in the ribbon or menus (a mode entered by a command, like free transform). */
+  readonly hidden?: boolean;
   readonly options: OptionSpec[];
   /** Tool records a history step and benefits from the pen's eraser end override. */
   readonly paints?: boolean;

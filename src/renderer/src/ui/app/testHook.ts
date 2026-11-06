@@ -34,6 +34,9 @@ export function installTestHook(): void {
     },
     selectionArea: () => engine.doc.selection?.area() ?? 0,
     savedSelections: () => engine.savedSelectionsInfo(),
+    transformInfo: () => engine.transformInfo(),
+    /** Destination corners of the free transform in progress (TL, TR, BR, BL). */
+    transformCorners: () => engine.transforming?.corners.map((p) => ({ x: p.x, y: p.y })) ?? null,
     openPath: (p: string) => openPath(p, true),
     filePath: () => useUi.getState().file.path,
     autosaveNow: () => autosaveNow(),

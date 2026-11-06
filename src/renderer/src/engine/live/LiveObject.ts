@@ -5,7 +5,7 @@ import type { PixelView } from '../raster/pixels';
 import type { Selection } from '../doc/Selection';
 import type { I18nKey } from '../../i18n';
 
-export type LiveKind = 'shape' | 'text' | 'float';
+export type LiveKind = 'shape' | 'text' | 'float' | 'transform';
 
 /**
  * Something being edited above the active layer that hasn't been rasterised yet: a shape with
@@ -14,6 +14,10 @@ export type LiveKind = 'shape' | 'text' | 'float';
 export interface LiveObject {
   readonly kind: LiveKind;
   readonly historyLabel: I18nKey;
+  /** Pixels lifted off the layer (floating selection, free transform): applying replaces the selection. */
+  readonly lifted?: boolean;
+  /** Applying would change nothing (skipped, no history step). */
+  readonly isIdentityPlacement?: boolean;
   /** Area of the document currently covered (for invalidation). */
   bounds(): Rect | null;
   /** Draw into the composite context (document coordinates), limited to r. */

@@ -25,7 +25,7 @@ export class ToolRegistry {
   }
 
   byGroup(group: ToolGroup): Tool[] {
-    return this.all().filter((t) => t.group === group);
+    return this.all().filter((t) => t.group === group && !t.hidden);
   }
 
   byShortcut(key: string): Tool | undefined {

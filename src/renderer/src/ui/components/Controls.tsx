@@ -12,6 +12,7 @@ export function NumberField({
   id,
   className = 'num',
   decimals = 0,
+  onEnter,
 }: {
   value: number;
   onChange: (v: number) => void;
@@ -22,6 +23,8 @@ export function NumberField({
   id?: string;
   className?: string;
   decimals?: number;
+  /** After Enter commits the value (e.g. hand focus back to the canvas). */
+  onEnter?: () => void;
 }) {
   const [text, setText] = useState(value.toFixed(decimals));
   useEffect(() => setText(value.toFixed(decimals)), [value, decimals]);
@@ -41,7 +44,10 @@ export function NumberField({
       onChange={(e) => setText(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') commit();
+        if (e.key === 'Enter') {
+          commit();
+          onEnter?.();
+        }
         if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
           e.preventDefault();
           const d = (e.key === 'ArrowUp' ? 1 : -1) * step * (e.shiftKey ? 10 : 1);

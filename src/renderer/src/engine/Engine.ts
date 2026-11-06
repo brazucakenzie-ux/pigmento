@@ -22,6 +22,8 @@ import { LosslessCommand, applyLossless } from './history/TransformCommand';
 import { CodecClient, type DecodedImage } from './io/CodecClient';
 import { MAX_DIMENSION, MAX_PIXELS } from './io/protocol';
 import { FloatObject, rectOutline } from './live/FloatObject';
+import { TransformObject, type TransformInfo } from './live/TransformObject';
+import { rectQuad, type TransformParams } from './raster/warp';
 import type { LiveKind, LiveObject } from './live/LiveObject';
 import type { TextObject } from './live/TextObject';
 import { alphaBounds, flattenOnto, hasTransparency, invertView, type MaskView } from './raster/pixels';
@@ -115,6 +117,8 @@ export interface EngineEvents {
   layers: LayersInfo;
   /** Named selections saved with the document. */
   savedSelections: SavedSelectionInfo[];
+  /** Free transform in progress (null when none). */
+  transform: TransformInfo | null;
 }
 
 export type Anchor = 'nw' | 'n' | 'ne' | 'w' | 'c' | 'e' | 'sw' | 's' | 'se';
@@ -288,7 +292,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     ov.begin();
     if (this.viewOptions.gridlines) ov.gridlines(this.viewOptions.gridSize);
     const sel = this.doc.selection;
-    if (sel && this._live?.kind !== 'float') ov.antsMany(sel.outlines);
+    if (sel && !this._live?.lifted) ov.antsMany(sel.outlines);
     this._live?.drawOverlay(ov);
     this.activeTool.drawOverlay?.(this, ov, this.hover);
     this.input?.drawOverlay(ov);
@@ -296,7 +300,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   }
 
   private updateAntsTimer(): void {
-    const need = !this.reducedMotion && (this.doc.selection !== null || this._live?.kind === 'float');
+    const need = !this.reducedMotion && (this.doc.selection !== null || this._live?.lifted === true);
     if (need && !this.antsTimer) {
       this.antsTimer = window.setInterval(() => {
         this.overlay.antsOffset = (this.overlay.antsOffset + 1) % 8;
@@ -351,8 +355,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   emitSelectionInfo(): void {
     const live = this._live;
     let bounds: Rect | null = this.doc.selection?.bounds ?? null;
-    if (live?.kind === 'float') bounds = (live as FloatObject).bounds();
-    this.emit('selection', { bounds, floating: live?.kind === 'float' });
+    if (live?.lifted) bounds = live.bounds();
+    this.emit('selection', { bounds, floating: live?.lifted === true });
   }
 
   notify(kind: Notice['kind'], key: I18nKey, params?: I18nParams): void {
@@ -527,14 +531,22 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     }
   }
 
+  private switchingTool = false;
+
   setTool(id: string): void {
     if (!this.tools.has(id) || id === this.activeToolId) return;
     const old = this.activeTool;
-    this.commitLive();
+    this.switchingTool = true;
+    try {
+      this.commitLive();
+    } finally {
+      this.switchingTool = false;
+    }
     old.deactivate?.(this);
     const next = this.tools.get(id)!;
     if (old.group === 'selection' && next.group !== 'selection') this.setSelection(null);
-    if (old.id !== 'picker' && old.id !== 'zoom') this.previousToolId = old.id;
+    // Temporary tools (picker, zoom, free transform) hand back to the tool used before them.
+    if (old.id !== 'picker' && old.id !== 'zoom' && !old.hidden) this.previousToolId = old.id;
     this.activeToolId = id;
     next.activate?.(this);
     this.emit('tool', { id });
@@ -589,6 +601,17 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     }
     this._live = obj;
     this.renderer.liveDrawer = (ctx, r) => obj.draw(ctx, r);
+    if (obj instanceof TransformObject) {
+      let last = obj.bounds();
+      obj.onChange = () => {
+        const b = obj.bounds();
+        this.invalidate(rectUnion(last, b));
+        last = b;
+        this.emitSelectionInfo();
+        this.emit('transform', obj.info());
+      };
+      this.emit('transform', obj.info());
+    }
     if (obj.layerFilter) {
       this.addLayerFilter(obj.layerFilter);
       this.syncActiveLayer(obj.filterBounds?.() ?? null);
@@ -611,6 +634,10 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this._live = null;
     this.renderer.liveDrawer = null;
     this.invalidate(obj.bounds());
+    if (obj instanceof TransformObject) {
+      obj.onChange = null;
+      this.emit('transform', null);
+    }
     if (obj.layerFilter) {
       this.removeLayerFilter(obj.layerFilter);
       this.syncActiveLayer(obj.filterBounds?.() ?? null);
@@ -622,17 +649,21 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   commitLive(keepSelection = false): void {
     const obj = this._live;
     if (!obj) return;
-    const float = obj.kind === 'float' ? (obj as FloatObject) : null;
+    const lifted = obj.lifted === true;
     const text = obj.kind === 'text' ? (obj as TextObject) : null;
-    const selAfter = float ? (keepSelection ? obj.selectionAfterCommit?.() ?? null : null) : this.doc.selection;
-    const skip = (text && text.isEmpty) || (float && float.isIdentityPlacement);
+    // A free transform keeps its (transformed) selection; a floating selection only when asked.
+    const keep = keepSelection || obj.kind === 'transform';
+    const selAfter = lifted ? (keep ? obj.selectionAfterCommit?.() ?? null : null) : this.doc.selection;
+    const skip = (text && text.isEmpty) || (lifted && obj.isIdentityPlacement === true);
     const layer = this.doc.activeRaster;
     if (skip || !layer || layer.locked) {
       this.detachLive();
       obj.dispose();
-      if (float) this.setSelection(selAfter);
+      // An unchanged transform leaves the selection exactly as it was.
+      if (lifted) this.setSelection(obj.kind === 'transform' ? this.doc.selection : selAfter);
       if (!skip) this.notify('info', layer ? 'notice.layerLocked' : 'notice.notRaster');
       this.emitLive();
+      this.afterLive(obj);
       return;
     }
     const selBefore = this.doc.selection;
@@ -641,7 +672,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     const s = layer.surface;
     s.beginEdit();
     try {
-      obj.rasterize(s, float ? null : this.doc.selection);
+      obj.rasterize(s, lifted ? null : this.doc.selection);
     } catch (err) {
       s.abortEdit();
       throw err;
@@ -652,12 +683,19 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.layerChanged(layer, rectUnion(obj.bounds(), obj.filterBounds?.() ?? null));
     obj.dispose();
     this.emitLive();
+    this.afterLive(obj);
+  }
+
+  /** Free transform runs on its own tool; when it ends, the previous tool comes back. */
+  private afterLive(obj: LiveObject): void {
+    if (obj.kind === 'transform' && this.activeTool.id === 'transform' && !this.switchingTool) this.restorePreviousTool();
   }
 
   cancelLive(): void {
     const obj = this.detachLive();
     if (!obj) return;
     obj.dispose();
+    this.afterLive(obj);
     this.emitLive();
   }
 
@@ -963,6 +1001,86 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     return f;
   }
 
+  get transforming(): TransformObject | null {
+    return this._live instanceof TransformObject ? this._live : null;
+  }
+
+  /**
+   * Edit → Free transform (Ctrl+T): the floating selection, the selection, or (with nothing
+   * selected) the whole active layer. Nothing changes until it's applied.
+   */
+  freeTransform(): boolean {
+    if (this.transforming) return true;
+    const { width: docW, height: docH } = this.doc;
+    let t: TransformObject;
+    const f = this.floating;
+    if (f) {
+      t = new TransformObject(f.transformSource(), docW, docH);
+      this.detachLive();
+      f.dispose();
+    } else {
+      this.commitLive(true);
+      if (!this.canPaint()) return false;
+      const layer = this.doc.activeRaster!;
+      const sel = this.doc.selection;
+      if (sel) {
+        const b = sel.bounds;
+        const maskImg: ImageBuf = { w: b.w, h: b.h, data: new Uint8ClampedArray(b.w * b.h * 4) };
+        for (let i = 0; i < sel.mask.length; i++) maskImg.data[i * 4 + 3] = sel.mask[i];
+        t = new TransformObject(
+          {
+            src: this.selectionPixels(sel),
+            corners: rectQuad(b),
+            outline: sel.outlines.map((o) => o.map((p) => ({ x: p.x - b.x, y: p.y - b.y }))),
+            hole: sel.maskView(),
+            maskImg,
+          },
+          docW,
+          docH,
+        );
+      } else {
+        const b = layer.surface.contentBounds();
+        if (!b) {
+          this.notify('info', 'notice.layerEmpty');
+          return false;
+        }
+        t = new TransformObject(
+          {
+            src: { w: b.w, h: b.h, data: layer.surface.readRect(b) },
+            corners: rectQuad(b),
+            outline: rectOutline(b.w, b.h),
+            hole: { data: new Uint8Array(b.w * b.h).fill(255), stride: b.w, ox: b.x, oy: b.y, w: b.w, h: b.h },
+            maskImg: null,
+          },
+          docW,
+          docH,
+        );
+      }
+    }
+    // Switch tools first: switching applies any live object, and this one isn't live yet.
+    this.setTool('transform');
+    this.setLive(t);
+    return true;
+  }
+
+  transformInfo(): TransformInfo | null {
+    return this.transforming?.info() ?? null;
+  }
+
+  /** Number fields of the options bar (scale in %, angles in degrees). */
+  setTransformValues(v: { x?: number; y?: number; w?: number; h?: number; angle?: number; skew?: number }): void {
+    const t = this.transforming;
+    if (!t) return;
+    const change: Partial<TransformParams> = {};
+    if (v.x !== undefined) change.cx = v.x;
+    if (v.y !== undefined) change.cy = v.y;
+    if (v.w !== undefined && v.w !== 0) change.sx = v.w / 100;
+    if (v.h !== undefined && v.h !== 0) change.sy = v.h / 100;
+    if (v.angle !== undefined) change.angle = (v.angle * Math.PI) / 180;
+    if (v.skew !== undefined) change.skew = (Math.max(-85, Math.min(85, v.skew)) * Math.PI) / 180;
+    t.setParams(change);
+  }
+
   get floating(): FloatObject | null {
     return this._live?.kind === 'float' ? (this._live as FloatObject) : null;
   }
@@ -1135,6 +1253,11 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   }
 
   nudgeSelection(dx: number, dy: number): boolean {
+    const t = this.transforming;
+    if (t) {
+      t.nudge(dx, dy);
+      return true;
+    }
     let f = this.floating;
     if (!f && this.doc.selection) f = this.liftSelection(false);
     if (!f) return false;
@@ -1160,6 +1283,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   }
 
   flip(axis: 'h' | 'v'): void {
+    const t = this.transforming;
+    if (t) return t.flip(axis);
     const f = this.selectionTarget();
     if (f) {
       const before = f.bounds();
@@ -1176,6 +1301,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
 
   /** Rotate by quarter turns clockwise (1 = 90°, 2 = 180°, 3 = 270°). */
   rotate(quarterTurns: number): void {
+    const t = this.transforming;
+    if (t) return t.rotateBy((quarterTurns * Math.PI) / 2);
     const f = this.selectionTarget();
     if (f) {
       const before = f.bounds();
@@ -1194,6 +1321,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   /** Free rotation (degrees, clockwise). The whole image grows to fit; selections rotate live. */
   rotateFree(degrees: number): void {
     const rad = (degrees * Math.PI) / 180;
+    const t = this.transforming;
+    if (t) return t.rotateBy(rad);
     const f = this.selectionTarget();
     if (f) {
       const before = f.bounds();

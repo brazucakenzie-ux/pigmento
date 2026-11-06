@@ -49,6 +49,7 @@ export type FloatHit = { type: 'handle'; handle: BoxHandle } | { type: 'body' };
  */
 export class FloatObject implements LiveObject {
   readonly kind = 'float' as const;
+  readonly lifted = true;
   historyLabel: I18nKey;
   src: ImageBuf;
   geom: BoxGeom;
@@ -194,6 +195,19 @@ export class FloatObject implements LiveObject {
   transformedOutline(): Point[][] {
     const m = this.matrix();
     return this.outline.map((poly) => matApplyPoints(m, poly));
+  }
+
+  /** Hand over to free transform: the pixels (with any colour keyed out) and where they are now. */
+  transformSource(): { src: ImageBuf; corners: [Point, Point, Point, Point]; outline: Point[][]; hole: MaskView | null; maskImg: ImageBuf; forceCommit: boolean } {
+    const m = this.matrix();
+    const { w, h } = this.src;
+    const corners = matApplyPoints(m, rectCorners({ x: 0, y: 0, w, h })) as [Point, Point, Point, Point];
+    let maskImg = this.maskImg;
+    if (!maskImg) {
+      maskImg = { w, h, data: new Uint8ClampedArray(w * h * 4) };
+      for (let i = 3; i < maskImg.data.length; i += 4) maskImg.data[i] = 255;
+    }
+    return { src: this.keyed(), corners, outline: this.outline, hole: this.hole, maskImg, forceCommit: !this.isIdentityPlacement };
   }
 
   /** The travelling mask placed in document space (like `rendered(false)`), or null. */

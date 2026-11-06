@@ -128,6 +128,7 @@ const base: Action[] = [
   { id: 'rotateCw', labelKey: 'action.rotateCw', icon: 'rotate-cw', group: 'image', shortcut: ['Ctrl+Period'], run: safe(() => engine.rotate(1)) },
   { id: 'rotateCcw', labelKey: 'action.rotateCcw', icon: 'rotate-ccw', group: 'image', shortcut: ['Ctrl+Comma'], run: safe(() => engine.rotate(3)) },
   { id: 'rotate180', labelKey: 'action.rotate180', icon: 'rotate-180', group: 'image', run: safe(() => engine.rotate(2)) },
+  { id: 'freeTransform', labelKey: 'action.freeTransform', icon: 'transform', group: 'image', shortcut: ['Ctrl+T'], run: safe(() => void engine.freeTransform()) },
   { id: 'rotateFree', labelKey: 'action.rotateFree', icon: 'rotate-free', group: 'image', run: () => openDialog({ kind: 'rotate' }) },
   { id: 'flipH', labelKey: 'action.flipH', icon: 'flip-h', group: 'image', run: safe(() => engine.flip('h')) },
   { id: 'flipV', labelKey: 'action.flipV', icon: 'flip-v', group: 'image', run: safe(() => engine.flip('v')) },
@@ -225,7 +226,7 @@ function themeActions(): Action[] {
 
 /** One action per registered tool, with its letter shortcut. */
 function toolActions(): Action[] {
-  return toolRegistry.all().map((tool) => ({
+  return toolRegistry.all().filter((tool) => !tool.hidden).map((tool) => ({
     id: `tool.${tool.id}`,
     labelKey: tool.labelKey,
     icon: tool.icon,

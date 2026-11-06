@@ -42,6 +42,7 @@ export function bindEngine(settings: Settings): void {
     colors: { primary: engine.primary, secondary: engine.secondary },
     layers: engine.layers.info(),
     savedSelections: engine.savedSelectionsInfo(),
+    transform: engine.transformInfo(),
   });
 
   engine.on('doc', (doc) => useUi.setState({ doc }));
@@ -56,10 +57,12 @@ export function bindEngine(settings: Settings): void {
   engine.on('notice', (n) => showToast(n));
   engine.on('layers', (layers) => useUi.setState({ layers }));
   engine.on('savedSelections', (savedSelections) => useUi.setState({ savedSelections }));
+  engine.on('transform', (transform) => useUi.setState({ transform }));
 
   engine.on('tool', ({ id }) => {
     useUi.setState({ tool: id });
-    updateSettings({ activeTool: id });
+    // Modes like free transform aren't remembered as the tool to start with.
+    if (!engine.tools.get(id)?.hidden) updateSettings({ activeTool: id });
   });
 
   let toolSave = 0;

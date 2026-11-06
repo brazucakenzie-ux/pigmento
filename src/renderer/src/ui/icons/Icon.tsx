@@ -88,6 +88,7 @@ import {
   Scan,
   Expand,
   Palette,
+  Scale3d,
   CircleDashed,
   SquaresUnite,
   SquaresSubtract,
@@ -120,6 +121,7 @@ const LUCIDE: Record<string, LucideIcon> = {
   select: SquareDashed,
   lasso: Lasso,
   'ellipse-select': CircleDashed,
+  transform: Scale3d,
   'sel-add': SquaresUnite,
   'sel-subtract': SquaresSubtract,
   'sel-intersect': SquaresIntersect,
@@ -209,6 +211,9 @@ const LUCIDE: Record<string, LucideIcon> = {
 
 /** Hand-drawn icons for things Lucide doesn't cover (same 24px grid, 2px stroke). */
 const CUSTOM: Record<string, JSX.Element> = {
+  'tf-skew': <path d="M8 5h12l-4 14H4Z" strokeLinejoin="round" />,
+  'tf-distort': <path d="M5 4.5 19.5 7 17 19.5 3.5 16Z" strokeLinejoin="round" />,
+  'tf-perspective': <path d="M8 5h8l4.5 14h-17Z" strokeLinejoin="round" />,
   'poly-lasso': <path d="M12 3.5 20.5 9.6 17.3 19.5H6.7L3.5 9.6Z" strokeDasharray="3 2.4" strokeLinejoin="round" />,
   'sel-replace': <rect x="4.5" y="4.5" width="15" height="15" rx="1.5" />,
   roundRect: <rect x="3.5" y="5.5" width="17" height="13" rx="4.5" />,

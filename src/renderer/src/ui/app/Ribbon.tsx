@@ -173,6 +173,7 @@ function HomeTab() {
                 <ActionMenuItem id="rotateCcw" close={close} />
                 <ActionMenuItem id="rotate180" close={close} />
                 <ActionMenuItem id="rotateFree" close={close} />
+                <ActionMenuItem id="freeTransform" close={close} />
                 <MenuSeparator />
                 <ActionMenuItem id="flipH" close={close} />
                 <ActionMenuItem id="flipV" close={close} />
@@ -232,6 +233,7 @@ function ImageTab() {
         <div className="rb-stack">
           <ActionButton id="rotate180" variant="small" />
           <ActionButton id="rotateFree" variant="small" />
+          <ActionButton id="freeTransform" variant="small" />
         </div>
         <div className="rb-stack">
           <ActionButton id="flipH" variant="small" />
