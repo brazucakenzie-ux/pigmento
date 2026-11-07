@@ -1,4 +1,5 @@
 import type { CustomShapeFile } from './shapeFormat';
+import type { AssetKind, OpenedAsset } from './assets';
 import type { FileFormat } from './formats';
 import type { Settings } from './settings';
 
@@ -39,6 +40,8 @@ export const IPC = {
   patternsList: 'patterns:list',
   patternsSave: 'patterns:save',
   patternsRemove: 'patterns:remove',
+  assetOpen: 'asset:open',
+  assetSave: 'asset:save',
   shapesList: 'shapes:list',
   shapesSave: 'shapes:save',
   shapesRemove: 'shapes:remove',
@@ -130,6 +133,10 @@ export interface PigmentoApi {
     showSaveDialog(req: SaveDialogRequest): Promise<SaveDialogResult | null>;
     read(path: string): Promise<OpenedFile>;
     write(path: string, bytes: Uint8Array): Promise<void>;
+    /** Pick and read a non-image file (SVG, shape pack, palette); null if cancelled. */
+    openAsset(kind: AssetKind): Promise<OpenedAsset | null>;
+    /** Save bytes as a non-image file through a Save dialog; resolves the path, or null. */
+    saveAsset(kind: AssetKind, defaultName: string, bytes: Uint8Array): Promise<string | null>;
     /** Resolve and grant a file dropped from Explorer; returns null if not openable. */
     pathForDroppedFile(file: File): Promise<string | null>;
   };

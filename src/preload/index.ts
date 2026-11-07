@@ -13,6 +13,8 @@ const api: PigmentoApi = {
     showSaveDialog: (req) => ipcRenderer.invoke(IPC.saveDialog, req),
     read: (path) => ipcRenderer.invoke(IPC.readFile, path),
     write: (path, bytes) => ipcRenderer.invoke(IPC.writeFile, path, bytes),
+    openAsset: (kind) => ipcRenderer.invoke(IPC.assetOpen, kind),
+    saveAsset: (kind, name, bytes) => ipcRenderer.invoke(IPC.assetSave, kind, name, bytes),
     pathForDroppedFile: async (file) => {
       const p = webUtils.getPathForFile(file);
       if (!p) return null;

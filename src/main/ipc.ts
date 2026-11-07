@@ -8,6 +8,7 @@ import {
   type IpcMainInvokeEvent,
 } from 'electron';
 import path from 'node:path';
+import { promises as fs } from 'node:fs';
 import { FILE_FORMATS, OPENABLE_EXTENSIONS, isOpenablePath, type FileFormat } from '@shared/formats';
 import {
   IPC,
@@ -28,6 +29,7 @@ import { setWallpaper } from './wallpaper';
 import { clearAutosave, listRecoverable, readAutosave, registerSession, releaseSession, writeAutosave } from './autosave';
 import { listPatterns, MAX_PATTERN_BYTES, removePattern, savePattern } from './patterns';
 import { listShapes, removeShape, saveShape } from './shapes';
+import { ASSET_KINDS, isAssetKind, type OpenedAsset } from '@shared/assets';
 import {
   TOP_BAR_HEIGHT,
   allowCloseAndClose,
@@ -115,6 +117,46 @@ export function registerIpc(): void {
     grantPath(p);
     updateSettings({ export: { ...getSettings().export, lastFolder: path.dirname(p) } });
     return { path: p, format };
+  });
+
+  // Non-image files: the main process picks, reads and writes them; nothing is granted.
+  ipcMain.handle(IPC.assetOpen, async (e, kind: unknown): Promise<OpenedAsset | null> => {
+    if (!isAssetKind(kind)) throw new Error('Invalid file kind');
+    const k = ASSET_KINDS[kind];
+    const res = await dialog.showOpenDialog(senderWindow(e), {
+      title: tm('dialog.import.title'),
+      properties: ['openFile'],
+      defaultPath: getSettings().export.lastFolder,
+      filters: [{ name: tm(k.filterKey), extensions: [...k.open] }],
+    });
+    if (res.canceled || res.filePaths.length === 0) return null;
+    const p = res.filePaths[0];
+    if (!(k.open as readonly string[]).includes(path.extname(p).slice(1).toLowerCase())) throw new Error('Unsupported file type');
+    const stat = await fs.stat(p);
+    if (!stat.isFile() || stat.size > k.maxBytes) throw new Error('File is too large');
+    const buf = await fs.readFile(p);
+    updateSettings({ export: { ...getSettings().export, lastFolder: path.dirname(p) } });
+    return { name: path.basename(p), bytes: new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength) };
+  });
+
+  ipcMain.handle(IPC.assetSave, async (e, kind: unknown, name: unknown, data: unknown): Promise<string | null> => {
+    if (!isAssetKind(kind) || typeof name !== 'string') throw new Error('Invalid save request');
+    const k = ASSET_KINDS[kind];
+    const bytes = bytesArg(data, k.maxBytes);
+    const base = path.basename(name).replace(/[<>:"/\\|?*]/g, '_') || 'Untitled';
+    const folder = getSettings().export.lastFolder ?? app.getPath('documents');
+    const res = await dialog.showSaveDialog(senderWindow(e), {
+      title: tm('dialog.saveFile.title'),
+      defaultPath: path.join(folder, base),
+      filters: [{ name: tm(k.filterKey), extensions: [k.save] }],
+      properties: ['showOverwriteConfirmation'],
+    });
+    if (res.canceled || !res.filePath) return null;
+    let p = res.filePath;
+    if (path.extname(p).slice(1).toLowerCase() !== k.save) p = `${p}.${k.save}`;
+    await atomicWrite(p, bytes);
+    updateSettings({ export: { ...getSettings().export, lastFolder: path.dirname(p) } });
+    return p;
   });
 
   ipcMain.handle(IPC.readFile, async (e, rawPath: unknown): Promise<OpenedFile> => {

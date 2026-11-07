@@ -40,3 +40,21 @@ export const CustomShapeSchema = z.object({
 });
 
 export type CustomShapeFile = z.infer<typeof CustomShapeSchema>;
+
+/**
+ * A shape pack: personal shapes to share between PCs (File → Export my shapes). Ids aren't
+ * kept; shapes get new ones when a pack is imported.
+ */
+export const SHAPE_PACK_FORMAT = 'pigmento-shape-pack';
+export const MAX_PACK_SHAPES = MAX_CUSTOM_SHAPES;
+
+export const PackShapeSchema = CustomShapeSchema.pick({ name: true, category: true, aspect: true, fillRule: true, outline: true });
+
+export const ShapePackSchema = z.object({
+  format: z.literal(SHAPE_PACK_FORMAT),
+  version: z.literal(SHAPE_FORMAT_VERSION),
+  name: z.string().trim().min(1).max(80),
+  shapes: z.array(PackShapeSchema).min(1).max(MAX_PACK_SHAPES),
+});
+
+export type ShapePack = z.infer<typeof ShapePackSchema>;

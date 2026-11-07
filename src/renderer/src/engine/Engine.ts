@@ -56,7 +56,9 @@ import {
   type VectorShape,
 } from './vector/model';
 import { hitTestNodes, lineStyleOf, rasterizeNodes, setSavedPatternSource, shapePad } from './vector/render';
-import { optionsOfStyle } from './tools/shapeTools';
+import { optionsOfStyle, shapeStyle } from './tools/shapeTools';
+import { maskToSubpaths } from './vector/trace';
+import type { SvgDrawing } from './io/svgImport';
 import { addImageAsset, ASSET_ID, MAX_ASSET_PIXELS } from './vector/assets';
 import { alphaBounds, flattenOnto, hasTransparency, invertView, type MaskView } from './raster/pixels';
 import { Surface } from './raster/Surface';
@@ -1441,6 +1443,57 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     if (!outline) return null;
     const u = toUnitBox(outline.subpaths);
     return u ? { unit: u.subs, aspect: u.aspect, fillRule: outline.fillRule } : null;
+  }
+
+  /** Put an imported SVG drawing on a new shape layer, scaled down to fit the image if larger. */
+  addSvgDrawing(d: SvgDrawing, name: string): string | null {
+    this.commitLive();
+    const k = Math.min(1, this.doc.width / d.width, this.doc.height / d.height);
+    const shapes =
+      k < 1
+        ? d.shapes.map((s) => {
+            const t = transformNode(s, matScale(k, k)) as VectorShape;
+            return { ...t, style: { ...t.style, width: Math.max(0.5, t.style.width * k) } };
+          })
+        : d.shapes;
+    let layer: VectorLayer | null = null;
+    this.history.group('history.importSvg', () => {
+      const id = this.layers.addVector();
+      this.layers.setProps(id, { name: name.slice(0, 200) });
+      layer = this.doc.layerById(id) as VectorLayer;
+      const before = layer.objects;
+      layer.setObjects(shapes);
+      this.history.push(new VectorEditCommand('history.importSvg', this, layer, before, layer.objects));
+    });
+    if (!layer) return null;
+    const added: VectorLayer = layer;
+    this.vectorChanged(added);
+    return added.id;
+  }
+
+  /** Trace the selection into a path (on the active shape layer, or a new one). */
+  selectionToShape(): boolean {
+    const sel = this.doc.selection;
+    if (!sel) {
+      this.notify('info', 'notice.selectionShapeNeedsSelection');
+      return false;
+    }
+    const subpaths = maskToSubpaths(sel.placed());
+    if (!subpaths.length) return false;
+    this.commitLive();
+    const node: VectorShape = { type: 'shape', id: vectorId(), shape: 'path', box: null, points: [], style: { ...shapeStyle(this, 'pen', false), mode: 'both' }, subpaths, fillRule: 'evenodd' };
+    const active = this.activeVector;
+    let layer: VectorLayer | null = active && !active.locked ? active : null;
+    this.history.group('history.selectionToShape', () => {
+      if (!layer) layer = this.doc.layerById(this.layers.addVector()) as VectorLayer;
+      const before = layer.objects;
+      layer.setObjects([...before, node]);
+      this.history.push(new VectorEditCommand('history.selectionToShape', this, layer, before, layer.objects));
+    });
+    if (!layer) return false;
+    this.vectorChanged(layer);
+    this.setVectorSelection([node.id]);
+    return true;
   }
 
   newShapeLayer(): string {

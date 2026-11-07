@@ -41,6 +41,7 @@ function FileMenu() {
         <ActionMenuItem id="new" close={close} label={t('file.new')} />
         <ActionMenuItem id="newWindow" close={close} />
         <ActionMenuItem id="open" close={close} label={t('file.open')} />
+        <ActionMenuItem id="importSvg" close={close} />
         <SubMenu label={t('file.recent')} icon="history">
           {(closeAll) => (
             <>
@@ -164,6 +165,7 @@ function HomeTab() {
               <ActionMenuItem id="saveSelection" close={close} />
               <ActionMenuItem id="loadSelection" close={close} />
               <ActionMenuItem id="definePattern" close={close} />
+              <ActionMenuItem id="selectionToShape" close={close} />
               <MenuSeparator />
               <ActionMenuItem id="transparentSelection" close={close} />
             </>

@@ -13,6 +13,7 @@ import { runAction } from '../actions/actions';
 import { duplicateMyShape, isCustom } from '../services/shapes';
 import { ActionButton, MenuButton, RibbonGroup } from './RibbonButton';
 import { ColorsGroup } from './ColorsGroup';
+import { ActionMenuItem } from './ActionMenuItem';
 
 /** Thumbnails are drawn once per shape, in a 24×24 box (personal shapes keep their proportions). */
 const THUMBS = new WeakMap<ShapeDef, string>();
@@ -229,12 +230,22 @@ export function ShapesTab() {
             <span className="rb-label">{t(isFavorite ? 'shapes.unfavorite' : 'shapes.favorite')}</span>
           </button>
           {isCustom(currentDef) ? <ManageShape def={currentDef} /> : null}
+          <MenuButton label={t('shapes.files')} icon="folder">
+            {(close) => (
+              <>
+                <ActionMenuItem id="importSvg" close={close} />
+                <ActionMenuItem id="importShapePack" close={close} />
+                <ActionMenuItem id="exportShapePack" close={close} />
+              </>
+            )}
+          </MenuButton>
         </div>
       </RibbonGroup>
       <RibbonGroup label={t('group.shapeDraw')}>
         <ActionButton id="tool.pen" />
         <div className="rb-stack">
           <ActionButton id="convertToPath" variant="small" />
+          <ActionButton id="selectionToShape" variant="small" />
           <ActionButton id="saveShape" variant="small" />
         </div>
       </RibbonGroup>

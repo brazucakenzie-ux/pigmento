@@ -188,7 +188,7 @@ Each item is ticked in the same commit as its work.
 - [x] 2.11 `ShapeRegistry` with 150+ original parametric shapes in 11 categories; Shapes ribbon tab with gallery, search and favourites; per-shape parameter sliders (+ path-generation unit tests)
 - [x] 2.12 Fill and outline styles: solid, linear/radial/angular gradient (multi-stop), pattern, image and no fill; outline width, dashes, caps/joins, gradient strokes, arrowheads
 - [x] 2.13 Pen tool and Shape Editor: click for corners, drag for curves, add/delete/move points, smooth/corner conversion, open/closed paths; save to the personal shape library with name, category and thumbnail; rename/duplicate/delete/favourite
-- [ ] 2.14 Selection to shape (mask tracing and simplification); SVG import (sanitised, paths and basic shapes); shape packs import/export with a Zod schema documented in `docs/shape-format.md` (+ schema tests)
+- [x] 2.14 Selection to shape (mask tracing and simplification); SVG import (sanitised, paths and basic shapes); shape packs import/export with a Zod schema documented in `docs/shape-format.md` (+ schema tests)
 - [ ] 2.15 Palette files: import/export `.json`, import `.gpl` and `.ase`; SVG export (vector layers as real paths, raster layers as embedded PNG)
 - [ ] 2.16 Golden-image tests for every built-in shape; e2e for creating and using a custom shape and for project save/reopen; `npm run check` green; report
 

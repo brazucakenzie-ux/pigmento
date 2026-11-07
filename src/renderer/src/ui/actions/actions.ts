@@ -1,3 +1,5 @@
+import { importSvgFile } from '../services/svg';
+import { exportShapePack, hasCustomShapes, importShapePack } from '../services/shapes';
 import type { ThemeMode } from '@shared/settings';
 import { toolRegistry } from '@engine/tools/ToolRegistry';
 import { reportEngineError } from '@engine/input/InputController';
@@ -251,6 +253,18 @@ const base: Action[] = [
     run: () => engine.convertVectorToPath(),
     enabled: (s) => s.vectorSelection.count > s.vectorSelection.groups,
   },
+  {
+    id: 'selectionToShape',
+    labelKey: 'action.selectionToShape',
+    icon: 'shapes',
+    group: 'image',
+    run: () => void engine.selectionToShape(),
+    enabled: (s) => s.selection.bounds !== null,
+  },
+  { id: 'importSvg', labelKey: 'action.importSvg', icon: 'open', group: 'file', run: () => void importSvgFile() },
+  { id: 'importShapePack', labelKey: 'action.importShapePack', icon: 'open', group: 'file', run: () => void importShapePack() },
+  // Enabled once My shapes has something in it (the library counter changes with it).
+  { id: 'exportShapePack', labelKey: 'action.exportShapePack', icon: 'export', group: 'file', run: () => void exportShapePack(), enabled: (s) => s.shapeLibrary >= 0 && hasCustomShapes() },
   {
     id: 'saveShape',
     labelKey: 'action.saveShape',

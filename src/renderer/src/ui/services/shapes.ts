@@ -1,6 +1,17 @@
 import { customShapeDef, shapeRegistry, type ShapeCategory, type ShapeDef } from '@engine/shapes/ShapeRegistry';
 import type { SubPath } from '@engine/vector/pathData';
-import { CustomShapeSchema, SHAPE_FORMAT, SHAPE_FORMAT_VERSION, type CustomShapeFile, type ShapeFileCategory } from '@shared/shapeFormat';
+import {
+  CustomShapeSchema,
+  MAX_CUSTOM_SHAPES,
+  SHAPE_FORMAT,
+  SHAPE_FORMAT_VERSION,
+  SHAPE_PACK_FORMAT,
+  ShapePackSchema,
+  type CustomShapeFile,
+  type ShapeFileCategory,
+  type ShapePack,
+} from '@shared/shapeFormat';
+import { t } from '../../i18n';
 import { engine } from '../state/engine';
 import { showToast, updateSettings, useUi } from '../state/store';
 
@@ -100,4 +111,70 @@ export async function deleteMyShape(id: string): Promise<void> {
 
 export function isCustom(def: ShapeDef | undefined): boolean {
   return def?.custom === true && files.has(def.id);
+}
+
+/** Save every personal shape to a shape pack file (to share or move to another PC). */
+export async function exportShapePack(): Promise<boolean> {
+  const list = [...files.values()].sort((a, b) => a.createdAt - b.createdAt);
+  if (!list.length) {
+    showToast({ kind: 'info', key: 'notice.shapePackEmpty' });
+    return false;
+  }
+  const pack: ShapePack = {
+    format: SHAPE_PACK_FORMAT,
+    version: SHAPE_FORMAT_VERSION,
+    name: t('shapes.packName'),
+    shapes: list.map((f) => ({ name: f.name, category: f.category, aspect: f.aspect, fillRule: f.fillRule, outline: f.outline })),
+  };
+  const bytes = new TextEncoder().encode(JSON.stringify(pack, null, 1));
+  let saved: string | null;
+  try {
+    saved = await window.pigmento.files.saveAsset('shapePack', `${t('shapes.packName')}.pigmshapes`, bytes);
+  } catch {
+    showToast({ kind: 'error', key: 'error.shapeSave' });
+    return false;
+  }
+  if (!saved) return false;
+  showToast({ kind: 'info', key: 'notice.shapePackExported', params: { count: list.length, name: saved.split(/[\\/]/).pop() ?? saved } });
+  return true;
+}
+
+/** Add the shapes in a shape pack to My shapes (each gets a new id). */
+export async function importShapePack(): Promise<number> {
+  let file: { name: string; bytes: Uint8Array } | null;
+  try {
+    file = await window.pigmento.files.openAsset('shapePack');
+  } catch {
+    showToast({ kind: 'error', key: 'error.shapePackInvalid', params: { name: '' } });
+    return 0;
+  }
+  if (!file) return 0;
+  const pack = parseShapePack(file.bytes);
+  if (!pack) {
+    showToast({ kind: 'error', key: 'error.shapePackInvalid', params: { name: file.name } });
+    return 0;
+  }
+  const room = Math.max(0, MAX_CUSTOM_SHAPES - files.size);
+  let added = 0;
+  for (const s of pack.shapes.slice(0, room)) {
+    const f: CustomShapeFile = { format: SHAPE_FORMAT, version: SHAPE_FORMAT_VERSION, id: `my-${crypto.randomUUID()}`, createdAt: Date.now() + added, ...s };
+    if (!(await store(f))) break;
+    added++;
+  }
+  showToast({ kind: 'info', key: 'notice.shapePackImported', params: { count: added } });
+  return added;
+}
+
+/** A validated shape pack from file bytes, or null. */
+export function parseShapePack(bytes: Uint8Array): ShapePack | null {
+  try {
+    const r = ShapePackSchema.safeParse(JSON.parse(new TextDecoder('utf-8').decode(bytes)));
+    return r.success ? r.data : null;
+  } catch {
+    return null;
+  }
+}
+
+export function hasCustomShapes(): boolean {
+  return files.size > 0;
 }
