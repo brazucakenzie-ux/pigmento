@@ -190,7 +190,7 @@ Each item is ticked in the same commit as its work.
 - [x] 2.13 Pen tool and Shape Editor: click for corners, drag for curves, add/delete/move points, smooth/corner conversion, open/closed paths; save to the personal shape library with name, category and thumbnail; rename/duplicate/delete/favourite
 - [x] 2.14 Selection to shape (mask tracing and simplification); SVG import (sanitised, paths and basic shapes); shape packs import/export with a Zod schema documented in `docs/shape-format.md` (+ schema tests)
 - [x] 2.15 Palette files: import/export `.json`, import `.gpl` and `.ase`; SVG export (vector layers as real paths, raster layers as embedded PNG)
-- [ ] 2.16 Golden-image tests for every built-in shape; e2e for creating and using a custom shape and for project save/reopen; `npm run check` green; report
+- [x] 2.16 Golden-image tests for every built-in shape; e2e for creating and using a custom shape and for project save/reopen; `npm run check` green; report
 
 ### Milestone 3 — Brushes, effects, drawing aids
 Full brush engine and dynamics, stabiliser, symmetry; `BrushRegistry` with 40+ brushes; Brush Designer; brush packs (`docs/brush-format.md`); smudge, blur, sharpen, clone, dodge/burn; brush along outline and path stroking; adjustments and filters in workers (`FilterRegistry`); reference image; view rotation; performance budgets. Tests per the brief.

@@ -17,6 +17,8 @@ export interface PigmentoTestHook {
   guides(): { axis: 'x' | 'y'; pos: number }[];
   vectorObjects(id?: string): VectorObject[] | null;
   vectorSelection(): string[];
+  shapeSheet(cell: number, cols: number): Promise<{ ids: string[]; w: number; h: number; png: number[] }>;
+  compareSheets(a: number[], b: number[], cell: number, cols: number): Promise<number[]>;
   pathInfo(): { drawing: boolean; closed: boolean; selected: { smooth: boolean } | null; anchors: number } | null;
   setVectorSelection(ids: string[]): void;
   activeLayerKind(): 'raster' | 'group' | 'vector';

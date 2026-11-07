@@ -4,6 +4,49 @@ import { engine } from '../state/engine';
 import { useUi } from '../state/store';
 import { openPath } from '../services/files';
 import { autosaveNow } from '../services/autosave';
+import { defaultParams, shapeRegistry } from '@engine/shapes/ShapeRegistry';
+import { paintShape } from '@engine/vector/render';
+
+/** Every built-in shape drawn into its own cell (golden-image tests). */
+async function shapeSheet(cell: number, cols: number): Promise<{ ids: string[]; w: number; h: number; png: number[] }> {
+  const defs = shapeRegistry.all().filter((d) => !d.custom);
+  const w = cols * cell;
+  const h = Math.ceil(defs.length / cols) * cell;
+  const ctx = new OffscreenCanvas(w, h).getContext('2d', { willReadFrequently: true })!;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, w, h);
+  defs.forEach((d, i) => {
+    const cx = (i % cols) * cell + cell / 2;
+    const cy = Math.floor(i / cols) * cell + cell / 2;
+    paintShape(ctx, {
+      shape: 'parametric',
+      shapeId: d.id,
+      params: defaultParams(d),
+      box: { cx, cy, w: cell - 10, h: cell - 10, angle: 0 },
+      points: [],
+      style: { mode: 'both', width: 2, outline: { r: 20, g: 20, b: 40, a: 255 }, fill: { r: 120, g: 160, b: 230, a: 255 }, radius: 0, antialias: true },
+    });
+  });
+  const data = ctx.getImageData(0, 0, w, h).data;
+  const png = await engine.codecs.encode('png', w, h, new Uint8ClampedArray(data), 100, 96);
+  return { ids: defs.map((d) => d.id), w, h, png: Array.from(png) };
+}
+
+/** Pixels per cell that differ (any channel by more than 24) between two sheets. */
+async function compareSheets(a: number[], b: number[], cell: number, cols: number): Promise<number[]> {
+  const [x, y] = await Promise.all([engine.codecs.decode(new Uint8Array(a)), engine.codecs.decode(new Uint8Array(b))]);
+  if (x.w !== y.w || x.h !== y.h) return [-1];
+  const rows = Math.ceil(x.h / cell);
+  const counts = new Array<number>(rows * cols).fill(0);
+  for (let py = 0; py < x.h; py++) {
+    for (let px = 0; px < x.w; px++) {
+      const i = (py * x.w + px) * 4;
+      const d = Math.max(Math.abs(x.data[i] - y.data[i]), Math.abs(x.data[i + 1] - y.data[i + 1]), Math.abs(x.data[i + 2] - y.data[i + 2]), Math.abs(x.data[i + 3] - y.data[i + 3]));
+      if (d > 24) counts[Math.floor(py / cell) * cols + Math.floor(px / cell)]++;
+    }
+  }
+  return counts;
+}
 
 /**
  * Exposes a small read-mostly API on window.__pigmentoTest when running end-to-end tests
@@ -12,6 +55,8 @@ import { autosaveNow } from '../services/autosave';
 export function installTestHook(): void {
   (window as unknown as Record<string, unknown>).__pigmentoTest = {
     pixel: (x: number, y: number) => engine.sampleColor(x, y),
+    shapeSheet,
+    compareSheets,
     doc: () => ({ width: engine.doc.width, height: engine.doc.height }),
     history: () => {
       const h = engine.historyInfo();
