@@ -94,6 +94,10 @@ A shape from the shape library is `"shape": "parametric"` with a `box`, the libr
 ```
 An unknown `shapeId` (for example from a newer version) is kept as is and drawn as its box until that shape is available.
 
+A personal shape (from My shapes) also carries its outline in `unitPath`, in the same form as a path's `subpaths` but in a 0–1 box, plus its `fillRule`. It is drawn from that copy, so the drawing doesn't depend on the shape still being in My shapes.
+
+A path (drawn with the Pen, or a shape converted to a path) is `"shape": "path"` with `box: null` and its outline in `subpaths`. Each subpath has `closed` and a list of `anchors`, each `{ "x", "y", "in", "out", "smooth" }`: `in` and `out` are the Bézier handles towards the previous and next point (`null` for a corner on that side), and `smooth` keeps the two handles in line while editing. `fillRule` is `evenodd` (the default: inner subpaths are holes) or `nonzero`. All shape layers together may hold at most 2,000,000 path points.
+
 A `style` may also say how the shape is filled and outlined. Every field is optional; without them a shape has a solid fill and outline and the usual ends and corners for its kind:
 
 | Field | Values |

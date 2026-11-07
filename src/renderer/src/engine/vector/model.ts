@@ -2,6 +2,7 @@ import { boundsOfPoints, rectUnion, type Point, type Rect } from '../core/geomet
 import { matChain, matScale, matTranslate, type Mat } from '../core/matrix';
 import { boxBounds, type BoxGeom } from '../live/BoxGeom';
 import type { ShapeKind, ShapeStyle } from '../live/ShapeObject';
+import { subpathBounds, transformSubpaths, type SubPaths } from './pathData';
 
 /**
  * Objects on a shape (vector) layer. Immutable: edits make new objects, so history steps can
@@ -19,6 +20,12 @@ export interface VectorShape {
   /** Library shape and its slider values (parametric shapes only). */
   readonly shapeId?: string;
   readonly params?: Readonly<Record<string, number>>;
+  /** Paths (pen paths, converted shapes): the outline as subpaths in document coordinates. */
+  readonly subpaths?: SubPaths;
+  /** Personal library shapes: their outline in a unit box, kept with the drawing. */
+  readonly unitPath?: SubPaths;
+  /** How overlapping parts fill (paths and personal shapes). */
+  readonly fillRule?: 'evenodd' | 'nonzero';
 }
 
 export interface VectorGroup {
@@ -45,6 +52,7 @@ export function* walkShapes(nodes: readonly VectorNode[]): Generator<VectorShape
 /** Geometric bounds (without the outline's width). */
 export function shapeBounds(s: VectorShape): Rect | null {
   if (s.box) return boxBounds(s.box);
+  if (s.subpaths) return subpathBounds(s.subpaths);
   return boundsOfPoints([...s.points]);
 }
 
@@ -67,7 +75,7 @@ const apply = (m: Mat, p: Point): Point => ({ x: m[0] * p.x + m[2] * p.y + m[4],
  */
 export function transformNode(n: VectorNode, m: Mat): VectorNode {
   if (n.type === 'group') return { ...n, children: n.children.map((c) => transformNode(c, m)) };
-  if (!n.box) return { ...n, points: n.points.map((p) => apply(m, p)) };
+  if (!n.box) return { ...n, points: n.points.map((p) => apply(m, p)), ...(n.subpaths ? { subpaths: transformSubpaths(n.subpaths, m) } : {}) };
   const g = n.box;
   const c = apply(m, { x: g.cx, y: g.cy });
   const cos = Math.cos(g.angle);

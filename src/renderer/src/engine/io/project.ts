@@ -15,6 +15,7 @@ import { Selection } from '../doc/Selection';
 import { guide } from '../doc/guides';
 import { parseHex, toHex8 } from '../core/color';
 import { walkShapes, type VectorNode } from '../vector/model';
+import type { SubPaths } from '../vector/pathData';
 import type { ShapeStyle } from '../live/ShapeObject';
 import { MAX_STOPS } from '../raster/gradient';
 import { addImageAsset, ASSET_ID, imageAsset, MAX_ASSET_PIXELS } from '../vector/assets';
@@ -159,10 +160,16 @@ function styleFromJson(j: ShapeStyleJsonT): ShapeStyle {
   for (const k of ['dash', 'cap', 'join', 'arrowStart', 'arrowEnd'] as const) if (j[k]) (s as unknown as Record<string, unknown>)[k] = j[k];
   return s;
 }
+const AnchorJson = z.object({ x: num, y: num, in: PointJson.nullable(), out: PointJson.nullable(), smooth: z.boolean() });
+/** Paths: subpaths of points with Bézier handles (document coordinates, or a unit box). */
+const SubPathsJson = z.array(z.object({ closed: z.boolean(), anchors: z.array(AnchorJson).min(1).max(100000) })).min(1).max(2000);
+/** Most path points all shape layers together may hold. */
+const MAX_ANCHORS = 2_000_000;
+
 const ShapeNodeJson = z.object({
   type: z.literal('shape'),
   id: z.string().min(1).max(100),
-  shape: z.enum(['line', 'curve', 'rect', 'roundRect', 'ellipse', 'polygon', 'parametric']),
+  shape: z.enum(['line', 'curve', 'rect', 'roundRect', 'ellipse', 'polygon', 'parametric', 'path']),
   box: z.object({ cx: num, cy: num, w: num, h: num, angle: num }).nullable(),
   points: z.array(PointJson).max(100000),
   style: ShapeStyleJson,
@@ -172,6 +179,10 @@ const ShapeNodeJson = z.object({
     .record(z.string().regex(/^[a-z][a-z0-9]{0,39}$/i), num)
     .refine((r) => Object.keys(r).length <= 32)
     .optional(),
+  /** Paths: the outline. Personal library shapes: their outline in a unit box. */
+  subpaths: SubPathsJson.optional(),
+  unitPath: SubPathsJson.optional(),
+  fillRule: z.enum(['evenodd', 'nonzero']).optional(),
 });
 type VectorNodeJson = z.infer<typeof ShapeNodeJson> | { type: 'group'; id: string; children: VectorNodeJson[] };
 const VectorNodeSchema: z.ZodType<VectorNodeJson> = z.lazy(() =>
@@ -190,16 +201,43 @@ function nodeToJson(n: VectorNode): VectorNodeJson {
     points: n.points.map((p) => ({ x: p.x, y: p.y })),
     style: styleToJson(s),
     ...(n.shapeId ? { shapeId: n.shapeId, params: { ...n.params } } : {}),
+    ...(n.subpaths ? { subpaths: subpathsToJson(n.subpaths) } : {}),
+    ...(n.unitPath ? { unitPath: subpathsToJson(n.unitPath) } : {}),
+    ...(n.fillRule ? { fillRule: n.fillRule } : {}),
   };
 }
 
-function nodeFromJson(n: VectorNodeJson, depth: number, counter: { n: number }): VectorNode {
+function subpathsToJson(subs: SubPaths): z.infer<typeof SubPathsJson> {
+  return subs.map((sp) => ({
+    closed: sp.closed,
+    anchors: sp.anchors.map((a) => ({ x: a.x, y: a.y, in: a.in ? { x: a.in.x, y: a.in.y } : null, out: a.out ? { x: a.out.x, y: a.out.y } : null, smooth: a.smooth })),
+  }));
+}
+
+function nodeFromJson(n: VectorNodeJson, depth: number, counter: { n: number; anchors?: number }): VectorNode {
   if (depth > MAX_DEPTH || ++counter.n > MAX_OBJECTS) throw new ProjectError('error.projectInvalid', 'Too many shapes');
   if (n.type === 'group') return { type: 'group', id: n.id, children: n.children.map((c) => nodeFromJson(c, depth + 1, counter)) };
   // A library shape needs its box and id.
   if (n.shape === 'parametric' && (!n.box || !n.shapeId)) throw new ProjectError('error.projectInvalid', 'Bad shape');
-  const library = n.shape === 'parametric' ? { shapeId: n.shapeId!, params: { ...n.params } } : {};
-  return { type: 'shape', id: n.id, shape: n.shape, box: n.box ? { ...n.box } : null, points: n.points, style: styleFromJson(n.style), ...library };
+  // A path needs its outline.
+  if (n.shape === 'path' && !n.subpaths) throw new ProjectError('error.projectInvalid', 'Path without points');
+  for (const subs of [n.subpaths, n.unitPath]) {
+    counter.anchors = (counter.anchors ?? 0) + (subs?.reduce((k, sp) => k + sp.anchors.length, 0) ?? 0);
+    if (counter.anchors > MAX_ANCHORS) throw new ProjectError('error.projectInvalid', 'Too many path points');
+  }
+  const library = n.shape === 'parametric' ? { shapeId: n.shapeId!, params: { ...n.params }, ...(n.unitPath ? { unitPath: n.unitPath } : {}) } : {};
+  const outline = n.shape === 'path' ? { subpaths: n.subpaths! } : {};
+  return {
+    type: 'shape',
+    id: n.id,
+    shape: n.shape,
+    box: n.box ? { ...n.box } : null,
+    points: n.points,
+    style: styleFromJson(n.style),
+    ...library,
+    ...outline,
+    ...(n.fillRule ? { fillRule: n.fillRule } : {}),
+  };
 }
 
 type LayerJson = z.infer<typeof RasterJson> | z.infer<typeof VectorJson> | GroupJson;

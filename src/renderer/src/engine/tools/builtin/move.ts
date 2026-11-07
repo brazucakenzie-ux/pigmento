@@ -7,7 +7,7 @@ import type { FloatObject } from '../../live/FloatObject';
 import { ShapeObject, type FillMode } from '../../live/ShapeObject';
 import { boundsOf, nodeBounds, rectToRect, transformNode, translateNode, walkShapes, type VectorNode } from '../../vector/model';
 import type { RGBA } from '../../core/color';
-import { beginShapeEdit, dragShapeEdit, endShapeEdit, FILL_MODE_OPTION, FILL_STYLE_OPTION, optionsOfStyle, outlineStyleOption, styleExtrasOf, WIDTH_OPTION } from '../shapeTools';
+import { beginShapeEdit, dragShapeEdit, endShapeEdit, FILL_MODE_OPTION, FILL_STYLE_OPTION, optionsOfStyle, outlineStyleOption, pathKeys, styleExtrasOf, WIDTH_OPTION } from '../shapeTools';
 import { lineStyleOf } from '../../vector/render';
 import type { ShapeStyle } from '../../live/ShapeObject';
 import { registerTool } from '../ToolRegistry';
@@ -111,6 +111,16 @@ export default registerTool({
     const layer = ctx.activeVector;
     if (!layer) return startPixelMove(ctx, e);
     if (!ctx.canPaint()) return;
+    // A double-click edits the shape under the pointer, even where a resize handle sits on
+    // its outline (the middle of a straight edge).
+    if (e.detail >= 2) {
+      const target = ctx.vectorHit(p);
+      if (target) {
+        drag = null;
+        ctx.editVectorShape(target);
+        return;
+      }
+    }
     const sel = selectionBox(ctx);
     if (sel) {
       const h = hitHandle(sel.box, screenOf(ctx), sp, ctx.view.zoom, true);
@@ -214,17 +224,7 @@ export default registerTool({
   },
 
   keyDown(ctx, e) {
-    if (ctx.live instanceof ShapeObject) {
-      if (e.key === 'Enter') {
-        ctx.commitLive();
-        return true;
-      }
-      if (e.key === 'Escape') {
-        ctx.cancelLive();
-        return true;
-      }
-      return false;
-    }
+    if (ctx.live instanceof ShapeObject) return pathKeys(ctx, e);
     if (!ctx.vectorSelection.length) return false;
     if (e.key === 'Escape' || e.key === 'Enter') {
       ctx.setVectorSelection([]);

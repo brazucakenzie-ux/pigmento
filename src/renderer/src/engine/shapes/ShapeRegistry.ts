@@ -1,5 +1,6 @@
 import type { I18nKey } from '../../i18n';
 import { PathBuilder, type PathCmd } from './path';
+import { unitCmds, type SubPaths } from '../vector/pathData';
 
 /** The gallery's categories, in display order. */
 export const SHAPE_CATEGORIES = [
@@ -15,7 +16,8 @@ export const SHAPE_CATEGORIES = [
   'math',
   'nature',
 ] as const;
-export type ShapeCategory = (typeof SHAPE_CATEGORIES)[number];
+/** Built-in categories, plus 'custom' for personal shapes with no other category. */
+export type ShapeCategory = (typeof SHAPE_CATEGORIES)[number] | 'custom';
 
 /** A slider on the shape (values in display units: %, degrees or a count). */
 export interface ShapeParam {
@@ -43,6 +45,32 @@ export interface ShapeDef {
   /** Lines only (brackets, spirals): never filled. */
   readonly strokeOnly: boolean;
   build(b: PathBuilder, w: number, h: number, p: ShapeParams): void;
+  /** Personal shapes: the name the user gave it (built-in shapes use labelKey). */
+  readonly name?: string;
+  readonly custom?: boolean;
+  /** Width ÷ height it was made at (thumbnails keep it). */
+  readonly aspect?: number;
+  /** Personal shapes: the outline in a unit box. */
+  readonly unit?: SubPaths;
+}
+
+/** A personal shape (from the Shape Editor or a shape pack): an outline in a unit box. */
+export function customShapeDef(d: { id: string; name: string; category: ShapeCategory; unit: SubPaths; fillRule: 'evenodd' | 'nonzero'; aspect: number }): ShapeDef {
+  const strokeOnly = d.unit.every((s) => !s.closed);
+  return {
+    id: d.id,
+    category: d.category,
+    labelKey: 'shape.custom' as I18nKey,
+    keywords: [],
+    params: [],
+    fillRule: d.fillRule,
+    strokeOnly,
+    name: d.name,
+    custom: true,
+    aspect: d.aspect,
+    unit: d.unit,
+    build: (b, w, h) => void b.cmds.push(...unitCmds(d.unit, w, h)),
+  };
 }
 
 type ParamInit = Omit<ShapeParam, 'labelKey' | 'step' | 'unit'> & {
@@ -107,6 +135,15 @@ export class ShapeRegistry {
   register(def: ShapeDef): void {
     if (this.defs.has(def.id)) throw new Error(`Shape "${def.id}" is already registered`);
     this.defs.set(def.id, def);
+  }
+
+  /** Add or replace a personal shape. */
+  set(def: ShapeDef): void {
+    this.defs.set(def.id, def);
+  }
+
+  remove(id: string): void {
+    if (this.defs.get(id)?.custom) this.defs.delete(id);
   }
 
   get(id: string): ShapeDef | undefined {

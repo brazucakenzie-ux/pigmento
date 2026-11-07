@@ -1,3 +1,4 @@
+import type { CustomShapeFile } from './shapeFormat';
 import type { FileFormat } from './formats';
 import type { Settings } from './settings';
 
@@ -38,6 +39,9 @@ export const IPC = {
   patternsList: 'patterns:list',
   patternsSave: 'patterns:save',
   patternsRemove: 'patterns:remove',
+  shapesList: 'shapes:list',
+  shapesSave: 'shapes:save',
+  shapesRemove: 'shapes:remove',
   // main -> renderer events
   evCloseRequested: 'ev:close-requested',
   evOpenFile: 'ev:open-file',
@@ -176,6 +180,13 @@ export interface PigmentoApi {
     list(): Promise<SavedPattern[]>;
     /** Store a PNG under a name; resolves the new id. */
     save(png: Uint8Array, name: string): Promise<string>;
+    remove(id: string): Promise<void>;
+  };
+  /** Personal shapes made with the Shape Editor. */
+  shapes: {
+    list(): Promise<CustomShapeFile[]>;
+    /** Add or replace one (by id). */
+    save(shape: CustomShapeFile): Promise<void>;
     remove(id: string): Promise<void>;
   };
   system: {

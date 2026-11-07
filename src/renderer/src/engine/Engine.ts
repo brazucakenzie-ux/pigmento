@@ -32,7 +32,9 @@ import { boxLines, snapBox, snapPoint, type SnapLine, type SnapMatch, type SnapT
 import { MAX_STOPS } from './raster/gradient';
 import type { LiveKind, LiveObject } from './live/LiveObject';
 import type { TextObject } from './live/TextObject';
-import { ShapeObject, type ShapeStyle } from './live/ShapeObject';
+import { ShapeObject, type PathInfo, type ShapeStyle } from './live/ShapeObject';
+import { shapeOutline } from './vector/convert';
+import { toUnitBox, type SubPath } from './vector/pathData';
 import {
   alignNodes,
   arrangeNodes,
@@ -177,6 +179,8 @@ export interface EngineEvents {
   savedSelections: SavedSelectionInfo[];
   /** Free transform in progress (null when none). */
   transform: TransformInfo | null;
+  /** A path is being drawn or edited (its state for the options bar), or null. */
+  path: PathInfo | null;
   /** Built-in and saved fill patterns. */
   patterns: PatternInfo[];
   /** Number of guides (for enabling "Clear guides"). */
@@ -740,6 +744,14 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     }
     this._live = obj;
     this.renderer.liveDrawer = (ctx, r) => obj.draw(ctx, r);
+    const drawnPath = obj instanceof ShapeObject && obj.shape === 'path' ? obj : null;
+    if (drawnPath) {
+      drawnPath.onPathChange = () => {
+        this.emit('path', drawnPath.pathInfo());
+        this.invalidateOverlay();
+      };
+      this.emit('path', drawnPath.pathInfo());
+    }
     if (obj instanceof TransformObject) {
       let last = obj.bounds();
       obj.onChange = () => {
@@ -773,6 +785,11 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this._live = null;
     this.renderer.liveDrawer = null;
     this.invalidate(obj.bounds());
+    const drawnPath = obj instanceof ShapeObject && obj.shape === 'path' ? obj : null;
+    if (drawnPath) {
+      drawnPath.onPathChange = null;
+      this.emit('path', null);
+    }
     if (obj instanceof TransformObject) {
       obj.onChange = null;
       this.emit('transform', null);
@@ -1363,6 +1380,69 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     return null;
   }
 
+  /** The path being drawn or edited (live), if any. */
+  private get livePath(): ShapeObject | null {
+    const l = this._live;
+    return l instanceof ShapeObject && l.shape === 'path' ? l : null;
+  }
+
+  /** Options bar commands for the path being edited. */
+  pathCommand(cmd: 'close' | 'open' | 'smooth' | 'corner' | 'delete' | 'finish'): void {
+    const p = this.livePath;
+    if (!p) return;
+    const before = p.bounds();
+    if (cmd === 'finish') {
+      if (!p.close()) this.cancelLive();
+    } else if (cmd === 'close' || cmd === 'open') {
+      if (p.open && !p.close()) return;
+      p.setClosedPath(cmd === 'close');
+    } else if (cmd === 'smooth' || cmd === 'corner') p.setPointSmooth(cmd === 'smooth');
+    else if (!p.deleteSelected()) {
+      // That was the last point: nothing is left to draw.
+      this.cancelLive();
+      return;
+    }
+    this.invalidate(rectUnion(before, p.bounds()));
+  }
+
+  /** Turn the selected shapes into paths whose points can be edited (one step). */
+  convertVectorToPath(): void {
+    const sel = new Set(this.vectorSel);
+    let changed = false;
+    this.editVector('history.convertToPath', (list) =>
+      list.map((n) => {
+        if (!sel.has(n.id) || n.type !== 'shape' || n.shape === 'path') return n;
+        const o = shapeOutline(n);
+        if (!o) return n;
+        changed = true;
+        const node: VectorShape = { type: 'shape', id: n.id, shape: 'path', box: null, points: [], style: { ...n.style }, subpaths: o.subpaths, fillRule: o.fillRule };
+        return node;
+      }),
+    );
+    if (changed) this.emit('vectorSelection', this.vectorSelectionInfo());
+  }
+
+  /** Can the selection (or the path being drawn) be saved as a personal shape? */
+  canSaveAsShape(): boolean {
+    return this.libraryOutline() !== null;
+  }
+
+  /**
+   * The outline to save as a personal shape: the path being edited, or the one selected shape,
+   * scaled into a unit box.
+   */
+  libraryOutline(): { unit: SubPath[]; aspect: number; fillRule: 'evenodd' | 'nonzero' } | null {
+    const live = this._live instanceof ShapeObject ? this._live : null;
+    let outline = live && !live.open ? shapeOutline(live) : null;
+    if (!outline && !live) {
+      const nodes = this.selectedVectorNodes();
+      if (nodes.length === 1 && nodes[0].type === 'shape') outline = shapeOutline(nodes[0]);
+    }
+    if (!outline) return null;
+    const u = toUnitBox(outline.subpaths);
+    return u ? { unit: u.subs, aspect: u.aspect, fillRule: outline.fillRule } : null;
+  }
+
   newShapeLayer(): string {
     this.commitLive();
     return this.layers.addVector();
@@ -1382,7 +1462,14 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     if (!node || node.type !== 'shape') return false;
     this.commitLive();
     const geom = node.box ? { box: { ...node.box } } : { points: node.points.map((p) => ({ ...p })) };
-    const s = new ShapeObject(node.shape, { ...node.style }, this.doc.width, this.doc.height, { ...geom, shapeId: node.shapeId ?? null, params: node.params });
+    const s = new ShapeObject(node.shape, { ...node.style }, this.doc.width, this.doc.height, {
+      ...geom,
+      shapeId: node.shapeId ?? null,
+      params: node.params,
+      subpaths: node.subpaths,
+      unitPath: node.unitPath,
+      fillRule: node.fillRule,
+    });
     s.vectorEdit = { layerId: layer.id, id, index, before: layer.objects };
     // The original is hidden while it's edited (nothing recorded until the edit is applied).
     this.previewVector(layer, layer.objects.filter((n) => n.id !== id));
@@ -1419,6 +1506,9 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       points: s.points.map((p) => ({ ...p })),
       style: { ...s.style, outline: { ...s.style.outline }, fill: { ...s.style.fill } },
       ...(s.shape === 'parametric' && s.shapeId ? { shapeId: s.shapeId, params: { ...s.params } } : {}),
+      ...(s.shape === 'path' ? { subpaths: s.subpaths } : {}),
+      ...(s.unitPath ? { unitPath: s.unitPath } : {}),
+      ...(s.fillRule ? { fillRule: s.fillRule } : {}),
     };
     let layer: VectorLayer | null = target === 'new' ? null : target;
     this.history.group(label, () => {

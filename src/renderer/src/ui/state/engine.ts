@@ -75,6 +75,7 @@ export function bindEngine(settings: Settings): void {
   engine.on('layers', (layers) => useUi.setState({ layers }));
   engine.on('savedSelections', (savedSelections) => useUi.setState({ savedSelections }));
   engine.on('transform', (transform) => useUi.setState({ transform }));
+  engine.on('path', (path) => useUi.setState({ path }));
   engine.on('patterns', (patterns) => useUi.setState({ patterns }));
   engine.on('guides', (guides) => useUi.setState({ guides }));
   engine.on('vectorSelection', (vectorSelection) => useUi.setState({ vectorSelection }));

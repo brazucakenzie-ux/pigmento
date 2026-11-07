@@ -3,6 +3,7 @@ import '../../shapes/library';
 import { createBoxShapeTool } from '../shapeTools';
 import { registerTool } from '../ToolRegistry';
 import type { OptionSpec, ToolOptions } from '../Tool';
+import type { SubPaths } from '../../vector/pathData';
 
 export const DEFAULT_LIBRARY_SHAPE = 'star-5';
 
@@ -24,11 +25,15 @@ const PARAMS_OPTION: OptionSpec = {
 export function libraryShapeOf(o: ToolOptions): {
   shapeId: string;
   params: Record<string, number>;
+  unitPath?: SubPaths;
+  fillRule?: 'evenodd' | 'nonzero';
 } {
   const def =
     shapeRegistry.get(String(o.shapeId ?? '')) ?? shapeRegistry.get(DEFAULT_LIBRARY_SHAPE)!;
   const table = (o.params ?? {}) as Record<string, Record<string, number> | undefined>;
-  return { shapeId: def.id, params: resolveParams(def, table[def.id]) };
+  // Personal shapes are copied into the drawing, so it doesn't depend on My shapes.
+  const own = def.custom && def.unit ? { unitPath: def.unit, fillRule: def.fillRule } : {};
+  return { shapeId: def.id, params: resolveParams(def, table[def.id]), ...own };
 }
 
 export default registerTool(

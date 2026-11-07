@@ -2,6 +2,7 @@ import { dragBox, rectUnion, type Point } from '../core/geometry';
 import { boxFromRect } from '../live/BoxGeom';
 import { ShapeObject, type FillMode, type ShapeKind, type ShapeStyle } from '../live/ShapeObject';
 import type { I18nKey } from '../../i18n';
+import type { SubPaths } from '../vector/pathData';
 import type { GradientStopValue, OptionSpec, Tool, ToolContext, ToolOptions, ToolPointerEvent } from './Tool';
 import { parseHex, toHex8 } from '../core/color';
 import {
@@ -267,7 +268,17 @@ export function beginShapeEdit(ctx: ToolContext, e: ToolPointerEvent): boolean {
   if (!live) return false;
   const hit = live.hit({ x: e.x, y: e.y }, { x: e.sx, y: e.sy }, (q) => ctx.view.toScreen(q.x, q.y), ctx.view.zoom);
   if (!hit) return false;
+  // Alt+click on a path point switches it between smooth and corner.
+  if (hit.type === 'anchor' && e.alt) {
+    const before = live.bounds();
+    const a = live.subpaths[hit.sub]?.anchors[hit.index];
+    live.setPointSmooth(!a?.smooth, { sub: hit.sub, index: hit.index });
+    ctx.invalidate(rectUnion(before, live.bounds()));
+    ctx.invalidateOverlay();
+    return true;
+  }
   live.beginDrag(hit, { x: e.x, y: e.y }, ctx.view.zoom);
+  ctx.invalidateOverlay();
   return true;
 }
 
@@ -308,6 +319,20 @@ export function hoverCursor(ctx: ToolContext, e: ToolPointerEvent): void {
   ctx.setCursor(live?.cursorFor(hit) ?? 'crosshair');
 }
 
+/** Keys for a live shape: Enter applies, Esc discards, Delete removes a selected path point. */
+export function pathKeys(ctx: ToolContext, e: KeyboardEvent): boolean {
+  const live = liveShape(ctx);
+  if (!live) return false;
+  if ((e.key === 'Delete' || e.key === 'Backspace') && live.shape === 'path' && live.selected) {
+    const before = live.bounds();
+    if (!live.deleteSelected()) ctx.cancelLive();
+    else ctx.invalidate(rectUnion(before, live.bounds()));
+    ctx.invalidateOverlay();
+    return true;
+  }
+  return shapeKeys(ctx, e);
+}
+
 export function shapeKeys(ctx: ToolContext, e: KeyboardEvent): boolean {
   if (!liveShape(ctx)) return false;
   if (e.key === 'Enter') {
@@ -333,7 +358,7 @@ interface BoxShapeConfig {
   /** Options shown before the drawing options (the library shape picker). */
   leadOptions?: OptionSpec[];
   /** Library shape to draw (parametric tools). */
-  library?: (ctx: ToolContext) => { shapeId: string; params: Record<string, number> };
+  library?: (ctx: ToolContext) => { shapeId: string; params: Record<string, number>; unitPath?: SubPaths; fillRule?: 'evenodd' | 'nonzero' };
   galleryOnly?: boolean;
 }
 
@@ -404,8 +429,8 @@ export function createBoxShapeTool(cfg: BoxShapeConfig): Tool {
       const live = liveShape(ctx);
       if (live && cfg.library && live.shape === 'parametric' && !live.vectorEdit) {
         const before = live.bounds();
-        const { shapeId, params } = cfg.library(ctx);
-        live.setShape(shapeId, params);
+        const { shapeId, params, unitPath, fillRule } = cfg.library(ctx);
+        live.setShape(shapeId, params, unitPath, fillRule);
         ctx.invalidate(rectUnion(before, live.bounds()));
       }
     },

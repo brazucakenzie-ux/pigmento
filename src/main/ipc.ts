@@ -27,6 +27,7 @@ import { getSettings, updateSettings } from './settings';
 import { setWallpaper } from './wallpaper';
 import { clearAutosave, listRecoverable, readAutosave, registerSession, releaseSession, writeAutosave } from './autosave';
 import { listPatterns, MAX_PATTERN_BYTES, removePattern, savePattern } from './patterns';
+import { listShapes, removeShape, saveShape } from './shapes';
 import {
   TOP_BAR_HEIGHT,
   allowCloseAndClose,
@@ -296,6 +297,12 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.patternsRemove, (_e, id: unknown) => {
     if (typeof id !== 'string') throw new Error('Invalid pattern id');
     return removePattern(id);
+  });
+  ipcMain.handle(IPC.shapesList, () => listShapes());
+  ipcMain.handle(IPC.shapesSave, (_e, shape: unknown) => saveShape(shape));
+  ipcMain.handle(IPC.shapesRemove, (_e, id: unknown) => {
+    if (typeof id !== 'string') throw new Error('Invalid shape id');
+    return removeShape(id);
   });
   ipcMain.handle(IPC.autosaveRead, (_e, id: unknown) => {
     if (typeof id !== 'string') throw new Error('Invalid session id');

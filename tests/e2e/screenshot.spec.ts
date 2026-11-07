@@ -352,3 +352,44 @@ test('capture shape styles', async () => {
     await h.close();
   }
 });
+
+// The Pen: a path being edited (points, handles, options bar) and the Save as my shape dialog.
+test('capture pen and my shapes', async () => {
+  test.skip(!process.env.PIGMENTO_SCREENSHOT, 'Set PIGMENTO_SCREENSHOT=1 to capture screenshots');
+  const out = process.env.PIGMENTO_SCREENSHOT_DIR ?? path.resolve('test-results');
+  const h = await launchApp();
+  const { page } = h;
+  const shot = (name: string) => page.screenshot({ path: path.join(out, `${name}.png`) });
+  const at = async (x: number, y: number) => {
+    const s = await page.evaluate(([dx, dy]) => window.__pigmentoTest!.docToScreen(dx, dy), [x, y] as const);
+    await page.mouse.click(s.x, s.y);
+  };
+  try {
+    await ready(page);
+    await page.getByRole('tab', { name: 'View' }).click();
+    await page.getByRole('button', { name: 'Light' }).click();
+    await page.getByRole('tab', { name: 'Shapes' }).click();
+    await page.getByRole('button', { name: 'Pen', exact: true }).click();
+    await page.getByRole('radio', { name: 'Outline and fill' }).click();
+    await at(150, 400);
+    await drag(page, [
+      [350, 150],
+      [450, 150],
+    ]);
+    await at(550, 400);
+    await at(350, 330);
+    await at(150, 400);
+    await page.waitForTimeout(150);
+    await shot('pen-editing');
+    await page.locator('.ribbon').getByRole('button', { name: 'Save as my shape…' }).click();
+    await page.waitForTimeout(200);
+    await shot('pen-save-dialog');
+    await page.getByRole('dialog', { name: 'Save as my shape' }).getByRole('button', { name: 'Save' }).click();
+    await page.getByRole('combobox', { name: 'Category' }).selectOption('custom');
+    await page.waitForTimeout(200);
+    await shot('pen-my-shapes');
+    console.warn('errors:', JSON.stringify(h.errors));
+  } finally {
+    await h.close();
+  }
+});

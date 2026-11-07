@@ -17,6 +17,7 @@ export interface PigmentoTestHook {
   guides(): { axis: 'x' | 'y'; pos: number }[];
   vectorObjects(id?: string): VectorObject[] | null;
   vectorSelection(): string[];
+  pathInfo(): { drawing: boolean; closed: boolean; selected: { smooth: boolean } | null; anchors: number } | null;
   setVectorSelection(ids: string[]): void;
   activeLayerKind(): 'raster' | 'group' | 'vector';
   addGuide(axis: 'x' | 'y', pos: number): void;
@@ -47,6 +48,7 @@ export interface VectorObject {
   params?: Record<string, number> | null;
   /** The full style (fill and outline styles included). */
   style?: { dash?: string; fillKind?: string; [key: string]: unknown };
+  subpaths?: { closed: boolean; anchors: { x: number; y: number; smooth: boolean; in: unknown; out: unknown }[] }[] | null;
   children?: VectorObject[];
 }
 

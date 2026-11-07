@@ -7,6 +7,8 @@ import { clearOwnAutosave, offerRecovery, startAutosave } from '../services/auto
 import { CanvasSizeDialog, NewImageDialog, PropertiesDialog, ResizeDialog, RotateDialog } from '../dialogs/ImageDialogs';
 import { ExportDialog } from '../dialogs/ExportDialog';
 import { GradientDialog } from '../dialogs/GradientDialog';
+import { DeleteShapeDialog, SaveShapeDialog } from '../dialogs/ShapeDialogs';
+import { loadCustomShapes } from '../services/shapes';
 import { loadSavedPatterns } from '../services/patterns';
 import { ColorRangeDialog, LoadSelectionDialog, ModifySelectionDialog, SaveSelectionDialog } from '../dialogs/SelectionDialogs';
 import { confirmDiscard, openPath } from '../services/files';
@@ -128,6 +130,10 @@ function DialogHost() {
       return <LoadSelectionDialog />;
     case 'gradient':
       return <GradientDialog toolId={d.toolId ?? 'gradient'} optKey={d.optKey ?? 'stops'} />;
+    case 'saveShape':
+      return <SaveShapeDialog id={d.id} />;
+    case 'deleteShape':
+      return <DeleteShapeDialog id={d.id} />;
   }
 }
 
@@ -168,6 +174,7 @@ export function App() {
       useUi.setState({ ready: true });
       void loadFonts();
       void loadSavedPatterns();
+      void loadCustomShapes();
       startAutosave();
       const launch = await api.window.getLaunchFile();
       if (launch) await openPath(launch, true);

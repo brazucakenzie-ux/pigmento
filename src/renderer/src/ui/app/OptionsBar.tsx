@@ -247,7 +247,28 @@ function VectorBar() {
       {group(['distributeH', 'distributeV'])}
       {group(['bringToFront', 'bringForward', 'sendBackward', 'sendToBack'])}
       {group(['groupShapes', 'ungroupShapes'])}
-      {group(['rasterizeLayer'])}
+      {group(['convertToPath', 'saveShape', 'rasterizeLayer'])}
+    </span>
+  );
+}
+
+/** A path being drawn or edited: finish, close or open it, and change or remove its points. */
+function PathBar() {
+  const info = useUi((s) => s.path);
+  if (!info) return null;
+  const btn = (label: string, icon: string, run: () => void, disabled = false, pressed?: boolean) => (
+    <button type="button" className="icon-btn" aria-label={label} data-tip={label} disabled={disabled} aria-pressed={pressed} onClick={run}>
+      <Icon name={icon} size={16} />
+    </button>
+  );
+  return (
+    <span className="opt tf-field" role="group" aria-label={t('a11y.pathTools')}>
+      {info.drawing ? btn(t('path.finish'), 'check', () => engine.pathCommand('finish'), info.anchors < 2) : null}
+      {btn(t(info.closed ? 'path.open' : 'path.close'), info.closed ? 'path-open' : 'path-close', () => engine.pathCommand(info.closed ? 'open' : 'close'), info.anchors < 2)}
+      {btn(t('path.smooth'), 'point-smooth', () => engine.pathCommand('smooth'), !info.selected || info.drawing, info.selected?.smooth === true)}
+      {btn(t('path.corner'), 'point-corner', () => engine.pathCommand('corner'), !info.selected || info.drawing, info.selected ? !info.selected.smooth : undefined)}
+      {btn(t('path.deletePoint'), 'delete', () => engine.pathCommand('delete'), !info.selected || info.drawing)}
+      {info.drawing ? null : <ActionIcon id="saveShape" />}
     </span>
   );
 }
@@ -327,6 +348,7 @@ export function OptionsBar() {
           <OptionControl key={spec.key} toolId={toolId} spec={spec} values={values} />
         ))}
         {toolId === 'transform' ? <TransformFields /> : null}
+        <PathBar />
         {toolId === 'move' && shapeLayer ? <SelectedShapeParams /> : null}
         {toolId === 'move' ? <VectorBar /> : null}
       </OptionScroller>

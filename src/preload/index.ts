@@ -62,6 +62,11 @@ const api: PigmentoApi = {
     save: (png, name) => ipcRenderer.invoke(IPC.patternsSave, png, name),
     remove: (id) => ipcRenderer.invoke(IPC.patternsRemove, id),
   },
+  shapes: {
+    list: () => ipcRenderer.invoke(IPC.shapesList),
+    save: (shape) => ipcRenderer.invoke(IPC.shapesSave, shape),
+    remove: (id) => ipcRenderer.invoke(IPC.shapesRemove, id),
+  },
   system: {
     getTheme: () => ipcRenderer.invoke(IPC.systemTheme),
     onThemeChanged: (cb) => subscribe<[SystemTheme]>(IPC.evThemeChanged, cb),

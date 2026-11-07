@@ -5,8 +5,9 @@ import type { ShapeKind, ShapeStyle } from '../live/ShapeObject';
 import { patternById, renderPattern } from '../raster/patterns';
 import { Surface } from '../raster/Surface';
 import type { ImageBuf } from '../raster/transform';
-import { shapePath, shapeRegistry, type ShapeDef } from '../shapes/ShapeRegistry';
-import { toPath2D } from '../shapes/path';
+import { customShapeDef, shapePath, shapeRegistry, type ShapeDef } from '../shapes/ShapeRegistry';
+import { pathBounds, toPath2D } from '../shapes/path';
+import { toCmds, type SubPaths } from './pathData';
 import '../shapes/library';
 import { assetCanvas } from './assets';
 import { shapeBounds, walkShapes, type VectorNode, type VectorShape } from './model';
@@ -20,6 +21,9 @@ export interface ShapeGeom {
   readonly style: ShapeStyle;
   readonly shapeId?: string | null;
   readonly params?: Readonly<Record<string, number>>;
+  readonly subpaths?: SubPaths;
+  readonly unitPath?: SubPaths;
+  readonly fillRule?: 'evenodd' | 'nonzero';
 }
 
 type Ctx = OffscreenCanvasRenderingContext2D;
@@ -29,17 +33,30 @@ export function isLineShape(shape: ShapeKind, open = false): boolean {
   return shape === 'line' || shape === 'curve' || open;
 }
 
+/** Personal shapes carry their own outline; one definition is made per outline. */
+const unitDefs = new WeakMap<object, ShapeDef>();
+
 /** The library definition of a parametric shape (undefined for other kinds or unknown ids). */
-export function shapeDefOf(g: Pick<ShapeGeom, 'shape' | 'shapeId'>): ShapeDef | undefined {
-  return g.shape === 'parametric' && g.shapeId ? shapeRegistry.get(g.shapeId) : undefined;
+export function shapeDefOf(g: Pick<ShapeGeom, 'shape' | 'shapeId' | 'unitPath' | 'fillRule'>): ShapeDef | undefined {
+  if (g.shape !== 'parametric') return undefined;
+  if (g.unitPath) {
+    let d = unitDefs.get(g.unitPath);
+    if (!d) {
+      d = customShapeDef({ id: g.shapeId ?? 'custom', name: '', category: 'custom', unit: g.unitPath, fillRule: g.fillRule ?? 'evenodd', aspect: 1 });
+      unitDefs.set(g.unitPath, d);
+    }
+    return d;
+  }
+  return g.shapeId ? shapeRegistry.get(g.shapeId) : undefined;
 }
 
 /** Drawn with the outline only: lines, curves, open polygons and line-only library shapes. */
-export function isStrokeOnly(g: Pick<ShapeGeom, 'shape' | 'shapeId'>, open = false): boolean {
+export function isStrokeOnly(g: Pick<ShapeGeom, 'shape' | 'shapeId' | 'unitPath' | 'fillRule'>, open = false): boolean {
   return isLineShape(g.shape, open) || shapeDefOf(g)?.strokeOnly === true;
 }
 
 function fillRuleOf(g: ShapeGeom): CanvasFillRule {
+  if (g.shape === 'path') return g.fillRule ?? 'evenodd';
   return shapeDefOf(g)?.fillRule ?? 'nonzero';
 }
 
@@ -105,6 +122,17 @@ function frameOf(g: ShapeGeom, open = false, rubber: Point | null = null): Frame
     const aw = Math.abs(b.w);
     const ah = Math.abs(b.h);
     return { path: local, matrix: new DOMMatrix([c * sx, s * sx, -s * sy, c * sy, b.cx, b.cy]), rect: { x: -aw / 2, y: -ah / 2, w: aw, h: ah } };
+  }
+  if (g.shape === 'path') {
+    const cmds = toCmds(g.subpaths ?? []);
+    // While the pen is placing points, a segment runs from the last one to the pointer.
+    const lastSub = g.subpaths?.[g.subpaths.length - 1];
+    const last = lastSub?.anchors[lastSub.anchors.length - 1];
+    if (open && rubber && last) {
+      const c1 = last.out ?? last;
+      cmds.push({ op: 'C', x1: c1.x, y1: c1.y, x2: rubber.x, y2: rubber.y, x: rubber.x, y: rubber.y });
+    }
+    return { path: toPath2D(cmds), matrix: null, rect: pathBounds(cmds) ?? { x: 0, y: 0, w: 0, h: 0 } };
   }
   const p = new Path2D();
   const pts = g.points;

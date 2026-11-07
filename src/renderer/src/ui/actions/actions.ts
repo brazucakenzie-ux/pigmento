@@ -243,6 +243,23 @@ const base: Action[] = [
   { id: 'sendBackward', labelKey: 'action.sendBackward', icon: 'send-backward', group: 'image', run: () => engine.arrangeVector('backward'), enabled: hasShapes(1) },
   { id: 'sendToBack', labelKey: 'action.sendToBack', icon: 'back', group: 'image', run: () => engine.arrangeVector('back'), enabled: hasShapes(1) },
   { id: 'groupShapes', labelKey: 'action.groupShapes', icon: 'group', group: 'image', run: () => engine.groupVector(), enabled: hasShapes(2) },
+  {
+    id: 'convertToPath',
+    labelKey: 'action.convertToPath',
+    icon: 'pen',
+    group: 'image',
+    run: () => engine.convertVectorToPath(),
+    enabled: (s) => s.vectorSelection.count > s.vectorSelection.groups,
+  },
+  {
+    id: 'saveShape',
+    labelKey: 'action.saveShape',
+    icon: 'star',
+    group: 'image',
+    run: () => openDialog({ kind: 'saveShape' }),
+    // One shape selected, or a shape or finished path being edited.
+    enabled: (s) => (s.live === 'shape' && !s.path?.drawing) || (s.vectorSelection.count === 1 && s.vectorSelection.groups === 0),
+  },
   { id: 'ungroupShapes', labelKey: 'action.ungroupShapes', icon: 'ungroup', group: 'image', run: () => engine.ungroupVector(), enabled: (s) => s.vectorSelection.groups > 0 },
   // Colours
   { id: 'swapColors', labelKey: 'action.swapColors', icon: 'swap', group: 'colors', shortcut: ['X'], run: () => engine.swapColors() },

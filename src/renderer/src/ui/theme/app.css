@@ -2043,3 +2043,44 @@ kbd {
     border-color: CanvasText;
   }
 }
+
+/* Save as my shape. */
+.dialog.shape-dialog {
+  width: min(460px, 92vw);
+}
+.shape-dialog-body {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.shape-dialog-fields {
+  flex: 1;
+  display: grid;
+  gap: 10px;
+}
+.shape-preview {
+  flex-shrink: 0;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-input);
+  color: var(--text);
+}
+.shape-preview path {
+  stroke-width: 1.6;
+}
+.rb-row {
+  display: flex;
+  gap: 2px;
+}
+.shape-dialog-fields {
+  min-width: 0;
+}
+.shape-dialog-fields .field {
+  grid-template-columns: 72px minmax(0, 1fr);
+}
+.shape-dialog-fields .text-input,
+.shape-dialog-fields .select {
+  width: 100%;
+  min-width: 0;
+}

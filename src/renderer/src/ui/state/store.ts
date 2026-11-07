@@ -6,6 +6,7 @@ import type { RGBA } from '@engine/core/color';
 import type { Point } from '@engine/core/geometry';
 import type { DocInfo, HistoryInfo, Notice, PatternInfo, SavedSelectionInfo, SelectionInfo, VectorSelectionInfo } from '@engine/Engine';
 import type { TransformInfo } from '@engine/live/TransformObject';
+import type { PathInfo } from '@engine/live/ShapeObject';
 import type { SelectionModify } from '@engine/doc/Selection';
 import type { LayersInfo } from '@engine/doc/LayerController';
 import type { LiveKind } from '@engine/live/LiveObject';
@@ -32,6 +33,9 @@ export type DialogState =
   /** Edit a gradient option (the Gradient tool's colours unless another option is named). */
   | { kind: 'gradient'; toolId?: string; optKey?: string }
   | { kind: 'pasteLarger'; w: number; h: number; resolve: (r: 'enlarge' | 'keep' | null) => void }
+  /** Save the selected shape to My shapes, or rename one (id). */
+  | { kind: 'saveShape'; id?: string }
+  | { kind: 'deleteShape'; id: string }
   | { kind: 'shortcuts' }
   | { kind: 'about' };
 
@@ -73,6 +77,10 @@ export interface UiState {
   layers: LayersInfo;
   savedSelections: SavedSelectionInfo[];
   transform: TransformInfo | null;
+  /** A path being drawn or edited with the Pen tool (or in place). */
+  path: PathInfo | null;
+  /** Bumped when personal shapes are added, renamed or removed (the gallery re-reads them). */
+  shapeLibrary: number;
   patterns: PatternInfo[];
   /** How many guides the image has. */
   guides: number;
@@ -107,6 +115,8 @@ export const useUi = create<UiState>(() => ({
   layers: { tree: [], activeId: '', count: 0 },
   savedSelections: [],
   transform: null,
+  path: null,
+  shapeLibrary: 0,
   patterns: [],
   guides: 0,
   vectorSelection: { count: 0, groups: 0, bounds: null, shape: null },
