@@ -1,4 +1,5 @@
 import { test } from '@playwright/test';
+import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { clickDoc, drag, launchApp, ready } from './harness';
 
@@ -388,6 +389,38 @@ test('capture pen and my shapes', async () => {
     await page.getByRole('combobox', { name: 'Category' }).selectOption('custom');
     await page.waitForTimeout(200);
     await shot('pen-my-shapes');
+    console.warn('errors:', JSON.stringify(h.errors));
+  } finally {
+    await h.close();
+  }
+});
+
+// An imported palette bigger than the ribbon, its popover, and the Edit colours dialog.
+test('capture palettes', async () => {
+  test.skip(!process.env.PIGMENTO_SCREENSHOT, 'Set PIGMENTO_SCREENSHOT=1 to capture screenshots');
+  const out = process.env.PIGMENTO_SCREENSHOT_DIR ?? path.resolve('test-results');
+  const h = await launchApp();
+  const { page } = h;
+  const shot = (name: string) => page.screenshot({ path: path.join(out, `${name}.png`) });
+  try {
+    await ready(page);
+    await page.getByRole('tab', { name: 'View' }).click();
+    await page.getByRole('button', { name: 'Light' }).click();
+    await page.getByRole('tab', { name: 'Home' }).click();
+    const rows = Array.from({ length: 40 }, (_, i) => `${(i * 37) % 256} ${(i * 91) % 256} ${(i * 53) % 256}\tC${i}`).join('\n');
+    const file = path.join(out, 'shot.gpl');
+    writeFileSync(file, `GIMP Palette\nName: Shot\n${rows}\n`);
+    await h.app.evaluate(({ dialog }, fp) => {
+      dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [fp] })) as typeof dialog.showOpenDialog;
+    }, file);
+    await page.getByRole('button', { name: 'Edit colours' }).click();
+    await page.getByRole('dialog', { name: 'Edit colours' }).getByRole('button', { name: 'Import palette…' }).click();
+    await page.waitForTimeout(300);
+    await shot('palette-dialog');
+    await page.getByRole('dialog', { name: 'Edit colours' }).getByRole('button', { name: 'Cancel' }).click();
+    await page.getByRole('button', { name: 'All 40 palette colours' }).click();
+    await page.waitForTimeout(200);
+    await shot('palette-more');
     console.warn('errors:', JSON.stringify(h.errors));
   } finally {
     await h.close();

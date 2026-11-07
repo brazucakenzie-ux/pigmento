@@ -4,15 +4,14 @@ import { Icon } from '../icons/Icon';
 import { action, runAction } from '../actions/actions';
 import { engine } from '../state/engine';
 import { openDialog, useUi } from '../state/store';
+import { useCallback, useRef, useState } from 'react';
+import { Popover } from '../components/Popover';
+import { PALETTE } from './paletteDefaults';
 
-/** Pigmento's default palette: two rows of 12, tuned to read well on light and dark chrome. */
-export const PALETTE = [
-  '#000000', '#3d3d46', '#7a7a86', '#b9b9c4', '#ffffff', '#7a4a2b',
-  '#d7263d', '#ff6b35', '#ffc914', '#2bb24c', '#1e88e5', '#4b4be0',
-  '#5e2b97', '#c2185b', '#ff9fb2', '#f4d6a0', '#fff3a3', '#b8e986',
-  '#00a896', '#7fd3f7', '#a5a5ff', '#2c3e7a', '#144d2c', '#9e6b4a',
-];
+export { PALETTE } from './paletteDefaults';
 
+/** Swatches shown in the ribbon; a bigger imported palette shows the rest in a popover. */
+const RIBBON_SWATCHES = 24;
 const CUSTOM_SLOTS = 12;
 
 function Swatch({ color, hex }: { color: RGBA; hex: string }) {
@@ -45,6 +44,7 @@ export function ColorsGroup() {
   const custom = useUi((s) => s.settings.colors.custom);
   const swap = action('swapColors');
   const slots = Array.from({ length: CUSTOM_SLOTS }, (_, i) => custom[i] ?? null);
+  const palette = useUi((s) => s.settings.colors.palette) ?? PALETTE;
   return (
     <div className="colors-group">
       <div className="color-pair">
@@ -78,9 +78,11 @@ export function ColorsGroup() {
         </button>
       </div>
       <div className="palette" role="group" aria-label={t('colors.palette')}>
-        {PALETTE.map((hex) => (
+        {/* A bigger palette gives its last cell to a button showing all of it. */}
+        {palette.slice(0, palette.length > RIBBON_SWATCHES ? RIBBON_SWATCHES - 1 : RIBBON_SWATCHES).map((hex) => (
           <Swatch key={hex} hex={hex} color={parseHex(hex)!} />
         ))}
+        {palette.length > RIBBON_SWATCHES ? <MorePalette palette={palette} /> : null}
         {slots.map((hex, i) =>
           hex ? (
             <Swatch key={`c${i}`} hex={hex.slice(0, 7)} color={parseHex(hex)!} />
@@ -106,5 +108,27 @@ export function ColorsGroup() {
         <span className="rb-label">{t('colors.edit')}</span>
       </button>
     </div>
+  );
+}
+
+/** The rest of a big imported palette. */
+function MorePalette({ palette }: { palette: string[] }) {
+  const ref = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  const label = t('colors.more', { count: palette.length });
+  return (
+    <>
+      <button ref={ref} type="button" className="swatch palette-more" aria-haspopup="dialog" aria-expanded={open} aria-label={label} data-tip={label} onClick={() => setOpen((o) => !o)}>
+        <Icon name="chevron-down" size={12} />
+      </button>
+      <Popover anchor={ref} open={open} onClose={close} label={t('colors.palette')} className="palette-popover">
+        <div className="palette-all" role="group" aria-label={t('colors.palette')}>
+          {palette.map((hex) => (
+            <Swatch key={hex} hex={hex} color={parseHex(hex)!} />
+          ))}
+        </div>
+      </Popover>
+    </>
   );
 }

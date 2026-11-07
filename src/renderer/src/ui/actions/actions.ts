@@ -1,4 +1,4 @@
-import { importSvgFile } from '../services/svg';
+import { exportSvgFile, importSvgFile } from '../services/svg';
 import { exportShapePack, hasCustomShapes, importShapePack } from '../services/shapes';
 import type { ThemeMode } from '@shared/settings';
 import { toolRegistry } from '@engine/tools/ToolRegistry';
@@ -262,6 +262,7 @@ const base: Action[] = [
     enabled: (s) => s.selection.bounds !== null,
   },
   { id: 'importSvg', labelKey: 'action.importSvg', icon: 'open', group: 'file', run: () => void importSvgFile() },
+  { id: 'exportSvg', labelKey: 'action.exportSvg', icon: 'export', group: 'file', run: () => void exportSvgFile() },
   { id: 'importShapePack', labelKey: 'action.importShapePack', icon: 'open', group: 'file', run: () => void importShapePack() },
   // Enabled once My shapes has something in it (the library counter changes with it).
   { id: 'exportShapePack', labelKey: 'action.exportShapePack', icon: 'export', group: 'file', run: () => void exportShapePack(), enabled: (s) => s.shapeLibrary >= 0 && hasCustomShapes() },

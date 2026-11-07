@@ -775,6 +775,20 @@ export const en = {
   'notice.shapeNeedsSelection': 'Select one shape, or finish a path, to save it.',
   'notice.shapeSaved': 'Saved “{name}” to My shapes.',
 
+  // Palettes and SVG export (2.15)
+  'palette.import': 'Import palette…',
+  'palette.export': 'Export palette…',
+  'palette.reset': 'Use Pigmento’s palette',
+  'palette.defaultName': 'Pigmento palette',
+  'colors.more': 'All {count} palette colours',
+  'error.paletteInvalid': 'Pigmento couldn’t read {name} as a palette.',
+  'error.paletteSave': 'Pigmento couldn’t save the palette.',
+  'notice.paletteImported': 'The palette now has the colours from {name} ({count}).',
+  'notice.paletteExported': 'Saved the palette to {name}.',
+  'action.exportSvg': 'Export as SVG…',
+  'error.svgSave': 'Pigmento couldn’t save the SVG drawing.',
+  'notice.svgExported': 'Saved {name}.',
+
   // Selection to shape, SVG import, shape packs (2.14)
   'history.importSvg': 'Import SVG',
   'history.selectionToShape': 'Selection to shape',

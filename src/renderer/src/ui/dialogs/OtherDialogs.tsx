@@ -13,6 +13,7 @@ import { engine } from '../state/engine';
 import { closeDialog, updateSettings, useUi, type DialogState } from '../state/store';
 import { rememberQuality } from '../services/files';
 import { discardAutosave, restoreAutosave } from '../services/autosave';
+import { exportPaletteFile, importPaletteFile, resetPalette } from '../services/palette';
 
 function addRecent(c: RGBA): void {
   const colors = useUi.getState().settings.colors;
@@ -96,10 +97,22 @@ export function EditColorsDialog({ target: initial }: { target: 'primary' | 'sec
       </div>
       {chips(saved.recent, 'colors.recent')}
       {chips(saved.custom, 'colors.custom')}
-      <div>
+      <div className="palette-actions">
         <button type="button" className="btn small" onClick={addCustom}>
           {t('colors.addCustom')}
         </button>
+        <span className="grow" />
+        <button type="button" className="btn small" onClick={() => void importPaletteFile()}>
+          {t('palette.import')}
+        </button>
+        <button type="button" className="btn small" onClick={() => void exportPaletteFile()}>
+          {t('palette.export')}
+        </button>
+        {saved.palette ? (
+          <button type="button" className="btn small" onClick={resetPalette}>
+            {t('palette.reset')}
+          </button>
+        ) : null}
       </div>
     </Dialog>
   );

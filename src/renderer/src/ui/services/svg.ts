@@ -1,6 +1,7 @@
 import { importSvg, SvgImportError } from '@engine/io/svgImport';
 import { engine } from '../state/engine';
-import { showToast } from '../state/store';
+import { showToast, useUi } from '../state/store';
+import { t } from '../../i18n';
 
 /** Decode an SVG file's text (UTF-8, with or without a byte-order mark; UTF-16 if marked). */
 export function svgText(bytes: Uint8Array): string {
@@ -29,4 +30,20 @@ export async function importSvgFile(): Promise<boolean> {
     showToast({ kind: 'error', key: err instanceof SvgImportError ? err.key : 'error.svgInvalid', params: { name } });
     return false;
   }
+}
+
+/** Save the image as an SVG drawing (shape layers stay vector paths). */
+export async function exportSvgFile(): Promise<boolean> {
+  const base = (useUi.getState().file.name ?? t('doc.untitled')).replace(/\.[a-z0-9]+$/i, '');
+  let saved: string | null;
+  try {
+    const text = await engine.exportSvg();
+    saved = await window.pigmento.files.saveAsset('svg', `${base}.svg`, new TextEncoder().encode(text));
+  } catch {
+    showToast({ kind: 'error', key: 'error.svgSave' });
+    return false;
+  }
+  if (!saved) return false;
+  showToast({ kind: 'info', key: 'notice.svgExported', params: { name: saved.split(/[\\/]/).pop() ?? saved } });
+  return true;
 }

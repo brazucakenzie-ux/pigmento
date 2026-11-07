@@ -253,11 +253,14 @@ function dirOf(a: Point, b: Point): Point | null {
   return d < 1e-6 ? null : { x: (b.x - a.x) / d, y: (b.y - a.y) / d };
 }
 
-/** A line or curve with arrowheads: the line pulled back into the heads, then the heads. */
-function strokeWithArrows(ctx: Ctx, g: ShapeGeom, paint: string | CanvasGradient): void {
+/**
+ * A line or curve with arrowheads: its points pulled back into the heads (so the line ends
+ * inside them), and the heads themselves (shared by drawing and SVG export).
+ */
+export function arrowParts(g: ShapeGeom): { points: Point[]; heads: { points: Point[]; closed: boolean }[] } | null {
   const st = g.style;
   const pts = g.points.map((p) => ({ ...p }));
-  if (pts.length < 2) return;
+  if (pts.length < 2 || !arrowsOf(g)) return null;
   const last = pts.length - 1;
   // Tangents at the ends (curves: towards their nearest distinct control point).
   const startFrom = g.shape === 'curve' ? (pts.slice(1).find((p) => dirOf(p, pts[0])) ?? pts[last]) : pts[1];
@@ -265,10 +268,7 @@ function strokeWithArrows(ctx: Ctx, g: ShapeGeom, paint: string | CanvasGradient
   const dStart = dirOf(startFrom, pts[0]);
   const dEnd = dirOf(endFrom, pts[last]);
   const length = Math.hypot(pts[last].x - pts[0].x, pts[last].y - pts[0].y);
-  const heads = [
-    dStart ? arrowHead(st.arrowStart ?? 'none', pts[0], dStart, st.width) : null,
-    dEnd ? arrowHead(st.arrowEnd ?? 'none', pts[last], dEnd, st.width) : null,
-  ];
+  const heads = [dStart ? arrowHead(st.arrowStart ?? 'none', pts[0], dStart, st.width) : null, dEnd ? arrowHead(st.arrowEnd ?? 'none', pts[last], dEnd, st.width) : null];
   const pull = (i: number, d: Point | null, inset: number) => {
     if (!d || !inset) return;
     const k = Math.min(inset, length * 0.45);
@@ -276,14 +276,20 @@ function strokeWithArrows(ctx: Ctx, g: ShapeGeom, paint: string | CanvasGradient
   };
   pull(0, dStart, heads[0]?.inset ?? 0);
   pull(last, dEnd, heads[1]?.inset ?? 0);
+  return { points: pts, heads: heads.filter((h): h is NonNullable<typeof h> => h !== null) };
+}
+
+function strokeWithArrows(ctx: Ctx, g: ShapeGeom, paint: string | CanvasGradient): void {
+  const parts = arrowParts(g);
+  if (!parts) return;
+  const pts = parts.points;
   const p = new Path2D();
   p.moveTo(pts[0].x, pts[0].y);
   if (g.shape === 'curve' && pts.length === 4) p.bezierCurveTo(pts[1].x, pts[1].y, pts[2].x, pts[2].y, pts[3].x, pts[3].y);
   else for (let i = 1; i < pts.length; i++) p.lineTo(pts[i].x, pts[i].y);
   ctx.stroke(p);
   ctx.setLineDash([]);
-  for (const h of heads) {
-    if (!h) continue;
+  for (const h of parts.heads) {
     const hp = new Path2D();
     h.points.forEach((q, i) => (i === 0 ? hp.moveTo(q.x, q.y) : hp.lineTo(q.x, q.y)));
     if (h.closed) {
@@ -297,6 +303,25 @@ function strokeWithArrows(ctx: Ctx, g: ShapeGeom, paint: string | CanvasGradient
     }
   }
 }
+
+/** The box a shape's paint is laid over, and the matrix from it to the document (SVG export). */
+export function shapeFrame(g: ShapeGeom): { matrix: [number, number, number, number, number, number] | null; rect: Rect } {
+  // The same frame paintShape uses, worked out without a canvas path.
+  if (g.box) {
+    const b = g.box;
+    const c = Math.cos(b.angle);
+    const s = Math.sin(b.angle);
+    const sx = g.shape === 'parametric' ? Math.sign(b.w) || 1 : 1;
+    const sy = g.shape === 'parametric' ? Math.sign(b.h) || 1 : 1;
+    const aw = Math.abs(b.w);
+    const ah = Math.abs(b.h);
+    return { matrix: [c * sx, s * sx, -s * sy, c * sy, b.cx, b.cy], rect: { x: -aw / 2, y: -ah / 2, w: aw, h: ah } };
+  }
+  const rect = g.shape === 'path' ? pathBounds(toCmds(g.subpaths ?? [])) : boundsOfPoints([...g.points]);
+  return { matrix: null, rect: rect ?? { x: 0, y: 0, w: 0, h: 0 } };
+}
+
+export { fillRuleOf as shapeFillRule, arrowsOf as hasArrowheads };
 
 /** Fill and/or outline a shape with its style. */
 export function paintShape(ctx: Ctx, g: ShapeGeom, open = false, rubber: Point | null = null): void {

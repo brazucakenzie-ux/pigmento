@@ -73,6 +73,7 @@ function FileMenu() {
           }
         </SubMenu>
         <ActionMenuItem id="export" close={close} />
+        <ActionMenuItem id="exportSvg" close={close} />
         <MenuSeparator />
         <ActionMenuItem id="print" close={close} label={t('file.print')} />
         <SubMenu label={t('file.wallpaper')} icon="wallpaper">

@@ -69,6 +69,8 @@ export const SettingsSchema = z.object({
       secondary: hex.default('#ffffffff'),
       recent: z.array(hex).max(16).default([]),
       custom: z.array(hex).max(24).default([]),
+      /** An imported palette (replaces Pigmento's 24 colours); missing = Pigmento's. */
+      palette: z.array(z.string().regex(/^#[0-9a-f]{6}$/i)).min(1).max(256).optional(),
     })
     .default({ primary: '#000000ff', secondary: '#ffffffff', recent: [], custom: [] }),
   tools: z.record(z.string(), z.record(z.string(), z.unknown())).default({}),

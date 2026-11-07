@@ -59,6 +59,7 @@ import { hitTestNodes, lineStyleOf, rasterizeNodes, setSavedPatternSource, shape
 import { optionsOfStyle, shapeStyle } from './tools/shapeTools';
 import { maskToSubpaths } from './vector/trace';
 import type { SvgDrawing } from './io/svgImport';
+import { documentToSvg } from './io/svgExport';
 import { addImageAsset, ASSET_ID, MAX_ASSET_PIXELS } from './vector/assets';
 import { alphaBounds, flattenOnto, hasTransparency, invertView, type MaskView } from './raster/pixels';
 import { Surface } from './raster/Surface';
@@ -1469,6 +1470,16 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     const added: VectorLayer = layer;
     this.vectorChanged(added);
     return added.id;
+  }
+
+  /** The image as an SVG document: shape layers as paths, pixel layers as embedded PNGs. */
+  exportSvg(): Promise<string> {
+    this.commitLive();
+    return documentToSvg(this.doc, {
+      // The encoder takes ownership of the buffer it's given, so it gets a copy.
+      encodePng: (data, w, h) => this.codecs.encode('png', w, h, data.slice(), 100, this.doc.dpi),
+      patternTile: (id, fg, bg, scale) => this.patternTile({ pattern: id, fg, bg, scale }),
+    });
   }
 
   /** Trace the selection into a path (on the active shape layer, or a new one). */
