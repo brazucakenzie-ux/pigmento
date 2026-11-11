@@ -193,7 +193,20 @@ Each item is ticked in the same commit as its work.
 - [x] 2.16 Golden-image tests for every built-in shape; e2e for creating and using a custom shape and for project save/reopen; `npm run check` green; report
 
 ### Milestone 3 — Brushes, effects, drawing aids
-Full brush engine and dynamics, stabiliser, symmetry; `BrushRegistry` with 40+ brushes; Brush Designer; brush packs (`docs/brush-format.md`); smudge, blur, sharpen, clone, dodge/burn; brush along outline and path stroking; adjustments and filters in workers (`FilterRegistry`); reference image; view rotation; performance budgets. Tests per the brief.
+Each item is ticked in the same commit as its work.
+- [ ] 3.1 Brush engine: a brush is data (tip, size, opacity, flow, hardness, spacing, angle, roundness, scatter, count, size/opacity/angle jitter, rotation follow-stroke, texture, colour mixing); dabs with flow build up under the stroke's opacity cap; seeded randomness so strokes repeat exactly; procedural and image tips; dynamics that map pressure, tilt, speed or randomness to any parameter through a curve, with mouse/touch fallbacks (+ stamping and dynamics unit tests)
+- [ ] 3.2 Drawing aids for every brush tool: stroke stabiliser (smoothing slider), Shift straight lines, symmetry (horizontal, vertical, both, radial with N segments) with on-canvas axes and a movable centre
+- [ ] 3.3 `BrushRegistry` with 40+ original brushes in categories (Basic, Pencil & pen, Paint, Spray & airbrush, Chalk/charcoal/crayon, Textured, Artistic, Pixel, Erasers) built from original procedural tips and grain textures; brush picker (gallery with search, categories, favourites) in the Home Brushes group and the options bar; Brush and Eraser use any brush (+ registry tests)
+- [ ] 3.4 Brush-based tools on the same engine: Smudge, Blur, Sharpen, Clone Stamp (Alt+click source, aligned or not), Dodge/Burn (shadows/midtones/highlights, exposure), each usable with any compatible brush, live while drawing and one undo step per stroke (+ per-tool pixel tests)
+- [ ] 3.5 Brush Designer: live preview stroke; tip from the built-in set, the selection, an imported PNG (alpha) or a small tip editor; texture/grain with scale, depth and blend; every parameter with a dynamics source and curve; save to the personal library (`%APPDATA%\Pigmento\brushes`), edit, duplicate, delete, favourite
+- [ ] 3.6 Brush packs: `.pigmbrush` zip of validated JSON plus PNG tips/textures; import/export; Zod schema documented in `docs/brush-format.md` (+ schema tests)
+- [ ] 3.7 Stroke with a brush: the selection's outline ("brush stroke along outline") and any path or shape outline ("stroke path"), with any brush and its dynamics simulated along the path, as one undo step
+- [ ] 3.8 `FilterRegistry` and a worker pool: filters run in Web Workers on tiles with progress and Cancel; dialogs with live preview (downscaled while dragging) and Apply/Cancel; apply to the selection or the whole layer, undoable (+ worker protocol tests)
+- [ ] 3.9 Adjustments: brightness/contrast, hue/saturation/lightness (with colourise), levels, curves, colour balance, grayscale, sepia, invert, posterize, threshold (+ known-input tests for each)
+- [ ] 3.10 Filters and effects: gaussian blur, motion blur, sharpen (unsharp mask), noise, pixelate, emboss, edge detect, vignette, drop shadow, outer glow, outline (+ known-input tests for each)
+- [ ] 3.11 Reference image overlay (load, move, scale, opacity, hide; never exported or saved into the image) and view-only canvas rotation (free angle, 15° steps with Shift, reset; tools, guides and cursors stay correct)
+- [ ] 3.12 Performance: in-app performance overlay (hidden shortcut) with frame time, pointer-to-pixel latency, memory; measured budgets on a 4000×3000 canvas (brush latency < 16 ms, flood fill < 300 ms), app load < 3 s, no leak across 500 undo/redo cycles; fix what misses (+ perf e2e)
+- [ ] 3.13 Golden-image tests for every built-in brush; e2e for creating and using a custom brush and for importing/exporting brush packs; `npm run check` green; report
 
 ### Milestone 4 — Polish, accessibility, packaging
 Onboarding, Simple/Full mode, shortcut editor, UI scale, full a11y pass, error handling, 100 MP open, 500-cycle memory test, perf overlay polish, NSIS + portable builds, file associations, README, user guide, changelog, final feature report.
