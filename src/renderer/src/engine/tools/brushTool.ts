@@ -1,15 +1,16 @@
 import type { RGBA } from '../core/color';
 import { rectIntersect, rectUnion, type Point, type Rect } from '../core/geometry';
 import { BrushStroke, strokeSeed, type StrokeSample } from '../brush/BrushStroke';
-import { paintDabInto, type DabShape } from '../brush/dab';
+import { dabShapeOf, paintDabInto } from '../brush/dab';
 import { stabilize, symmetryAxes, symmetryCenter, symmetryCopies } from '../brush/symmetry';
-import { textureStore, tipStore } from '../brush/tips';
 import type { BrushSettings } from '../brush/types';
 import { applyImage, type PixelView } from '../raster/pixels';
 import { Surface } from '../raster/Surface';
 import type { Overlay } from '../render/Overlay';
 import type { I18nKey } from '../../i18n';
-import type { OptionSpec, Tool, ToolContext, ToolGroup, ToolPointerEvent } from './Tool';
+import type { OptionSpec, Tool, ToolContext, ToolGroup, ToolOptions, ToolPointerEvent } from './Tool';
+import { brushRegistry, type BrushDef } from '../brush/BrushRegistry';
+import '../brush/library';
 
 /** What a brush tool paints with right now (from its options and the picked brush). */
 export interface ToolBrush {
@@ -44,19 +45,22 @@ export interface BrushToolConfig {
 /** The stabiliser slider: smooths strokes by trailing the pointer (0–100 %). */
 export const SMOOTHING_OPTION: OptionSpec = { key: 'smoothing', type: 'slider', labelKey: 'opt.smoothing', min: 0, max: 100, step: 1, unit: '%', default: 0 };
 
+/** Which brush a brush tool paints with. */
+export const BRUSH_OPTION = (def: string): OptionSpec => ({ key: 'brushId', type: 'brush', labelKey: 'opt.brush', default: def });
+
+/** The brush a tool's options name (or the fallback when it's gone, e.g. a deleted personal brush). */
+export function brushOf(o: ToolOptions, fallback: string): BrushDef {
+  return brushRegistry.get(String(o.brushId ?? '')) ?? brushRegistry.get(fallback)!;
+}
+
+/** Picking a brush loads its size, opacity, flow and hardness into the tool's sliders. */
+export function brushOptionsFor(def: BrushDef): ToolOptions {
+  const s = def.settings;
+  return { brushId: def.id, size: Math.max(1, Math.round(s.size)), opacity: Math.round(s.opacity * 100), flow: Math.round(s.flow * 100), hardness: Math.round(s.hardness * 100) };
+}
+
 /** The longest the stabiliser's string gets, in screen px. */
 const MAX_STRING = 80;
-
-/** The tip and grain a brush's dabs use (image tips and textures come from their stores). */
-export function dabShapeOf(s: BrushSettings): DabShape {
-  const tip = s.tip.kind === 'image' ? (tipStore.get(s.tip.id) ?? 'round') : s.tip.kind;
-  const tex = s.texture ? textureStore.get(s.texture.id) : undefined;
-  return {
-    tip,
-    pixel: s.pixel,
-    texture: tex && s.texture ? { mask: tex, scale: Math.max(0.25, s.texture.scale), depth: Math.min(1, Math.max(0, s.texture.depth)), mode: s.texture.mode } : null,
-  };
-}
 
 /** Composite a stroke surface onto a pixel view (the live preview). */
 export function compositeStroke(dst: PixelView, r: Rect, stroke: Surface, op: 'over' | 'erase', opacity: number, clip: Parameters<typeof applyImage>[5]): void {

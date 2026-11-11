@@ -455,6 +455,34 @@ test('capture brushes', async () => {
     await page.mouse.move(900, 700);
     await page.waitForTimeout(150);
     await shot('brush-symmetry');
+    await page.locator('.opt-pop-btn', { hasText: 'Symmetry' }).click();
+    await page.getByRole('dialog', { name: 'Symmetry' }).getByRole('radio', { name: 'Off' }).click();
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+a');
+    await page.keyboard.press('Delete');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('b');
+    // A row of strokes, each with a different brush at its own size.
+    const names = ['Oil', 'Watercolour', 'Chalk', 'Charcoal', 'Crayon', 'Calligraphy', 'Ink pen', 'Graphite pencil', 'Marker', 'Highlighter', 'Airbrush', 'Spray can', 'Splatter', 'Grass', 'Stars', 'Sparkles', 'Fur', 'Leaves', 'Confetti', 'Sponge', 'Soft pastel', 'Canvas', 'Dither (ordered)', 'Pixel round'];
+    for (let i = 0; i < names.length; i++) {
+      await page.locator('.brush-pick').click();
+      await page.getByRole('dialog', { name: 'Brushes' }).getByRole('option', { name: names[i], exact: true }).click();
+      const col = i % 4;
+      const row = Math.floor(i / 4);
+      const x = 30 + col * 310;
+      const y = 50 + row * 125;
+      await drag(page, [
+        [x, y + 40],
+        [x + 80, y],
+        [x + 160, y + 60],
+        [x + 260, y + 20],
+      ]);
+    }
+    await page.mouse.move(1300, 850);
+    await shot('brush-strokes');
+    await page.locator('.brush-pick').click();
+    await page.waitForTimeout(300);
+    await shot('brush-picker');
     console.warn('errors:', JSON.stringify(h.errors));
   } finally {
     await h.close();

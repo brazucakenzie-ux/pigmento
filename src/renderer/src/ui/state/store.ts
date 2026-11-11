@@ -84,6 +84,8 @@ export interface UiState {
   shapeLibrary: number;
   /** Brush symmetry. */
   symmetry: Symmetry;
+  /** Bumped when personal brushes change (pickers re-read the library). */
+  brushLibrary: number;
   patterns: PatternInfo[];
   /** How many guides the image has. */
   guides: number;
@@ -121,6 +123,7 @@ export const useUi = create<UiState>(() => ({
   path: null,
   shapeLibrary: 0,
   symmetry: { mode: 'off', segments: 6, center: null },
+  brushLibrary: 0,
   patterns: [],
   guides: 0,
   vectorSelection: { count: 0, groups: 0, bounds: null, shape: null },

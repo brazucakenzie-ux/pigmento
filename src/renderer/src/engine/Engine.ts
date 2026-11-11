@@ -644,7 +644,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
           } else if (spec.type === 'font' && typeof v === 'string' && v.length < 200) merged[spec.key] = v;
           else if (spec.type === 'pattern' && typeof v === 'string' && /^[a-z0-9-]{1,64}$/i.test(v)) merged[spec.key] = v;
           else if (spec.type === 'gradient' && (v === null || isStopList(v))) merged[spec.key] = v;
-          else if (spec.type === 'shape' && typeof v === 'string' && /^[a-z0-9-]{1,100}$/i.test(v)) merged[spec.key] = v;
+          else if ((spec.type === 'shape' || spec.type === 'brush') && typeof v === 'string' && /^[a-z0-9-]{1,100}$/i.test(v)) merged[spec.key] = v;
           else if (spec.type === 'image' && typeof v === 'string' && (v === '' || ASSET_ID.test(v))) merged[spec.key] = v;
           else if (spec.type === 'shapeParams' && isShapeParamTable(v)) merged[spec.key] = v;
         }

@@ -14,6 +14,7 @@ import { useUi } from '../state/store';
 import { actions, runAction } from '../actions/actions';
 import { GradientButton, PatternPicker } from './PaintOptions';
 import { SelectedShapeParams, ShapeOption, ShapeToolParams } from './ShapeGallery';
+import { BrushPicker } from './BrushPicker';
 
 const FALLBACK_FONTS = ['Segoe UI', 'Arial', 'Calibri', 'Cambria', 'Comic Sans MS', 'Consolas', 'Georgia', 'Impact', 'Segoe Print', 'Times New Roman', 'Trebuchet MS', 'Verdana'];
 
@@ -95,6 +96,8 @@ function OptionControl({ toolId, spec, values, inPopover = false }: { toolId: st
       return <PatternPicker value={String(values[spec.key] ?? spec.default)} onChange={set} label={label} />;
     case 'shape':
       return <ShapeOption value={values[spec.key] ?? spec.default} />;
+    case 'brush':
+      return <BrushPicker toolId={toolId} value={String(values[spec.key] ?? spec.default)} label={label} />;
     case 'image':
       return <ImageOption value={String(values[spec.key] ?? '')} onChange={set} label={label} />;
     case 'popover':

@@ -81,12 +81,15 @@ export function SplitButton({
   label,
   icon,
   menuLabel,
+  menuClassName,
   children,
 }: {
   id: string;
   label?: string;
   icon?: string;
   menuLabel: string;
+  /** Extra class for the menu (e.g. a gallery). */
+  menuClassName?: string;
   children: (close: () => void) => ReactNode;
 }) {
   const a = action(id);
@@ -126,7 +129,7 @@ export function SplitButton({
           <Icon name="chevron-down" size={12} className="rb-chevron" />
         </span>
       </button>
-      <Menu anchor={ref} open={open} onClose={close} label={menuLabel}>
+      <Menu anchor={ref} open={open} onClose={close} label={menuLabel} className={menuClassName}>
         {children(close)}
       </Menu>
     </span>

@@ -52,6 +52,8 @@ export type OptionSpec =
   | (OptionBase & { type: 'image'; default: string })
   /** A button that opens more options in a popover (their values are ordinary options). */
   | (OptionBase & { type: 'popover'; icon: string; options: OptionSpec[]; summary?: (values: Record<string, unknown>) => I18nKey })
+  /** A brush from the brush library (its id). */
+  | (OptionBase & { type: 'brush'; default: string })
   /** A shape from the shape library (its id). */
   | (OptionBase & { type: 'shape'; default: string })
   /** Slider values per library shape: { shapeId: { param: value } }; `shapeKey` names the shape option. */

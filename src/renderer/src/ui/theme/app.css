@@ -2118,3 +2118,98 @@ kbd {
   grid-template-columns: repeat(16, auto);
   gap: 3px;
 }
+
+/* Brush library: preview tiles in the options bar popover and the Home tab menu. */
+.brush-thumb {
+  display: block;
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+}
+.brush-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px 0 3px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  max-width: 220px;
+}
+.brush-pick > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.brush-pick:hover,
+.brush-pick[aria-expanded='true'] {
+  background: var(--bg-hover);
+}
+.brush-popover:popover-open,
+.menu.brush-menu:popover-open {
+  width: min(560px, 94vw);
+  max-width: min(560px, 94vw);
+  max-height: min(70vh, 620px);
+  overflow-y: auto;
+}
+.brush-gallery-head {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.brush-gallery-head .text-input {
+  flex: 1;
+  min-width: 0;
+}
+.brush-favorite[aria-pressed='true'] svg {
+  fill: var(--accent-2);
+  stroke: var(--accent-2);
+}
+.brush-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 4px;
+}
+.brush-tile,
+.menu-item.brush-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--fs-2xs);
+  height: auto;
+}
+.brush-tile:hover {
+  background: var(--bg-hover);
+}
+.brush-tile[aria-selected='true'],
+.brush-tile[aria-checked='true'] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.brush-tile-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.brush-gallery-empty {
+  grid-column: 1 / -1;
+  padding: 8px;
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+}
+@media (forced-colors: active) {
+  .brush-tile[aria-selected='true'],
+  .brush-tile[aria-checked='true'] {
+    border-color: Highlight;
+  }
+}

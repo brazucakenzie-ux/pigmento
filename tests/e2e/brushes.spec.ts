@@ -134,3 +134,66 @@ test('stabilises strokes and still ends where the pointer is released', async ()
   expect(await pixel(page, 300, 500)).toEqual(RED);
   expect(await pixel(page, 300, 560)).toEqual(WHITE);
 });
+
+test('picks brushes from the library, with favourites, for the Brush and the Eraser', async () => {
+  h = await launchApp();
+  const { page } = h;
+  await ready(page);
+  await page.getByRole('button', { name: /Colour #D7263D/ }).click();
+  await page.keyboard.press('b');
+  await expect(page.locator('.brush-pick')).toContainText('Round');
+
+  // From the options bar: a brush brings its own size and opacity.
+  await page.locator('.brush-pick').click();
+  const lib = page.getByRole('dialog', { name: 'Brushes' });
+  // The brush tiles (the category list's entries are options too).
+  const tiles = lib.getByRole('listbox', { name: 'Brushes' });
+  await lib.getByRole('searchbox', { name: 'Search brushes' }).fill('high');
+  await expect(tiles.getByRole('option')).toHaveCount(1);
+  await tiles.getByRole('option', { name: 'Highlighter' }).click();
+  await expect(page.locator('.brush-pick')).toContainText('Highlighter');
+  await expect(page.locator('.optionsbar').getByRole('textbox', { name: 'Size' })).toHaveValue('22');
+  await expect(page.locator('.optionsbar').getByRole('textbox', { name: 'Opacity' })).toHaveValue('45');
+  await drag(page, [
+    [100, 100],
+    [300, 100],
+  ]);
+  // A see-through red over white.
+  const hl = await pixel(page, 200, 100);
+  expect(hl.r).toBeGreaterThan(230);
+  expect(hl.g).toBeGreaterThan(120);
+  expect(hl.g).toBeLessThan(200);
+
+  // Starred, it shows under Favourites.
+  await page.locator('.brush-pick').click();
+  await lib.getByRole('searchbox', { name: 'Search brushes' }).fill('');
+  await lib.getByRole('button', { name: 'Add to favourites' }).click();
+  await lib.getByRole('combobox', { name: 'Category' }).selectOption('favorites');
+  await expect(tiles.getByRole('option')).toHaveCount(1);
+  await expect(tiles.getByRole('option', { name: 'Highlighter' })).toBeVisible();
+  await lib.getByRole('combobox', { name: 'Category' }).selectOption('all');
+  await page.keyboard.press('Escape');
+
+  // From the Home tab's Brush menu.
+  await page.locator('.rb-split', { has: page.getByRole('button', { name: 'Brush', exact: true }) }).locator('[aria-haspopup="menu"]').click();
+  const menu = page.getByRole('menu', { name: 'Brushes' });
+  await menu.getByRole('menuitemradio', { name: 'Watercolour' }).click();
+  await expect(page.locator('.brush-pick')).toContainText('Watercolour');
+  expect(await page.evaluate(() => window.__pigmentoTest!.tool())).toBe('brush');
+
+  // An eraser brush switches to the Eraser; the Eraser can use any brush.
+  await page.locator('.brush-pick').click();
+  await lib.getByRole('combobox', { name: 'Category' }).selectOption('eraser');
+  await tiles.getByRole('option', { name: 'Soft eraser' }).click();
+  expect(await page.evaluate(() => window.__pigmentoTest!.tool())).toBe('eraser');
+  await expect(page.locator('.brush-pick')).toContainText('Soft eraser');
+  await page.locator('.brush-pick').click();
+  await lib.getByRole('combobox', { name: 'Category' }).selectOption('all');
+  await tiles.getByRole('option', { name: 'Round hard' }).click();
+  expect(await page.evaluate(() => window.__pigmentoTest!.tool())).toBe('eraser');
+  await drag(page, [
+    [150, 100],
+    [250, 100],
+  ]);
+  expect(await pixel(page, 200, 100)).toEqual(WHITE);
+});

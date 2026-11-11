@@ -1,4 +1,5 @@
 import { shapesEn } from './shapes.en';
+import { brushesEn } from './brushes.en';
 
 /** English strings. Keys are grouped by area; placeholders use {name}. */
 export const en = {
@@ -820,4 +821,5 @@ export const en = {
   'notice.shapePackExported': 'Saved My shapes to {name} (shapes: {count}).',
   'notice.shapePackEmpty': 'There are no shapes in My shapes to export yet.',
   ...shapesEn,
+  ...brushesEn,
 } as const;

@@ -2,8 +2,8 @@ import type { RGBA } from '../core/color';
 import type { Rect } from '../core/geometry';
 import type { PixelView } from '../raster/pixels';
 import type { Surface } from '../raster/Surface';
-import { sampleMask, tipLevel, type Mask, type TipMask } from './tips';
-import type { TextureMode } from './types';
+import { sampleMask, textureStore, tipLevel, tipStore, type Mask, type TipMask } from './tips';
+import type { BrushSettings, TextureMode } from './types';
 
 /** One stamp of the tip, fully worked out (dynamics, jitter and scatter already applied). */
 export interface Dab {
@@ -149,3 +149,15 @@ function union(a: Rect, b: Rect): Rect {
   const y = Math.min(a.y, b.y);
   return { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y };
 }
+
+/** The tip and grain a brush's dabs use (image tips and textures come from their stores). */
+export function dabShapeOf(s: BrushSettings): DabShape {
+  const tip = s.tip.kind === 'image' ? (tipStore.get(s.tip.id) ?? 'round') : s.tip.kind;
+  const tex = s.texture ? textureStore.get(s.texture.id) : undefined;
+  return {
+    tip,
+    pixel: s.pixel,
+    texture: tex && s.texture ? { mask: tex, scale: Math.max(0.25, s.texture.scale), depth: Math.min(1, Math.max(0, s.texture.depth)), mode: s.texture.mode } : null,
+  };
+}
+

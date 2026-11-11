@@ -11,6 +11,8 @@ import { ActionButton, MenuButton, RibbonGroup, SplitButton } from './RibbonButt
 import { ColorsGroup } from './ColorsGroup';
 import { ThemePicker } from './ThemePicker';
 import { ShapesTab } from './ShapeGallery';
+import { BrushGallery, pickBrush } from './BrushPicker';
+import { engine } from '../state/engine';
 
 const TABS: { id: RibbonTab; labelKey: I18nKey }[] = [
   { id: 'home', labelKey: 'tab.home' },
@@ -119,6 +121,20 @@ function ToolButtons({ group, variant }: { group: 'tools' | 'shapes' | 'brushes'
   );
 }
 
+function RibbonBrushes({ close }: { close: () => void }) {
+  const value = useUi((s) => String((s.toolOptions.brush ?? engine.options('brush')).brushId ?? 'round'));
+  return (
+    <BrushGallery
+      menu
+      value={value}
+      onPick={(id) => {
+        pickBrush('brush', id);
+        close();
+      }}
+    />
+  );
+}
+
 function HomeTab() {
   return (
     <>
@@ -197,7 +213,10 @@ function HomeTab() {
         </div>
       </RibbonGroup>
       <RibbonGroup label={t('group.brushes')}>
-        <ToolButtons group="brushes" variant="large" />
+        {/* The Brush, with the brush library one click away. */}
+        <SplitButton id="tool.brush" menuLabel={t('brushes.gallery')} menuClassName="brush-menu">
+          {(close) => <RibbonBrushes close={close} />}
+        </SplitButton>
       </RibbonGroup>
       <RibbonGroup label={t('group.shapes')}>
         <div className="rb-grid">
