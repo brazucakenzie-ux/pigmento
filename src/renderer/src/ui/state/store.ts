@@ -15,7 +15,7 @@ import type { ViewState } from '@engine/render/View';
 import type { TextEditState, ToolOptions } from '@engine/tools/Tool';
 import type { I18nKey } from '../../i18n';
 
-export type RibbonTab = 'home' | 'shapes' | 'image' | 'view';
+export type RibbonTab = 'home' | 'shapes' | 'brushes' | 'image' | 'view';
 
 export type DialogState =
   | { kind: 'new' }
@@ -37,6 +37,9 @@ export type DialogState =
   /** Save the selected shape to My shapes, or rename one (id). */
   | { kind: 'saveShape'; id?: string }
   | { kind: 'deleteShape'; id: string }
+  /** The Brush Designer: edit personal brush `id`, or make a new one starting from brush `from`. */
+  | { kind: 'brushDesigner'; id?: string; from?: string }
+  | { kind: 'deleteBrush'; id: string }
   | { kind: 'shortcuts' }
   | { kind: 'about' };
 

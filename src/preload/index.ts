@@ -69,6 +69,11 @@ const api: PigmentoApi = {
     save: (shape) => ipcRenderer.invoke(IPC.shapesSave, shape),
     remove: (id) => ipcRenderer.invoke(IPC.shapesRemove, id),
   },
+  brushes: {
+    list: () => ipcRenderer.invoke(IPC.brushesList),
+    save: (brush) => ipcRenderer.invoke(IPC.brushesSave, brush),
+    remove: (id) => ipcRenderer.invoke(IPC.brushesRemove, id),
+  },
   system: {
     getTheme: () => ipcRenderer.invoke(IPC.systemTheme),
     onThemeChanged: (cb) => subscribe<[SystemTheme]>(IPC.evThemeChanged, cb),

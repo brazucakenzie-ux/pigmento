@@ -29,6 +29,7 @@ import { setWallpaper } from './wallpaper';
 import { clearAutosave, listRecoverable, readAutosave, registerSession, releaseSession, writeAutosave } from './autosave';
 import { listPatterns, MAX_PATTERN_BYTES, removePattern, savePattern } from './patterns';
 import { listShapes, removeShape, saveShape } from './shapes';
+import { listBrushes, removeBrush, saveBrush } from './brushes';
 import { ASSET_KINDS, isAssetKind, type OpenedAsset } from '@shared/assets';
 import {
   TOP_BAR_HEIGHT,
@@ -345,6 +346,12 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.shapesRemove, (_e, id: unknown) => {
     if (typeof id !== 'string') throw new Error('Invalid shape id');
     return removeShape(id);
+  });
+  ipcMain.handle(IPC.brushesList, () => listBrushes());
+  ipcMain.handle(IPC.brushesSave, (_e, brush: unknown) => saveBrush(brush));
+  ipcMain.handle(IPC.brushesRemove, (_e, id: unknown) => {
+    if (typeof id !== 'string') throw new Error('Invalid brush id');
+    return removeBrush(id);
   });
   ipcMain.handle(IPC.autosaveRead, (_e, id: unknown) => {
     if (typeof id !== 'string') throw new Error('Invalid session id');

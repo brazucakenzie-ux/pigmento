@@ -1,3 +1,4 @@
+import type { CustomBrushFile } from './brushFormat';
 import type { CustomShapeFile } from './shapeFormat';
 import type { AssetKind, OpenedAsset } from './assets';
 import type { FileFormat } from './formats';
@@ -45,6 +46,9 @@ export const IPC = {
   shapesList: 'shapes:list',
   shapesSave: 'shapes:save',
   shapesRemove: 'shapes:remove',
+  brushesList: 'brushes:list',
+  brushesSave: 'brushes:save',
+  brushesRemove: 'brushes:remove',
   // main -> renderer events
   evCloseRequested: 'ev:close-requested',
   evOpenFile: 'ev:open-file',
@@ -194,6 +198,13 @@ export interface PigmentoApi {
     list(): Promise<CustomShapeFile[]>;
     /** Add or replace one (by id). */
     save(shape: CustomShapeFile): Promise<void>;
+    remove(id: string): Promise<void>;
+  };
+  /** Personal brushes made with the Brush Designer. */
+  brushes: {
+    list(): Promise<CustomBrushFile[]>;
+    /** Add or replace one (by id). */
+    save(brush: CustomBrushFile): Promise<void>;
     remove(id: string): Promise<void>;
   };
   system: {

@@ -11,12 +11,17 @@ import { ActionButton, MenuButton, RibbonGroup, SplitButton } from './RibbonButt
 import { ColorsGroup } from './ColorsGroup';
 import { ThemePicker } from './ThemePicker';
 import { ShapesTab } from './ShapeGallery';
-import { BrushGallery, pickBrush } from './BrushPicker';
+import { BrushCommands, BrushGallery, BrushThumb, brushName, pickBrush } from './BrushPicker';
+import { Popover } from '../components/Popover';
+import { Icon } from '../icons/Icon';
+import { brushRegistry } from '@engine/brush/BrushRegistry';
+import { brushTarget } from '../services/brushes';
 import { engine } from '../state/engine';
 
 const TABS: { id: RibbonTab; labelKey: I18nKey }[] = [
   { id: 'home', labelKey: 'tab.home' },
   { id: 'shapes', labelKey: 'tab.shapes' },
+  { id: 'brushes', labelKey: 'tab.brushes' },
   { id: 'image', labelKey: 'tab.image' },
   { id: 'view', labelKey: 'tab.view' },
 ];
@@ -149,6 +154,71 @@ function RibbonBrushes({ close }: { close: () => void }) {
         close();
       }}
     />
+  );
+}
+
+/** The brush in use (the active brush tool's, or the Brush's), opening the library. */
+function CurrentBrush() {
+  const ref = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  const toolId = useUi((s) => brushTarget(s).toolId);
+  const brushId = useUi((s) => brushTarget(s).brushId);
+  useUi((s) => s.brushLibrary);
+  const def = brushRegistry.get(brushId);
+  const tool = toolRegistry.get(toolId);
+  return (
+    <>
+      <button ref={ref} type="button" className="rb rb-large brush-current" aria-haspopup="dialog" aria-expanded={open} data-tip={t('brushes.pick')} onClick={() => setOpen((o) => !o)}>
+        {def ? <BrushThumb def={def} w={64} h={24} /> : null}
+        <span className="rb-label">
+          {def ? brushName(def) : brushId}
+          <Icon name="chevron-down" size={12} className="rb-chevron" />
+        </span>
+      </button>
+      <span className="brush-current-tool">{tool ? t('brushes.forTool', { tool: t(tool.labelKey) }) : null}</span>
+      <Popover anchor={ref} open={open} onClose={close} label={t('brushes.gallery')} className="brush-popover">
+        <BrushGallery
+          value={brushId}
+          onPick={(id) => {
+            pickBrush(toolId, id);
+            close();
+          }}
+        />
+        <BrushCommands onRun={close} />
+      </Popover>
+    </>
+  );
+}
+
+/** Brushes tab: the brush in use, personal brushes, and every tool that paints with a brush. */
+function BrushesTab() {
+  return (
+    <>
+      <RibbonGroup label={t('group.brushCurrent')}>
+        <div className="brush-current-cell">
+          <CurrentBrush />
+        </div>
+      </RibbonGroup>
+      <RibbonGroup label={t('group.myBrushes')}>
+        <ActionButton id="newBrush" />
+        <div className="rb-stack">
+          <ActionButton id="editBrush" variant="small" />
+          <ActionButton id="duplicateBrush" variant="small" />
+          <ActionButton id="deleteBrush" variant="small" />
+        </div>
+      </RibbonGroup>
+      <RibbonGroup label={t('group.paintWith')}>
+        <div className="rb-grid">
+          {['brush', 'pencil', 'eraser', ...toolRegistry.byGroup('retouch').map((tool) => tool.id)].map((id) => (
+            <ActionButton key={id} id={`tool.${id}`} variant="compact" />
+          ))}
+        </div>
+      </RibbonGroup>
+      <RibbonGroup label={t('group.colors')}>
+        <ColorsGroup />
+      </RibbonGroup>
+    </>
   );
 }
 
@@ -409,7 +479,7 @@ export function Ribbon() {
         <HelpMenu />
       </div>
       <div className="ribbon-panel" id="ribbon-panel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
-        {tab === 'home' ? <HomeTab /> : tab === 'shapes' ? <ShapesTab /> : tab === 'image' ? <ImageTab /> : <ViewTab />}
+        {tab === 'home' ? <HomeTab /> : tab === 'shapes' ? <ShapesTab /> : tab === 'brushes' ? <BrushesTab /> : tab === 'image' ? <ImageTab /> : <ViewTab />}
       </div>
     </div>
   );

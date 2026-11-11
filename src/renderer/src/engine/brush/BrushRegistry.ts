@@ -23,6 +23,11 @@ export function defineBrush(id: string, category: BrushCategory, settings: Parti
   return { id, category, labelKey: `brush.${id}` as I18nKey, keywords, settings: defaultBrush(settings), eraser: category === 'eraser' };
 }
 
+/** A personal brush (Brush Designer, brush packs): named by the user, filed in a category. */
+export function customBrushDef(b: { id: string; name: string; category: BrushCategory; settings: BrushSettings }): BrushDef {
+  return { id: b.id, category: b.category, labelKey: 'brushcat.custom', name: b.name, keywords: [], settings: b.settings, eraser: b.category === 'eraser', custom: true };
+}
+
 export class BrushRegistry {
   private defs = new Map<string, BrushDef>();
 

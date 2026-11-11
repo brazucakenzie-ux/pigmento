@@ -9,6 +9,8 @@ import { ExportDialog } from '../dialogs/ExportDialog';
 import { GradientDialog } from '../dialogs/GradientDialog';
 import { DeleteShapeDialog, SaveShapeDialog } from '../dialogs/ShapeDialogs';
 import { loadCustomShapes } from '../services/shapes';
+import { loadCustomBrushes } from '../services/brushes';
+import { BrushDesignerDialog, DeleteBrushDialog } from '../dialogs/BrushDesigner';
 import { loadSavedPatterns } from '../services/patterns';
 import { ColorRangeDialog, LoadSelectionDialog, ModifySelectionDialog, SaveSelectionDialog } from '../dialogs/SelectionDialogs';
 import { confirmDiscard, openPath } from '../services/files';
@@ -134,6 +136,10 @@ function DialogHost() {
       return <SaveShapeDialog id={d.id} />;
     case 'deleteShape':
       return <DeleteShapeDialog id={d.id} />;
+    case 'brushDesigner':
+      return <BrushDesignerDialog id={d.id} from={d.from} />;
+    case 'deleteBrush':
+      return <DeleteBrushDialog id={d.id} />;
   }
 }
 
@@ -175,6 +181,7 @@ export function App() {
       void loadFonts();
       void loadSavedPatterns();
       void loadCustomShapes();
+      void loadCustomBrushes();
       startAutosave();
       const launch = await api.window.getLaunchFile();
       if (launch) await openPath(launch, true);

@@ -2213,3 +2213,250 @@ kbd {
     border-color: Highlight;
   }
 }
+
+/* Brush commands under the library, and the Brushes tab's current brush. */
+.brush-commands {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.brush-current-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.rb.brush-current {
+  max-width: 132px;
+}
+.rb.brush-current .rb-label {
+  max-width: 124px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.brush-current-tool {
+  font-size: var(--fs-2xs);
+  color: var(--text-faint);
+}
+
+/* Brush Designer */
+.dialog.brush-designer {
+  width: min(680px, 94vw);
+}
+.brush-designer .dialog-body {
+  gap: 10px;
+}
+.bd-preview {
+  display: block;
+  width: 100%;
+  aspect-ratio: 5 / 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: #ffffff;
+}
+.bd-head {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.bd-head .field {
+  grid-template-columns: auto 1fr;
+}
+.bd-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+}
+.bd-tab {
+  padding: 6px 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.bd-tab:hover {
+  color: var(--text);
+}
+.bd-tab[aria-selected='true'] {
+  border-bottom-color: var(--accent);
+  color: var(--accent-fg);
+}
+.bd-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 300px;
+}
+.bd-note {
+  margin: 0;
+  color: var(--accent-fg);
+}
+.bd-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.bd-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+}
+.bd-tile:hover {
+  border-color: var(--border-strong);
+}
+.bd-tile[aria-checked='true'] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.bd-thumb {
+  display: block;
+}
+.bd-none {
+  width: 30px;
+  height: 2px;
+  background: var(--text-faint);
+  transform: rotate(-45deg);
+}
+.bd-buttons,
+.bd-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+}
+.bd-buttons {
+  gap: 6px;
+}
+.bd-buttons .btn[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+.bd-editor {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.bd-editor-grid {
+  width: 192px;
+  height: 192px;
+  border: 1px solid var(--border-strong);
+  image-rendering: pixelated;
+  cursor: crosshair;
+  touch-action: none;
+}
+.bd-editor-side {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bd-editor-side .dialog-note {
+  margin: 0;
+}
+.bd-dynamics {
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  gap: 14px;
+}
+.bd-targets {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.bd-target {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  text-align: left;
+}
+.bd-target:hover {
+  background: var(--bg-hover);
+}
+.bd-target[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.bd-target-src {
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+}
+.bd-dyn-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.bd-dyn-edit .field {
+  grid-template-columns: 110px 1fr;
+}
+.bd-curve-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.bd-curve {
+  width: 212px;
+  height: 152px;
+  flex: none;
+  touch-action: none;
+}
+.bd-curve-bg {
+  fill: var(--bg-input);
+  stroke: var(--border-strong);
+}
+.bd-curve-diag {
+  stroke: var(--border);
+  stroke-dasharray: 3 3;
+}
+.bd-curve-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+.bd-curve-pt {
+  fill: var(--bg-panel);
+  stroke: var(--accent);
+  stroke-width: 2;
+  cursor: grab;
+}
+.bd-curve-pt.current {
+  fill: var(--accent);
+}
+.bd-curve-pt:focus-visible {
+  outline: none;
+  stroke: var(--text);
+  stroke-width: 3;
+}
+.bd-presets {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+@media (forced-colors: active) {
+  .bd-tile[aria-checked='true'],
+  .bd-target[aria-pressed='true'] {
+    border-color: Highlight;
+  }
+  .bd-curve-line,
+  .bd-curve-pt {
+    stroke: CanvasText;
+  }
+  .bd-curve-pt.current {
+    fill: Highlight;
+  }
+}

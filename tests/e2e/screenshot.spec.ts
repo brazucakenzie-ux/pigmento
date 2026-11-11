@@ -507,3 +507,46 @@ test('capture brushes', async () => {
     await h.close();
   }
 });
+
+test('capture brush designer', async () => {
+  test.skip(!process.env.PIGMENTO_SCREENSHOT, 'Set PIGMENTO_SCREENSHOT=1 to capture screenshots');
+  const out = process.env.PIGMENTO_SCREENSHOT_DIR ?? path.resolve('test-results');
+  const h = await launchApp();
+  const { page } = h;
+  const shot = (name: string) => page.screenshot({ path: path.join(out, `${name}.png`) });
+  try {
+    await ready(page);
+    await page.getByRole('tab', { name: 'Brushes' }).click();
+    await page.waitForTimeout(150);
+    await shot('brushes-tab');
+    await page.locator('.ribbon').getByRole('button', { name: 'New brush…' }).click();
+    const dlg = page.getByRole('dialog', { name: 'New brush' });
+    await dlg.getByRole('radio', { name: 'Charcoal' }).click();
+    await page.waitForTimeout(150);
+    await shot('designer-tip');
+    await dlg.getByRole('button', { name: 'Draw a tip' }).click();
+    const grid = dlg.getByRole('img', { name: 'Tip drawing grid' });
+    const b = (await grid.boundingBox())!;
+    await page.mouse.move(b.x + b.width * 0.2, b.y + b.height * 0.8);
+    await page.mouse.down();
+    await page.mouse.move(b.x + b.width * 0.8, b.y + b.height * 0.2, { steps: 10 });
+    await page.mouse.up();
+    await page.waitForTimeout(150);
+    await shot('designer-draw');
+    await dlg.getByRole('tab', { name: 'Grain' }).click();
+    await dlg.getByRole('radio', { name: 'Canvas' }).click();
+    await page.waitForTimeout(150);
+    await shot('designer-texture');
+    await dlg.getByRole('tab', { name: 'Dynamics' }).click();
+    await dlg.getByRole('combobox', { name: 'Controlled by' }).selectOption('pressure');
+    await dlg.getByRole('button', { name: 'S-curve' }).click();
+    await page.waitForTimeout(150);
+    await shot('designer-dynamics');
+    await dlg.getByRole('tab', { name: 'Stroke' }).click();
+    await page.waitForTimeout(150);
+    await shot('designer-stroke');
+    console.warn('errors:', JSON.stringify(h.errors));
+  } finally {
+    await h.close();
+  }
+});

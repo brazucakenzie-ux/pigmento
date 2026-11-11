@@ -1827,8 +1827,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     return k === 1 ? saved.tile : resample(saved.tile, saved.tile.w * k, saved.tile.h * k, 'nearest');
   }
 
-  /** The visible image inside the selection (outside it transparent), for a new pattern. */
-  patternFromSelection(): ImageBuf | null {
+  /** The visible image inside the selection (outside it transparent): a new pattern or brush tip. */
+  selectionImage(): ImageBuf | null {
     this.commitLive(true);
     const sel = this.doc.selection;
     if (!sel) return null;

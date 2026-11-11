@@ -1,5 +1,6 @@
 import { exportSvgFile, importSvgFile } from '../services/svg';
 import { exportShapePack, hasCustomShapes, importShapePack } from '../services/shapes';
+import { brushTarget, duplicateBrush, isCustomBrush } from '../services/brushes';
 import type { ThemeMode } from '@shared/settings';
 import { toolRegistry } from '@engine/tools/ToolRegistry';
 import { reportEngineError } from '@engine/input/InputController';
@@ -25,6 +26,8 @@ export interface Action {
 }
 
 const hasSelection = (s: UiState) => s.selection.bounds !== null;
+/** The brush the brush commands act on is a personal one (the library counter changes with it). */
+const customBrush = (s: UiState) => s.brushLibrary >= 0 && isCustomBrush(brushTarget(s).brushId);
 /** At least n objects selected on the active shape layer. */
 const hasShapes = (n: number) => (s: UiState) => s.vectorSelection.count >= n;
 
@@ -275,6 +278,21 @@ const base: Action[] = [
     // One shape selected, or a shape or finished path being edited.
     enabled: (s) => (s.live === 'shape' && !s.path?.drawing) || (s.vectorSelection.count === 1 && s.vectorSelection.groups === 0),
   },
+  // Brushes: the active brush tool's brush (or the Brush's)
+  { id: 'newBrush', labelKey: 'action.newBrush', icon: 'plus', group: 'tools', run: () => openDialog({ kind: 'brushDesigner', from: brushTarget().brushId }) },
+  { id: 'editBrush', labelKey: 'action.editBrush', icon: 'brush', group: 'tools', run: () => openDialog({ kind: 'brushDesigner', id: brushTarget().brushId }), enabled: customBrush },
+  {
+    id: 'duplicateBrush',
+    labelKey: 'action.duplicateBrush',
+    icon: 'copy',
+    group: 'tools',
+    run: () => {
+      const b = brushTarget();
+      void duplicateBrush(b.brushId, b.toolId);
+    },
+    enabled: customBrush,
+  },
+  { id: 'deleteBrush', labelKey: 'action.deleteBrush', icon: 'delete', group: 'tools', run: () => openDialog({ kind: 'deleteBrush', id: brushTarget().brushId }), enabled: customBrush },
   { id: 'ungroupShapes', labelKey: 'action.ungroupShapes', icon: 'ungroup', group: 'image', run: () => engine.ungroupVector(), enabled: (s) => s.vectorSelection.groups > 0 },
   // Colours
   { id: 'swapColors', labelKey: 'action.swapColors', icon: 'swap', group: 'colors', shortcut: ['X'], run: () => engine.swapColors() },

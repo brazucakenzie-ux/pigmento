@@ -19,7 +19,7 @@ export async function loadSavedPatterns(): Promise<void> {
 
 /** Edit → Make pattern from selection: save it and switch the Fill tool to it. */
 export async function makePatternFromSelection(): Promise<boolean> {
-  const img = engine.patternFromSelection();
+  const img = engine.selectionImage();
   if (!img) {
     showToast({ kind: 'info', key: 'notice.patternNeedsSelection' });
     return false;

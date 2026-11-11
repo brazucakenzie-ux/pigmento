@@ -2,19 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { create } from 'zustand';
 import { BRUSH_CATEGORIES, brushRegistry, type BrushCategory, type BrushDef } from '@engine/brush/BrushRegistry';
 import { brushPreview } from '@engine/brush/preview';
-import { flatOptions } from '@engine/tools/Tool';
-import { brushOptionsFor } from '@engine/tools/brushTool';
-import { toolRegistry } from '@engine/tools/ToolRegistry';
 import { t, type I18nKey } from '../../i18n';
 import { Icon } from '../icons/Icon';
 import { Popover } from '../components/Popover';
-import { runAction } from '../actions/actions';
-import { engine } from '../state/engine';
+import { action, runAction } from '../actions/actions';
+import { brushName, pickBrush } from '../services/brushes';
 import { updateSettings, useUi } from '../state/store';
 
-export function brushName(def: BrushDef): string {
-  return def.name ?? t(def.labelKey);
-}
+export { brushName, pickBrush };
 
 /** Previews are drawn once per brush and size (they're seeded, so they never change). */
 const PREVIEWS = new WeakMap<BrushDef, Map<string, ImageData>>();
@@ -45,22 +40,6 @@ export function BrushThumb({ def, w = 96, h = 32 }: { def: BrushDef; w?: number;
     if (ctx) ctx.putImageData(previewOf(def, pw, ph), 0, 0);
   }, [def, pw, ph]);
   return <canvas ref={ref} className="brush-thumb" width={pw} height={ph} style={{ width: w, height: h }} aria-hidden="true" />;
-}
-
-/**
- * Use a brush with a tool: its size, opacity, flow and hardness go into the tool's sliders.
- * An eraser brush picked for the Brush switches to the Eraser.
- */
-export function pickBrush(toolId: string, id: string): void {
-  const def = brushRegistry.get(id);
-  if (!def) return;
-  const target = def.eraser && toolId === 'brush' ? 'eraser' : toolId;
-  const tool = toolRegistry.get(target);
-  if (!tool) return;
-  const keys = new Set(flatOptions(tool.options).map((o) => o.key));
-  const values = Object.fromEntries(Object.entries(brushOptionsFor(def)).filter(([k]) => keys.has(k)));
-  engine.setToolOptions(target, values);
-  runAction(`tool.${target}`);
 }
 
 function toggleFavorite(id: string): void {
@@ -144,11 +123,45 @@ export function BrushGallery({ value, onPick, menu = false }: { value: string; o
   );
 }
 
+/** A brush command as a plain button (closing the popover it sits in first). */
+export function BrushCommand({ id, onRun }: { id: string; onRun?: () => void }) {
+  const a = action(id);
+  const enabled = useUi((s) => (a.enabled ? a.enabled(s) : true));
+  return (
+    <button
+      type="button"
+      className="btn small"
+      disabled={!enabled}
+      onClick={() => {
+        onRun?.();
+        runAction(id);
+      }}
+    >
+      <Icon name={a.icon ?? 'brush'} size={15} />
+      {t(a.labelKey)}
+    </button>
+  );
+}
+
+/** Make, edit, duplicate and delete brushes (the last three for personal brushes). */
+export function BrushCommands({ onRun }: { onRun?: () => void }) {
+  return (
+    <div className="brush-commands" role="group" aria-label={t('brushes.manage')}>
+      <BrushCommand id="newBrush" onRun={onRun} />
+      <BrushCommand id="editBrush" onRun={onRun} />
+      <BrushCommand id="duplicateBrush" onRun={onRun} />
+      <BrushCommand id="deleteBrush" onRun={onRun} />
+    </div>
+  );
+}
+
 /** Options bar: the tool's brush (a preview and its name) opening the library. */
 export function BrushPicker({ toolId, value, label }: { toolId: string; value: string; label: string }) {
   const ref = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
+  // Personal brushes load after start-up (and can be renamed): look the brush up again then.
+  useUi((s) => s.brushLibrary);
   const def = brushRegistry.get(value);
   return (
     <span className="opt">
@@ -165,6 +178,7 @@ export function BrushPicker({ toolId, value, label }: { toolId: string; value: s
             close();
           }}
         />
+        <BrushCommands onRun={close} />
       </Popover>
     </span>
   );
