@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect } from 'react';
 import { t } from '../../i18n';
-import { handleGlobalKey } from '../actions/keymap';
+import { handleGlobalKey, handleGlobalPointer } from '../actions/keymap';
 import { TooltipLayer } from '../components/Tooltips';
 import { AboutDialog, EditColorsDialog, PasteLargerDialog, QualityDialog, RecoverDialog, ShortcutsDialog } from '../dialogs/OtherDialogs';
 import { clearOwnAutosave, offerRecovery, startAutosave } from '../services/autosave';
@@ -210,10 +210,13 @@ export function App() {
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     window.addEventListener('keydown', handleGlobalKey);
+    // Capture phase: the canvas never sees the side buttons, so they can't start a stroke.
+    for (const type of ['pointerdown', 'pointermove', 'pointerup'] as const) window.addEventListener(type, handleGlobalPointer, true);
     return () => {
       cancelled = true;
       offs.forEach((off) => off());
       window.removeEventListener('keydown', handleGlobalKey);
+      for (const type of ['pointerdown', 'pointermove', 'pointerup'] as const) window.removeEventListener(type, handleGlobalPointer, true);
       window.removeEventListener('beforeunload', onBeforeUnload);
     };
   }, []);

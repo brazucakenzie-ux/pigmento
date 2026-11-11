@@ -298,8 +298,8 @@ const base: Action[] = [
   { id: 'swapColors', labelKey: 'action.swapColors', icon: 'swap', group: 'colors', shortcut: ['X'], run: () => engine.swapColors() },
   { id: 'resetColors', labelKey: 'action.resetColors', group: 'colors', shortcut: ['D'], run: () => engine.resetColors() },
   { id: 'editColors', labelKey: 'action.editColors', icon: 'palette', group: 'colors', run: () => openDialog({ kind: 'editColors', target: 'primary' }) },
-  { id: 'brushSizeUp', labelKey: 'action.brushSizeUp', group: 'tools', shortcut: [']'], run: () => stepSize(1) },
-  { id: 'brushSizeDown', labelKey: 'action.brushSizeDown', group: 'tools', shortcut: ['['], run: () => stepSize(-1) },
+  { id: 'brushSizeUp', labelKey: 'action.brushSizeUp', group: 'tools', shortcut: [']', 'Mouse5'], run: () => stepSize(1) },
+  { id: 'brushSizeDown', labelKey: 'action.brushSizeDown', group: 'tools', shortcut: ['[', 'Mouse4'], run: () => stepSize(-1) },
   // Help
   { id: 'shortcuts', labelKey: 'action.shortcuts', icon: 'keyboard', group: 'view', shortcut: ['Ctrl+Slash', 'F1'], run: () => openDialog({ kind: 'shortcuts' }) },
   { id: 'about', labelKey: 'action.about', icon: 'info', group: 'view', run: () => openDialog({ kind: 'about' }) },

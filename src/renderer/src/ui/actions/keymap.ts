@@ -43,6 +43,7 @@ export function displayCombo(combo: string): string {
     .replace('Slash', '/')
     .replace('Period', '.')
     .replace('Comma', ',')
+    .replace(/^Mouse(\d)$/, 'Mouse $1')
     .replace(/\+(?=.)/g, ' + ')
     .replace(' +  + ', ' + +');
 }
@@ -125,4 +126,24 @@ export function handleGlobalKey(e: KeyboardEvent): void {
   // Brush-size keys repeat; everything else fires once per press.
   e.preventDefault();
   runAction(id);
+}
+
+/** The mouse's side buttons as shortcuts: back is "Mouse4", forward "Mouse5". */
+const SIDE_BUTTONS: Record<number, { combo: string; bit: number }> = { 3: { combo: 'Mouse4', bit: 8 }, 4: { combo: 'Mouse5', bit: 16 } };
+
+/**
+ * Window-level handler for the side buttons (pointerdown, pointermove and pointerup). They run
+ * their shortcut even mid-stroke, where pressing one arrives as a pointermove, and never
+ * navigate back or forward.
+ */
+export function handleGlobalPointer(e: PointerEvent): void {
+  const side = SIDE_BUTTONS[e.button];
+  if (!side) return;
+  e.preventDefault();
+  // Only presses count (a move reports the button on release too).
+  if (e.type === 'pointerup' || !(e.buttons & side.bit)) return;
+  const state = useUi.getState();
+  if (state.dialog) return;
+  const id = actionForCombo(side.combo, state.tool);
+  if (id) runAction(id);
 }

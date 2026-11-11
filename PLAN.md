@@ -192,6 +192,9 @@ Each item is ticked in the same commit as its work.
 - [x] 2.15 Palette files: import/export `.json`, import `.gpl` and `.ase`; SVG export (vector layers as real paths, raster layers as embedded PNG)
 - [x] 2.16 Golden-image tests for every built-in shape; e2e for creating and using a custom shape and for project save/reopen; `npm run check` green; report
 
+### Side step: mouse side buttons (requested during Milestone 3)
+- [x] Mouse 4 (back) and Mouse 5 (forward) make the active tool's size smaller and bigger, like [ and ], even mid-stroke; they never start a stroke or navigate, and are listed in the shortcuts cheat sheet
+
 ### Milestone 3 — Brushes, effects, drawing aids
 Each item is ticked in the same commit as its work.
 - [x] 3.1 Brush engine: a brush is data (tip, size, opacity, flow, hardness, spacing, angle, roundness, scatter, count, size/opacity/angle jitter, rotation follow-stroke, texture, colour mixing); dabs with flow build up under the stroke's opacity cap; seeded randomness so strokes repeat exactly; procedural and image tips; dynamics that map pressure, tilt, speed or randomness to any parameter through a curve, with mouse/touch fallbacks (+ stamping and dynamics unit tests)
