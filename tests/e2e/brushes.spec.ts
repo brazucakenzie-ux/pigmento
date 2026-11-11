@@ -135,6 +135,111 @@ test('stabilises strokes and still ends where the pointer is released', async ()
   expect(await pixel(page, 300, 560)).toEqual(WHITE);
 });
 
+test('retouches with blur, smudge, dodge/burn and the clone stamp, one undo step a stroke', async () => {
+  h = await launchApp();
+  const { page } = h;
+  await ready(page);
+  // Left half red, right half white.
+  await page.evaluate((c) => {
+    const t = window.__pigmentoTest!;
+    t.fillLayer(t.layers().activeId, c, { x: 0, y: 0, w: 640, h: 800 });
+  }, RED);
+  const step = () => page.evaluate(() => window.__pigmentoTest!.history().index);
+  const size = page.locator('.optionsbar').getByRole('textbox', { name: 'Size' });
+  const setSize = async (n: number) => {
+    await size.fill(String(n));
+    await size.press('Enter');
+  };
+
+  // Picked from the Retouch menu among the tools; the button then shows the tool in use.
+  await page.locator('.ribbon').getByRole('button', { name: 'Retouch' }).click();
+  await page.getByRole('menu', { name: 'Retouch' }).locator('[role^="menuitem"]', { hasText: 'Blur' }).click();
+  expect(await page.evaluate(() => window.__pigmentoTest!.tool())).toBe('blur');
+  await expect(page.locator('.ribbon').getByRole('button', { name: 'Blur' })).toHaveAttribute('aria-pressed', 'true');
+
+  // Blur softens the edge down the middle.
+  await setSize(40);
+  const before = await step();
+  await drag(page, [
+    [640, 100],
+    [640, 300],
+  ]);
+  expect(await step()).toBe(before + 1);
+  const left = await pixel(page, 638, 200);
+  const right = await pixel(page, 641, 200);
+  expect(left.g).toBeGreaterThan(RED.g);
+  expect(right.g).toBeLessThan(255);
+  // Away from the brush the edge stays sharp.
+  expect(await pixel(page, 638, 500)).toEqual(RED);
+  await page.keyboard.press('Control+z');
+  expect(await pixel(page, 641, 200)).toEqual(WHITE);
+
+  // Smudge drags red into the white. K moves through Smudge, Blur and Sharpen.
+  const seen = new Set<string>();
+  for (let i = 0; i < 3; i++) {
+    await page.keyboard.press('k');
+    seen.add(await page.evaluate(() => window.__pigmentoTest!.tool()));
+    if (seen.size === 3) break;
+  }
+  expect([...seen].sort()).toEqual(['blur', 'sharpen', 'smudge']);
+  while ((await page.evaluate(() => window.__pigmentoTest!.tool())) !== 'smudge') await page.keyboard.press('k');
+  await setSize(30);
+  await drag(page, [
+    [600, 500],
+    [660, 500],
+    [720, 500],
+  ]);
+  expect((await pixel(page, 690, 500)).g).toBeLessThan(230);
+  expect(await pixel(page, 690, 700)).toEqual(WHITE);
+
+  // Dodge lightens the red, burn darkens it.
+  await page.keyboard.press('h');
+  expect(await page.evaluate(() => window.__pigmentoTest!.tool())).toBe('dodgeBurn');
+  await drag(page, [
+    [200, 600],
+    [300, 600],
+  ]);
+  const dodged = await pixel(page, 250, 600);
+  expect(dodged.r).toBeGreaterThan(RED.r);
+  expect(dodged.g).toBeGreaterThan(RED.g);
+  await page.getByRole('radio', { name: 'Burn (darken)' }).click();
+  await drag(page, [
+    [200, 700],
+    [300, 700],
+  ]);
+  const burnt = await pixel(page, 250, 700);
+  expect(burnt.r).toBeLessThan(RED.r);
+  expect(burnt.a).toBe(255);
+
+  // The clone stamp needs a source first…
+  await page.keyboard.press('j');
+  expect(await page.evaluate(() => window.__pigmentoTest!.tool())).toBe('clone');
+  const n = await step();
+  await drag(page, [
+    [900, 100],
+    [920, 100],
+  ]);
+  await expect(page.locator('.toast')).toContainText('Alt+click first to choose where to copy from.');
+  expect(await step()).toBe(n);
+  expect(await pixel(page, 910, 100)).toEqual(WHITE);
+  // …then copies red from 600 px to the left onto the white.
+  const src = await docToScreen(page, 300, 100);
+  await page.keyboard.down('Alt');
+  await page.mouse.click(src.x, src.y);
+  await page.keyboard.up('Alt');
+  await drag(page, [
+    [900, 100],
+    [920, 100],
+  ]);
+  expect(await step()).toBe(n + 1);
+  const copied = await pixel(page, 910, 100);
+  expect(copied.r).toBeGreaterThan(200);
+  expect(copied.g).toBeLessThan(80);
+  expect(await pixel(page, 910, 200)).toEqual(WHITE);
+  await page.keyboard.press('Control+z');
+  expect(await pixel(page, 910, 100)).toEqual(WHITE);
+});
+
 test('picks brushes from the library, with favourites, for the Brush and the Eraser', async () => {
   h = await launchApp();
   const { page } = h;

@@ -283,6 +283,17 @@ export class Surface {
     }
   }
 
+  /**
+   * A read-only view of the pixels as they are now, sharing tiles (no copying). It stays
+   * unchanged while this surface is written only inside an edit (beginEdit copies a tile
+   * before its first write), e.g. the source for cloning during a stroke.
+   */
+  snapshot(): Surface {
+    const s = new Surface(this.width, this.height);
+    s.tiles = [...this.tiles];
+    return s;
+  }
+
   clone(): Surface {
     const s = new Surface(this.width, this.height);
     s.tiles = this.tiles.map((t) => (t ? t.slice() : null));

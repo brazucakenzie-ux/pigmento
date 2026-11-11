@@ -79,9 +79,14 @@ describe('wallpaper (Windows)', () => {
     }
   });
 
-  it.runIf(process.platform === 'win32')('runs the P/Invoke through PowerShell (read-only query)', async () => {
-    // SPI_GETDESKWALLPAPER: proves Add-Type + user32 interop work without changing anything.
-    const current = await runPowerShell(buildQueryWallpaperScript());
-    expect(typeof current).toBe('string');
-  });
+  // A cold powershell.exe plus an Add-Type compile: allow for the other test files hogging the CPU.
+  it.runIf(process.platform === 'win32')(
+    'runs the P/Invoke through PowerShell (read-only query)',
+    async () => {
+      // SPI_GETDESKWALLPAPER: proves Add-Type + user32 interop work without changing anything.
+      const current = await runPowerShell(buildQueryWallpaperScript());
+      expect(typeof current).toBe('string');
+    },
+    60000,
+  );
 });

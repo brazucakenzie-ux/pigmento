@@ -14,7 +14,7 @@ import type { I18nKey } from '../../i18n';
 import type { Symmetry } from '../brush/symmetry';
 
 /** Where a tool's button goes in the ribbon. */
-export type ToolGroup = 'selection' | 'tools' | 'brushes' | 'shapes';
+export type ToolGroup = 'selection' | 'tools' | 'brushes' | 'shapes' | 'retouch';
 
 interface OptionBase {
   key: string;
@@ -132,6 +132,8 @@ export interface ToolContext {
   pushPixels(label: I18nKey, layer: Layer, delta: TileDelta | null, selBefore?: Selection | null, selAfter?: Selection | null): void;
   /** True if the active layer can be painted (visible and unlocked); notifies otherwise. */
   canPaint(): boolean;
+  /** Show a short message (a toast). */
+  notify(kind: 'info' | 'error', key: I18nKey): void;
   /** Show a selection without recording it (e.g. while a new one is being drawn). */
   setSelection(sel: Selection | null): void;
   /** Change the selection as an undoable step. */

@@ -121,6 +121,23 @@ function ToolButtons({ group, variant }: { group: 'tools' | 'shapes' | 'brushes'
   );
 }
 
+/** Smudge, Blur, Sharpen, Clone and Dodge/Burn share one cell of the Tools grid. */
+function RetouchMenu() {
+  const current = useUi((s) => toolRegistry.get(s.tool));
+  const active = current?.group === 'retouch' ? current : null;
+  return (
+    <MenuButton label={active ? t(active.labelKey) : t('group.retouch')} icon={active?.icon ?? 'smudge'} variant="compact" tip={t('group.retouch')} pressed={active !== null}>
+      {(close) => (
+        <>
+          {toolRegistry.byGroup('retouch').map((tool) => (
+            <ActionMenuItem key={tool.id} id={`tool.${tool.id}`} close={close} />
+          ))}
+        </>
+      )}
+    </MenuButton>
+  );
+}
+
 function RibbonBrushes({ close }: { close: () => void }) {
   const value = useUi((s) => String((s.toolOptions.brush ?? engine.options('brush')).brushId ?? 'round'));
   return (
@@ -210,6 +227,7 @@ function HomeTab() {
       <RibbonGroup label={t('group.tools')}>
         <div className="rb-grid">
           <ToolButtons group="tools" variant="compact" />
+          <RetouchMenu />
         </div>
       </RibbonGroup>
       <RibbonGroup label={t('group.brushes')}>

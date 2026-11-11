@@ -38,11 +38,14 @@ export function MenuButton({
   variant = 'small',
   children,
   tip,
+  pressed,
 }: {
   label: string;
   icon: string;
   variant?: RbVariant;
   tip?: string;
+  /** Shown as pressed (e.g. one of its tools is in use). */
+  pressed?: boolean;
   children: (close: () => void) => ReactNode;
 }) {
   const ref = useRef<HTMLButtonElement>(null);
@@ -56,6 +59,7 @@ export function MenuButton({
         className={`rb rb-${variant}`}
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-pressed={pressed}
         data-tip={tip ?? label}
         onClick={() => setOpen((o) => !o)}
       >

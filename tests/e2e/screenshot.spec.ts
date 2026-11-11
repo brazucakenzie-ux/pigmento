@@ -483,6 +483,25 @@ test('capture brushes', async () => {
     await page.locator('.brush-pick').click();
     await page.waitForTimeout(300);
     await shot('brush-picker');
+    await page.keyboard.press('Escape');
+    // The Retouch tools, and a smudge across the first row of strokes.
+    await page.locator('.ribbon').getByRole('button', { name: 'Retouch' }).click();
+    await page.waitForTimeout(150);
+    await shot('retouch-menu');
+    await page.getByRole('menu', { name: 'Retouch' }).locator('[role^="menuitem"]', { hasText: 'Smudge' }).click();
+    await drag(page, [
+      [60, 30],
+      [80, 80],
+      [100, 130],
+    ]);
+    await drag(page, [
+      [380, 30],
+      [400, 80],
+      [420, 130],
+    ]);
+    await page.mouse.move(700, 600);
+    await page.waitForTimeout(150);
+    await shot('retouch-smudge');
     console.warn('errors:', JSON.stringify(h.errors));
   } finally {
     await h.close();
