@@ -58,6 +58,7 @@ import {
 import { hitTestNodes, lineStyleOf, rasterizeNodes, setSavedPatternSource, shapePad } from './vector/render';
 import { optionsOfStyle, shapeStyle } from './tools/shapeTools';
 import { maskToSubpaths } from './vector/trace';
+import { MAX_SEGMENTS, MIN_SEGMENTS, type Symmetry } from './brush/symmetry';
 import type { SvgDrawing } from './io/svgImport';
 import { documentToSvg } from './io/svgExport';
 import { addImageAsset, ASSET_ID, MAX_ASSET_PIXELS } from './vector/assets';
@@ -190,6 +191,8 @@ export interface EngineEvents {
   guides: number;
   /** Objects selected on the active shape layer. */
   vectorSelection: VectorSelectionInfo;
+  /** Brush symmetry changed (mode, segments or centre). */
+  symmetry: Symmetry;
 }
 
 export type Anchor = 'nw' | 'n' | 'ne' | 'w' | 'c' | 'e' | 'sw' | 's' | 'se';
@@ -975,6 +978,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.activeTool.deactivate?.(this);
     for (const l of doc.layers) if (l.name === '') l.name = this.layers.namer('layer', 1);
     this.doc = doc;
+    // A new image puts the symmetry centre back in its middle.
+    if (this._symmetry.center) this.setSymmetry({ center: null });
     this.history.reset(initial);
     this.view.setDocSize(doc.width, doc.height);
     this.renderer.resetDocument(doc);
@@ -1505,6 +1510,20 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.vectorChanged(layer);
     this.setVectorSelection([node.id]);
     return true;
+  }
+
+  private _symmetry: Symmetry = { mode: 'off', segments: 6, center: null };
+
+  get symmetry(): Symmetry {
+    return this._symmetry;
+  }
+
+  setSymmetry(change: Partial<Symmetry>): void {
+    const next: Symmetry = { ...this._symmetry, ...change };
+    next.segments = Math.max(MIN_SEGMENTS, Math.min(MAX_SEGMENTS, Math.round(next.segments)));
+    this._symmetry = next;
+    this.emit('symmetry', next);
+    this.invalidateOverlay();
   }
 
   newShapeLayer(): string {

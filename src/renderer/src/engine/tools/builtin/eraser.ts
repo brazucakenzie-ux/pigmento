@@ -1,5 +1,5 @@
 import { defaultBrush, LINEAR } from '../../brush/types';
-import { createBrushTool } from '../brushTool';
+import { createBrushTool, SMOOTHING_OPTION } from '../brushTool';
 import { registerTool } from '../ToolRegistry';
 
 /** Paint's eraser: hard square pixels. With smooth edges on, a soft round tip. */
@@ -20,12 +20,13 @@ export default registerTool(
     options: [
       { key: 'size', type: 'slider', labelKey: 'opt.size', min: 1, max: 400, step: 1, unit: 'px', default: 10, presets: [4, 10, 20, 40], log: true },
       { key: 'opacity', type: 'slider', labelKey: 'opt.opacity', min: 1, max: 100, step: 1, unit: '%', default: 100 },
+      SMOOTHING_OPTION,
       { key: 'antialias', type: 'toggle', labelKey: 'opt.antialias', default: false },
     ],
     cursor: () => 'none',
     brush: (ctx) => {
       const o = ctx.options('eraser');
-      return { settings: o.antialias === true ? SMOOTH : SQUARE, size: Number(o.size ?? 10), opacity: Number(o.opacity ?? 100) / 100, pressure: true };
+      return { settings: o.antialias === true ? SMOOTH : SQUARE, size: Number(o.size ?? 10), opacity: Number(o.opacity ?? 100) / 100, pressure: true, smoothing: Number(o.smoothing ?? 0) / 100 };
     },
     overlay: (ctx, ov, hover) => {
       const o = ctx.options('eraser');

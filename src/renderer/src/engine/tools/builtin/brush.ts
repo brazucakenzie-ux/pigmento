@@ -1,5 +1,5 @@
 import { defaultBrush, LINEAR } from '../../brush/types';
-import { createBrushTool } from '../brushTool';
+import { createBrushTool, SMOOTHING_OPTION } from '../brushTool';
 import { registerTool } from '../ToolRegistry';
 
 export default registerTool(
@@ -18,6 +18,7 @@ export default registerTool(
       { key: 'opacity', type: 'slider', labelKey: 'opt.opacity', min: 1, max: 100, step: 1, unit: '%', default: 100 },
       { key: 'flow', type: 'slider', labelKey: 'opt.flow', min: 1, max: 100, step: 1, unit: '%', default: 100 },
       { key: 'hardness', type: 'slider', labelKey: 'opt.hardness', min: 0, max: 100, step: 1, unit: '%', default: 80 },
+      SMOOTHING_OPTION,
       { key: 'pressure', type: 'toggle', labelKey: 'opt.pressure', default: true },
     ],
     cursor: () => 'none',
@@ -33,6 +34,7 @@ export default registerTool(
         size: Number(o.size ?? 8),
         opacity: Number(o.opacity ?? 100) / 100,
         pressure: o.pressure !== false,
+        smoothing: Number(o.smoothing ?? 0) / 100,
       };
     },
     overlay: (ctx, ov, hover) => {

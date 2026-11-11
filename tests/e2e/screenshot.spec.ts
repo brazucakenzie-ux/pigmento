@@ -426,3 +426,37 @@ test('capture palettes', async () => {
     await h.close();
   }
 });
+
+// Brushes: symmetry axes and strokes, the options bar with the Symmetry popover.
+test('capture brushes', async () => {
+  test.skip(!process.env.PIGMENTO_SCREENSHOT, 'Set PIGMENTO_SCREENSHOT=1 to capture screenshots');
+  const out = process.env.PIGMENTO_SCREENSHOT_DIR ?? path.resolve('test-results');
+  const h = await launchApp();
+  const { page } = h;
+  const shot = (name: string) => page.screenshot({ path: path.join(out, `${name}.png`) });
+  try {
+    await ready(page);
+    await page.getByRole('tab', { name: 'View' }).click();
+    await page.getByRole('button', { name: 'Light' }).click();
+    await page.getByRole('tab', { name: 'Home' }).click();
+    await page.getByRole('button', { name: /Colour #4B4BE0/ }).click();
+    await page.keyboard.press('b');
+    await page.locator('.opt-pop-btn', { hasText: 'Symmetry' }).click();
+    await page.getByRole('dialog', { name: 'Symmetry' }).getByRole('radio', { name: 'Radial' }).click();
+    await page.waitForTimeout(150);
+    await shot('brush-symmetry-popover');
+    await page.keyboard.press('Escape');
+    await drag(page, [
+      [640, 250],
+      [700, 300],
+      [680, 360],
+      [760, 330],
+    ]);
+    await page.mouse.move(900, 700);
+    await page.waitForTimeout(150);
+    await shot('brush-symmetry');
+    console.warn('errors:', JSON.stringify(h.errors));
+  } finally {
+    await h.close();
+  }
+});

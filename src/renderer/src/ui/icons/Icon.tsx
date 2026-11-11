@@ -205,6 +205,7 @@ const LUCIDE: Record<string, LucideIcon> = {
   'path-open': Spline,
   'point-smooth': CircleDot,
   'point-corner': SquareDot,
+  symmetry: FlipHorizontal2,
   close: X,
   minus: Minus,
   plus: Plus,

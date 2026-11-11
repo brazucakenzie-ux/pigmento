@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type WheelEvent } from 'react';
 import { assetCanvas } from '@engine/vector/assets';
+import { MAX_SEGMENTS, MIN_SEGMENTS, SYMMETRY_MODES, type Symmetry } from '@engine/brush/symmetry';
 import { Popover } from '../components/Popover';
 import { pickFillImage } from '../services/files';
 import type { OptionSpec } from '@engine/tools/Tool';
 import type { LayerNode } from '@engine/doc/LayerController';
 import { toolRegistry } from '@engine/tools/ToolRegistry';
-import { t } from '../../i18n';
+import { t, type I18nKey } from '../../i18n';
 import { Icon } from '../icons/Icon';
 import { NumberField, Segmented, Slider } from '../components/Controls';
 import { engine } from '../state/engine';
@@ -157,6 +158,50 @@ function OptionScroller({ children }: { children: ReactNode }) {
         </button>
       ) : null}
     </>
+  );
+}
+
+/** Brush symmetry (shared by every brush tool): mode, radial segments, centre. */
+function SymmetryControl() {
+  const ref = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  const sym = useUi((s) => s.symmetry);
+  const label = t('opt.symmetry');
+  return (
+    <span className="opt">
+      <button ref={ref} type="button" className="opt-pop-btn" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <Icon name="symmetry" size={15} />
+        <span>{label}</span>
+        <span className="opt-pop-summary">{t(`symmetry.${sym.mode}` as I18nKey)}</span>
+        <Icon name="chevron-down" size={12} />
+      </button>
+      <Popover anchor={ref} open={open} onClose={close} label={label} className="opt-popover">
+        <span className="opt">
+          <span>{t('opt.symmetryMode')}</span>
+          <Segmented
+            value={sym.mode}
+            onChange={(v) => engine.setSymmetry({ mode: v as Symmetry['mode'] })}
+            label={t('opt.symmetryMode')}
+            choices={SYMMETRY_MODES.map((m) => ({ value: m, label: t(`symmetry.${m}` as I18nKey) }))}
+          />
+        </span>
+        {sym.mode === 'radial' ? (
+          <span className="opt">
+            <span>{t('opt.symmetrySegments')}</span>
+            <Slider value={sym.segments} min={MIN_SEGMENTS} max={MAX_SEGMENTS} step={1} label={t('opt.symmetrySegments')} onChange={(v) => engine.setSymmetry({ segments: v })} />
+          </span>
+        ) : null}
+        {sym.mode !== 'off' ? (
+          <span className="opt">
+            <span className="opt-hint">{t('symmetry.hint')}</span>
+            <button type="button" className="btn small" disabled={!sym.center} onClick={() => engine.setSymmetry({ center: null })}>
+              {t('symmetry.recenter')}
+            </button>
+          </span>
+        ) : null}
+      </Popover>
+    </span>
   );
 }
 
@@ -348,6 +393,7 @@ export function OptionsBar() {
           <OptionControl key={spec.key} toolId={toolId} spec={spec} values={values} />
         ))}
         {toolId === 'transform' ? <TransformFields /> : null}
+        {tool.symmetry ? <SymmetryControl /> : null}
         <PathBar />
         {toolId === 'move' && shapeLayer ? <SelectedShapeParams /> : null}
         {toolId === 'move' ? <VectorBar /> : null}

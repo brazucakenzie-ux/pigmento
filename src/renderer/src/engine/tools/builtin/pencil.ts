@@ -1,6 +1,6 @@
 import { defaultBrush } from '../../brush/types';
 import { CURSOR_PENCIL } from '../cursors';
-import { createBrushTool } from '../brushTool';
+import { createBrushTool, SMOOTHING_OPTION } from '../brushTool';
 import { registerTool } from '../ToolRegistry';
 
 /** Paint's pencil: hard square pixels, stepped pixel by pixel. */
@@ -20,11 +20,12 @@ export default registerTool(
     options: [
       { key: 'size', type: 'slider', labelKey: 'opt.size', min: 1, max: 32, step: 1, unit: 'px', default: 1, presets: [1, 2, 3, 4] },
       { key: 'opacity', type: 'slider', labelKey: 'opt.opacity', min: 1, max: 100, step: 1, unit: '%', default: 100 },
+      SMOOTHING_OPTION,
     ],
     cursor: () => CURSOR_PENCIL,
     brush: (ctx) => {
       const o = ctx.options('pencil');
-      return { settings: PENCIL, size: Number(o.size ?? 1), opacity: Number(o.opacity ?? 100) / 100, pressure: false };
+      return { settings: PENCIL, size: Number(o.size ?? 1), opacity: Number(o.opacity ?? 100) / 100, pressure: false, smoothing: Number(o.smoothing ?? 0) / 100 };
     },
     overlay: (ctx, ov, hover) => {
       if (ctx.view.zoom >= 4) ov.squareCursor(hover.x, hover.y, Number(ctx.options('pencil').size ?? 1));

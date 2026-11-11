@@ -5,6 +5,7 @@ import { makeTip, sampleMask, tipLevel } from '@engine/brush/tips';
 import { curveAt, defaultBrush, dynamicValue, LINEAR, seededRandom, type BrushSettings } from '@engine/brush/types';
 import { Surface } from '@engine/raster/Surface';
 import type { RGBA } from '@engine/core/color';
+import { stabilize, symmetryAxes, symmetryCopies, type Symmetry } from '@engine/brush/symmetry';
 
 const BLACK: RGBA = { r: 0, g: 0, b: 0, a: 255 };
 const ROUND: DabShape = { tip: 'round', pixel: false, texture: null };
@@ -215,5 +216,39 @@ describe('dynamics', () => {
     expect(dynamicValue({ ...d, source: 'off' }, { pressure: 0, tilt: 0, speed: 0 }, Math.random)).toBe(1);
     const r = seededRandom(5);
     expect(dynamicValue({ ...d, source: 'random', min: 0 }, still, r)).toBe(seededRandom(5)());
+  });
+});
+
+describe('symmetry and the stabiliser', () => {
+  const sym = (mode: Symmetry['mode'], segments = 6, center: Symmetry['center'] = null): Symmetry => ({ mode, segments, center });
+  const apply = (s: Symmetry, p: { x: number; y: number }) => symmetryCopies(s, 200, 100).map((f) => f(p));
+
+  it('mirrors and turns strokes around the centre', () => {
+    expect(apply(sym('off'), { x: 10, y: 20 })).toEqual([{ x: 10, y: 20 }]);
+    expect(apply(sym('leftRight'), { x: 10, y: 20 })).toEqual([
+      { x: 10, y: 20 },
+      { x: 190, y: 20 },
+    ]);
+    expect(apply(sym('topBottom'), { x: 10, y: 20 })[1]).toEqual({ x: 10, y: 80 });
+    expect(apply(sym('both'), { x: 10, y: 20 })).toHaveLength(4);
+    expect(apply(sym('both'), { x: 10, y: 20 })[3]).toEqual({ x: 190, y: 80 });
+    // Four radial copies of a point right of a moved centre land on the four sides.
+    const r = apply(sym('radial', 4, { x: 50, y: 50 }), { x: 60, y: 50 });
+    expect(r.map((p) => [Math.round(p.x), Math.round(p.y)])).toEqual([
+      [60, 50],
+      [50, 60],
+      [40, 50],
+      [50, 40],
+    ]);
+    expect(apply(sym('radial', 999), { x: 1, y: 1 })).toHaveLength(32);
+    expect(symmetryAxes(sym('radial', 5), 200, 100)).toHaveLength(5);
+    expect(symmetryAxes(sym('both'), 200, 100)).toHaveLength(2);
+  });
+
+  it('trails the pointer on a string', () => {
+    const brush = { x: 0, y: 0 };
+    expect(stabilize(brush, { x: 5, y: 0 }, 10)).toBe(brush);
+    expect(stabilize(brush, { x: 25, y: 0 }, 10)).toEqual({ x: 15, y: 0 });
+    expect(stabilize(brush, { x: 3, y: 4 }, 0)).toEqual({ x: 3, y: 4 });
   });
 });

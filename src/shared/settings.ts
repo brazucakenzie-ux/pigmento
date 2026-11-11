@@ -74,6 +74,13 @@ export const SettingsSchema = z.object({
     })
     .default({ primary: '#000000ff', secondary: '#ffffffff', recent: [], custom: [] }),
   tools: z.record(z.string(), z.record(z.string(), z.unknown())).default({}),
+  /** Brush symmetry (its centre is per image and not saved). */
+  drawing: z
+    .object({
+      symmetry: z.enum(['off', 'leftRight', 'topBottom', 'both', 'radial']).default('off'),
+      segments: z.number().int().min(2).max(32).default(6),
+    })
+    .default({ symmetry: 'off', segments: 6 }),
   /** Shape library: starred shapes, in the order they were starred. */
   shapes: z
     .object({ favorites: z.array(z.string().regex(/^[a-z0-9-]{1,100}$/i)).max(500).default([]) })

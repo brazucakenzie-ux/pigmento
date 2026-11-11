@@ -11,6 +11,7 @@ import type { View } from '../render/View';
 import type { LayerFilter } from '../render/Renderer';
 import type { TileDelta } from '../raster/Surface';
 import type { I18nKey } from '../../i18n';
+import type { Symmetry } from '../brush/symmetry';
 
 /** Where a tool's button goes in the ribbon. */
 export type ToolGroup = 'selection' | 'tools' | 'brushes' | 'shapes';
@@ -107,6 +108,9 @@ export interface ToolContext {
   readonly secondary: RGBA;
   readonly live: LiveObject | null;
   readonly transparentSelection: boolean;
+  /** Symmetry for brush tools (shared by all of them). */
+  readonly symmetry: Symmetry;
+  setSymmetry(change: Partial<Symmetry>): void;
   setPrimary(c: RGBA): void;
   setSecondary(c: RGBA): void;
   /** Options of the given tool (defaults merged with saved values). */
@@ -203,6 +207,8 @@ export interface Tool {
   readonly order: number;
   /** Not shown in the ribbon or menus (a mode entered by a command, like free transform). */
   readonly hidden?: boolean;
+  /** Draws with brush symmetry (the options bar shows its control). */
+  readonly symmetry?: boolean;
   /** Picked from the Shapes tab's gallery rather than a button in the Home tab. */
   readonly galleryOnly?: boolean;
   readonly options: OptionSpec[];

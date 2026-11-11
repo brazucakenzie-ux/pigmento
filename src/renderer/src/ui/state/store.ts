@@ -7,6 +7,7 @@ import type { Point } from '@engine/core/geometry';
 import type { DocInfo, HistoryInfo, Notice, PatternInfo, SavedSelectionInfo, SelectionInfo, VectorSelectionInfo } from '@engine/Engine';
 import type { TransformInfo } from '@engine/live/TransformObject';
 import type { PathInfo } from '@engine/live/ShapeObject';
+import type { Symmetry } from '@engine/brush/symmetry';
 import type { SelectionModify } from '@engine/doc/Selection';
 import type { LayersInfo } from '@engine/doc/LayerController';
 import type { LiveKind } from '@engine/live/LiveObject';
@@ -81,6 +82,8 @@ export interface UiState {
   path: PathInfo | null;
   /** Bumped when personal shapes are added, renamed or removed (the gallery re-reads them). */
   shapeLibrary: number;
+  /** Brush symmetry. */
+  symmetry: Symmetry;
   patterns: PatternInfo[];
   /** How many guides the image has. */
   guides: number;
@@ -117,6 +120,7 @@ export const useUi = create<UiState>(() => ({
   transform: null,
   path: null,
   shapeLibrary: 0,
+  symmetry: { mode: 'off', segments: 6, center: null },
   patterns: [],
   guides: 0,
   vectorSelection: { count: 0, groups: 0, bounds: null, shape: null },

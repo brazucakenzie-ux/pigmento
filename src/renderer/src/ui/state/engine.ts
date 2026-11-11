@@ -46,6 +46,7 @@ export function bindEngine(settings: Settings): void {
   if (s) engine.setSecondary(s);
   if (engine.tools.has(settings.activeTool)) engine.setTool(settings.activeTool);
   engine.setViewOptions(viewOptionsOf(settings.view));
+  engine.setSymmetry({ mode: settings.drawing.symmetry, segments: settings.drawing.segments });
 
   useUi.setState({
     doc: engine.docInfo(),
@@ -78,6 +79,12 @@ export function bindEngine(settings: Settings): void {
   engine.on('path', (path) => useUi.setState({ path }));
   engine.on('patterns', (patterns) => useUi.setState({ patterns }));
   engine.on('guides', (guides) => useUi.setState({ guides }));
+  engine.on('symmetry', (symmetry) => {
+    useUi.setState({ symmetry });
+    // Mode and segments are remembered; the centre belongs to the image.
+    const d = useUi.getState().settings.drawing;
+    if (d.symmetry !== symmetry.mode || d.segments !== symmetry.segments) updateSettings({ drawing: { symmetry: symmetry.mode, segments: symmetry.segments } });
+  });
   engine.on('vectorSelection', (vectorSelection) => useUi.setState({ vectorSelection }));
 
   engine.on('tool', ({ id }) => {
