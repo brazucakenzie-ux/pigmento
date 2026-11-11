@@ -1,8 +1,13 @@
-import { createStrokeTool } from '../strokeTool';
+import { defaultBrush, LINEAR } from '../../brush/types';
+import { createBrushTool } from '../brushTool';
 import { registerTool } from '../ToolRegistry';
 
+/** Paint's eraser: hard square pixels. With smooth edges on, a soft round tip. */
+const SQUARE = defaultBrush({ tip: { kind: 'square' }, pixel: true, hardness: 1 });
+const SMOOTH = defaultBrush({ hardness: 0.7, dynamics: { size: { source: 'pressure', curve: LINEAR, min: 0.08 } } });
+
 export default registerTool(
-  createStrokeTool({
+  createBrushTool({
     id: 'eraser',
     labelKey: 'tool.eraser',
     hintKey: 'tool.eraser.hint',
@@ -18,15 +23,11 @@ export default registerTool(
       { key: 'antialias', type: 'toggle', labelKey: 'opt.antialias', default: false },
     ],
     cursor: () => 'none',
-    params: (o) => ({
-      size: Number(o.size ?? 10),
-      opacity: Number(o.opacity ?? 100) / 100,
-      square: o.antialias !== true,
-      hardness: 0.7,
-      pressureSize: true,
-    }),
+    brush: (ctx) => {
+      const o = ctx.options('eraser');
+      return { settings: o.antialias === true ? SMOOTH : SQUARE, size: Number(o.size ?? 10), opacity: Number(o.opacity ?? 100) / 100, pressure: true };
+    },
     overlay: (ctx, ov, hover) => {
-      if (!hover) return;
       const o = ctx.options('eraser');
       const size = Number(o.size ?? 10);
       if (o.antialias === true) ov.brushCursor(ov.toScreen(hover), (size / 2) * ctx.view.zoom);

@@ -1,9 +1,13 @@
+import { defaultBrush } from '../../brush/types';
 import { CURSOR_PENCIL } from '../cursors';
-import { createStrokeTool } from '../strokeTool';
+import { createBrushTool } from '../brushTool';
 import { registerTool } from '../ToolRegistry';
 
+/** Paint's pencil: hard square pixels, stepped pixel by pixel. */
+const PENCIL = defaultBrush({ tip: { kind: 'square' }, pixel: true, hardness: 1 });
+
 export default registerTool(
-  createStrokeTool({
+  createBrushTool({
     id: 'pencil',
     labelKey: 'tool.pencil',
     hintKey: 'tool.pencil.hint',
@@ -18,15 +22,12 @@ export default registerTool(
       { key: 'opacity', type: 'slider', labelKey: 'opt.opacity', min: 1, max: 100, step: 1, unit: '%', default: 100 },
     ],
     cursor: () => CURSOR_PENCIL,
-    params: (o) => ({
-      size: Number(o.size ?? 1),
-      opacity: Number(o.opacity ?? 100) / 100,
-      square: true,
-      hardness: 1,
-      pressureSize: false,
-    }),
+    brush: (ctx) => {
+      const o = ctx.options('pencil');
+      return { settings: PENCIL, size: Number(o.size ?? 1), opacity: Number(o.opacity ?? 100) / 100, pressure: false };
+    },
     overlay: (ctx, ov, hover) => {
-      if (ctx.view.zoom >= 4 && hover) ov.squareCursor(hover.x, hover.y, Number(ctx.options('pencil').size ?? 1));
+      if (ctx.view.zoom >= 4) ov.squareCursor(hover.x, hover.y, Number(ctx.options('pencil').size ?? 1));
     },
   }),
 );

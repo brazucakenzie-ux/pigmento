@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { alphaBounds, applyColorMask, applyImage, flattenOnto, invertView } from '@engine/raster/pixels';
-import { DabSpacer, StrokeBuffer } from '@engine/raster/stroke';
 import { colorDistance, hsvToRgb, parseHex, rgbToHsv, toHex8 } from '@engine/core/color';
 import { encodeBmp, jpegWithDpi, pngWithDpi, readDpi, crc32 } from '@engine/io/codecs';
 import { px, solid } from './helpers';
@@ -84,45 +83,6 @@ describe('compositing', () => {
     const t = solid(1, 1, [255, 0, 0, 0]);
     flattenOnto(t, { r: 255, g: 255, b: 255, a: 255 });
     expect(px(t, 1, 0, 0)).toEqual([255, 255, 255, 255]);
-  });
-});
-
-describe('stroke rasterisation', () => {
-  it('stamps aliased squares and Bresenham lines', () => {
-    const b = new StrokeBuffer(20, 20);
-    b.lineSquare(2, 2, 10, 2, 1);
-    expect(b.mask[2 * 20 + 2]).toBe(255);
-    expect(b.mask[2 * 20 + 10]).toBe(255);
-    expect(b.mask[3 * 20 + 5]).toBe(0);
-    expect(b.bounds).toEqual({ x: 2, y: 2, w: 9, h: 1 });
-    b.reset();
-    expect(b.mask.every((v) => v === 0)).toBe(true);
-  });
-
-  it('round dabs are anti-aliased and accumulate by max', () => {
-    const b = new StrokeBuffer(40, 40);
-    b.stampDab(20, 20, 8, 1);
-    expect(b.mask[20 * 40 + 20]).toBe(255);
-    expect(b.mask[20 * 40 + 35]).toBe(0);
-    const edge = b.mask[20 * 40 + 27];
-    expect(edge).toBeGreaterThan(0);
-    b.stampDab(20, 20, 8, 1, 0.5);
-    expect(b.mask[20 * 40 + 20]).toBe(255);
-  });
-
-  it('spaces dabs evenly regardless of input segmentation', () => {
-    const count = (segments: number) => {
-      let n = 0;
-      const s = new DabSpacer(() => 5, () => {
-        n++;
-        return null;
-      });
-      s.begin({ x: 0, y: 0, pressure: 1 });
-      for (let i = 1; i <= segments; i++) s.to({ x: (100 * i) / segments, y: 0, pressure: 1 });
-      return n;
-    };
-    expect(count(1)).toBe(21);
-    expect(count(37)).toBe(21);
   });
 });
 

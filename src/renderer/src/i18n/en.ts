@@ -307,6 +307,7 @@ export const en = {
   'opt.size': 'Size',
   'opt.opacity': 'Opacity',
   'opt.hardness': 'Hardness',
+  'opt.flow': 'Flow',
   'opt.tolerance': 'Tolerance',
   'opt.contiguous': 'Connected only',
   'opt.fillMode': 'Style',
