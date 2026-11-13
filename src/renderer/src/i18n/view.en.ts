@@ -1,0 +1,25 @@
+/** Drawing aids in the View tab: turning the view, and a reference image. */
+export const viewEn = {
+  'group.rotateView': 'Turn view',
+  'group.reference': 'Reference image',
+  'tool.rotateView': 'Turn view',
+  'tool.rotateView.hint': 'Drag around the middle to turn the view (Shift: 15° steps). Double-click to set it upright. The picture itself doesn’t turn.',
+  'action.rotateViewLeft': 'Turn left 15°',
+  'action.rotateViewRight': 'Turn right 15°',
+  'action.resetViewRotation': 'Upright',
+  'tool.reference': 'Move reference',
+  'tool.reference.hint': 'Drag the reference image to move it, or its corner to resize it. It isn’t part of the picture.',
+  'action.loadReference': 'Load reference…',
+  'action.toggleReference': 'Show reference',
+  'action.removeReference': 'Remove reference',
+  'opt.referenceVisible': 'Show',
+  // Short labels for the View tab's buttons (their group names say what they're for).
+  'ribbon.turnLeft': 'Left 15°',
+  'ribbon.turnRight': 'Right 15°',
+  'ribbon.referenceMove': 'Move',
+  'ribbon.referenceShow': 'Show',
+  'ribbon.referenceRemove': 'Remove',
+  'ribbon.windowsAccent': 'Windows accent',
+  'notice.referenceNone': 'Load a reference image first (View → Load reference).',
+  'error.reference': 'Pigmento couldn’t open {name} as a reference image.',
+} as const;

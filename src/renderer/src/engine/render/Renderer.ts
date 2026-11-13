@@ -69,6 +69,8 @@ export class Renderer {
   };
   showPixelGrid = true;
   activeFilters: LayerFilter[] = [];
+  /** A reference image over the canvas (view only: not in the composite, never exported). */
+  reference: { canvas: OffscreenCanvas; x: number; y: number; w: number; h: number; scale: number; opacity: number } | null = null;
   liveDrawer: LiveDrawer | null = null;
   /** True while the user is drawing/panning; trades downscale quality for speed. */
   interactive = false;
@@ -330,6 +332,12 @@ export class Renderer {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = this.theme.workspace;
     ctx.fillRect(0, 0, this.viewCanvas.width, this.viewCanvas.height);
+    if (view.rotation !== 0) {
+      // A turned view: the page is drawn as usual, about the viewport's centre.
+      ctx.translate((view.width / 2) * dpr, (view.height / 2) * dpr);
+      ctx.rotate((view.rotation * Math.PI) / 180);
+      ctx.translate((-view.width / 2) * dpr, (-view.height / 2) * dpr);
+    }
 
     const d = view.docRectOnScreen();
     const x = Math.round(d.x * dpr);
@@ -392,6 +400,16 @@ export class Renderer {
         ctx.lineWidth = 1;
         ctx.stroke();
       }
+    }
+
+    const ref = this.reference;
+    if (ref) {
+      const z = view.zoom * dpr;
+      ctx.save();
+      ctx.globalAlpha = ref.opacity;
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(ref.canvas, d.x * dpr + ref.x * z, d.y * dpr + ref.y * z, ref.w * ref.scale * z, ref.h * ref.scale * z);
+      ctx.restore();
     }
   }
 

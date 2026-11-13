@@ -577,3 +577,27 @@ test('capture effects', async () => {
     await h.close();
   }
 });
+
+test('capture turned view', async () => {
+  test.skip(!process.env.PIGMENTO_SCREENSHOT, 'Set PIGMENTO_SCREENSHOT=1 to capture screenshots');
+  const out = process.env.PIGMENTO_SCREENSHOT_DIR ?? path.resolve('test-results');
+  const h = await launchApp();
+  const { page } = h;
+  try {
+    await ready(page);
+    await page.evaluate(() => {
+      const t = window.__pigmentoTest!;
+      t.fillLayer(t.layers().activeId, { r: 40, g: 110, b: 200, a: 255 }, { x: 100, y: 100, w: 500, h: 300 });
+      t.addGuide('x', 640);
+      t.selectRect(700, 200, 300, 200);
+    });
+    await page.getByRole('tab', { name: 'View' }).click();
+    for (let i = 0; i < 2; i++) await page.locator('.ribbon').getByRole('button', { name: 'Right 15°' }).click();
+    await page.locator('.ribbon').getByRole('button', { name: 'Turn view' }).click();
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: path.join(out, 'view-turned.png') });
+    console.warn('errors:', JSON.stringify(h.errors));
+  } finally {
+    await h.close();
+  }
+});

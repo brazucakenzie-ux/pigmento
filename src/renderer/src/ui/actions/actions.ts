@@ -10,6 +10,7 @@ import { openDialog, updateSettings, useUi, type UiState } from '../state/store'
 import * as files from '../services/files';
 import { makePatternFromSelection } from '../services/patterns';
 import { openFilter } from '../services/filters';
+import { loadReference } from '../services/reference';
 import { filterRegistry } from '@engine/filters/FilterRegistry';
 import { THEME_FAMILIES } from '../theme/themes';
 
@@ -297,6 +298,25 @@ const base: Action[] = [
   { id: 'deleteBrush', labelKey: 'action.deleteBrush', icon: 'delete', group: 'tools', run: () => openDialog({ kind: 'deleteBrush', id: brushTarget().brushId }), enabled: customBrush },
   { id: 'strokeSelection', labelKey: 'action.strokeSelection', icon: 'select', group: 'image', run: () => selectionDialog({ kind: 'strokeOutline', source: 'selection' }), enabled: hasSelection },
   { id: 'strokePath', labelKey: 'action.strokePath', icon: 'pen', group: 'image', run: () => openDialog({ kind: 'strokeOutline', source: 'path' }), enabled: (s) => s.vectorSelection.count > 0 || s.live === 'shape' },
+  // View: turning it, and a reference image
+  { id: 'rotateViewLeft', labelKey: 'action.rotateViewLeft', icon: 'rotate-ccw', group: 'view', shortcut: ['Ctrl+Alt+ArrowLeft'], run: () => engine.rotateViewBy(-15) },
+  { id: 'rotateViewRight', labelKey: 'action.rotateViewRight', icon: 'rotate-cw', group: 'view', shortcut: ['Ctrl+Alt+ArrowRight'], run: () => engine.rotateViewBy(15) },
+  { id: 'resetViewRotation', labelKey: 'action.resetViewRotation', icon: 'rotate-view', group: 'view', shortcut: ['Ctrl+Alt+0'], run: () => engine.setViewRotation(0), enabled: (s) => s.view.rotation !== 0 },
+  { id: 'loadReference', labelKey: 'action.loadReference', icon: 'reference', group: 'view', run: () => void loadReference() },
+  {
+    id: 'toggleReference',
+    labelKey: 'action.toggleReference',
+    icon: 'eye',
+    group: 'view',
+    run: () => {
+      const visible = !(useUi.getState().reference?.visible ?? true);
+      engine.setToolOption('reference', 'visible', visible);
+      engine.updateReference({ visible });
+    },
+    enabled: (s) => s.reference !== null,
+    checked: (s) => s.reference?.visible === true,
+  },
+  { id: 'removeReference', labelKey: 'action.removeReference', icon: 'delete', group: 'view', run: () => engine.clearReference(), enabled: (s) => s.reference !== null },
   { id: 'importBrushPack', labelKey: 'action.importBrushPack', icon: 'open', group: 'file', run: () => void importBrushPack() },
   // Enabled once My brushes has something in it.
   { id: 'exportBrushPack', labelKey: 'action.exportBrushPack', icon: 'export', group: 'file', run: () => void exportBrushPack(), enabled: (s) => s.brushLibrary >= 0 && hasCustomBrushes() },

@@ -114,6 +114,16 @@ export function installTestHook(): void {
       const d = ctx.getImageData(x, y, 1, 1).data;
       return { r: d[0], g: d[1], b: d[2], a: d[3] };
     },
+    /** What the screen shows at document point (x, y): after zoom, rotation and the reference image. */
+    displayPixel: async (x: number, y: number) => {
+      await new Promise<void>((r) => requestAnimationFrame(() => r()));
+      const c = engine.renderer.viewCanvas;
+      const p = engine.view.toScreen(x, y);
+      const k = c.width / engine.view.width;
+      const d = c.getContext('2d')!.getImageData(Math.floor(p.x * k), Math.floor(p.y * k), 1, 1).data;
+      return { r: d[0], g: d[1], b: d[2], a: d[3] };
+    },
+    viewRotation: () => engine.view.rotation,
     /** Fill a raster layer (or part of it) with a colour (test setup; recorded as no history step). */
     fillLayer: (id: string, c: { r: number; g: number; b: number; a: number }, r?: { x: number; y: number; w: number; h: number }) => {
       const layer = engine.doc.layerById(id);

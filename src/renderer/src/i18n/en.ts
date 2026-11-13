@@ -1,6 +1,7 @@
 import { shapesEn } from './shapes.en';
 import { brushesEn } from './brushes.en';
 import { filtersEn } from './filters.en';
+import { viewEn } from './view.en';
 
 /** English strings. Keys are grouped by area; placeholders use {name}. */
 export const en = {
@@ -851,4 +852,5 @@ export const en = {
   ...shapesEn,
   ...brushesEn,
   ...filtersEn,
+  ...viewEn,
 } as const;

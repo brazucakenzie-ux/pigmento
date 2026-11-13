@@ -19,6 +19,8 @@ export interface ViewState {
   height: number;
   docW: number;
   docH: number;
+  /** View rotation in degrees (the image itself never turns). */
+  rotation: number;
 }
 
 /** Space kept around the document so edges and resize handles stay reachable. */
@@ -26,7 +28,8 @@ const MARGIN = 48;
 
 /**
  * Document ⇄ screen transform. Pan is clamped so the document can't be lost off-screen, and
- * documents smaller than the viewport stay centred.
+ * documents smaller than the viewport stay centred. The view can also turn (rotation) about
+ * the viewport's centre: pan and zoom work as if it didn't, then the whole view is rotated.
  */
 export class View {
   zoom = 1;
@@ -36,6 +39,34 @@ export class View {
   height = 1;
   docW = 1;
   docH = 1;
+  /** Radians. */
+  private angle = 0;
+  private cos = 1;
+  private sin = 0;
+
+  get rotation(): number {
+    return (this.angle * 180) / Math.PI;
+  }
+
+  /** Turn the view to `deg` degrees (normalised to −180…180). */
+  setRotation(deg: number): void {
+    let d = (((deg % 360) + 540) % 360) - 180;
+    if (Math.abs(d) < 1e-9) d = 0;
+    this.angle = (d * Math.PI) / 180;
+    this.cos = Math.cos(this.angle);
+    this.sin = Math.sin(this.angle);
+  }
+
+  /** Turn a screen point about the viewport centre (by the view's rotation, or back). */
+  private turn(x: number, y: number, back: boolean): Point {
+    if (this.angle === 0) return { x, y };
+    const cx = this.width / 2;
+    const cy = this.height / 2;
+    const s = back ? -this.sin : this.sin;
+    const dx = x - cx;
+    const dy = y - cy;
+    return { x: cx + dx * this.cos - dy * s, y: cy + dx * s + dy * this.cos };
+  }
 
   state(): ViewState {
     return {
@@ -46,29 +77,31 @@ export class View {
       height: this.height,
       docW: this.docW,
       docH: this.docH,
+      rotation: this.rotation,
     };
   }
 
   toScreen(x: number, y: number): Point {
-    return { x: x * this.zoom + this.panX, y: y * this.zoom + this.panY };
+    return this.turn(x * this.zoom + this.panX, y * this.zoom + this.panY, false);
   }
 
   toDoc(sx: number, sy: number): Point {
-    return { x: (sx - this.panX) / this.zoom, y: (sy - this.panY) / this.zoom };
+    const u = this.turn(sx, sy, true);
+    return { x: (u.x - this.panX) / this.zoom, y: (u.y - this.panY) / this.zoom };
   }
 
+  /** The document's rectangle on screen before rotation (the renderer turns it). */
   docRectOnScreen(): Rect {
     return { x: this.panX, y: this.panY, w: this.docW * this.zoom, h: this.docH * this.zoom };
   }
 
   /** Visible part of the document in doc coordinates (integer, clipped). */
   visibleDocRect(): Rect | null {
-    const a = this.toDoc(0, 0);
-    const b = this.toDoc(this.width, this.height);
-    const x0 = clamp(Math.floor(a.x), 0, this.docW);
-    const y0 = clamp(Math.floor(a.y), 0, this.docH);
-    const x1 = clamp(Math.ceil(b.x), 0, this.docW);
-    const y1 = clamp(Math.ceil(b.y), 0, this.docH);
+    const c = [this.toDoc(0, 0), this.toDoc(this.width, 0), this.toDoc(0, this.height), this.toDoc(this.width, this.height)];
+    const x0 = clamp(Math.floor(Math.min(...c.map((p) => p.x))), 0, this.docW);
+    const y0 = clamp(Math.floor(Math.min(...c.map((p) => p.y))), 0, this.docH);
+    const x1 = clamp(Math.ceil(Math.max(...c.map((p) => p.x))), 0, this.docW);
+    const y1 = clamp(Math.ceil(Math.max(...c.map((p) => p.y))), 0, this.docH);
     if (x1 <= x0 || y1 <= y0) return null;
     return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
   }
@@ -95,9 +128,10 @@ export class View {
   zoomAt(z: number, sx: number, sy: number): void {
     const nz = clamp(z, MIN_ZOOM, MAX_ZOOM);
     const p = this.toDoc(sx, sy);
+    const u = this.turn(sx, sy, true);
     this.zoom = nz;
-    this.panX = sx - p.x * nz;
-    this.panY = sy - p.y * nz;
+    this.panX = u.x - p.x * nz;
+    this.panY = u.y - p.y * nz;
     this.clampPan();
   }
 
@@ -140,9 +174,10 @@ export class View {
     this.clampPan();
   }
 
+  /** Move the view by a screen distance (turned back into the unrotated pan). */
   panBy(dx: number, dy: number): void {
-    this.panX += dx;
-    this.panY += dy;
+    this.panX += dx * this.cos + dy * this.sin;
+    this.panY += -dx * this.sin + dy * this.cos;
     this.clampPan();
   }
 

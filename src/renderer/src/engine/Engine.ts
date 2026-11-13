@@ -73,7 +73,7 @@ import { Overlay } from './render/Overlay';
 import { Renderer, type LayerFilter, type Theme } from './render/Renderer';
 import { View, type ViewState } from './render/View';
 import { InputController } from './input/InputController';
-import { defaultOptions, type FillPattern, type TextEditState, type Tool, type ToolContext, type ToolOptions, flatOptions } from './tools/Tool';
+import { defaultOptions, type FillPattern, type ReferenceInfo, type TextEditState, type Tool, type ToolContext, type ToolOptions, flatOptions } from './tools/Tool';
 import { toolRegistry, type ToolRegistry } from './tools/ToolRegistry';
 import type { I18nKey, I18nParams } from '../i18n';
 import type { TileDelta } from './raster/Surface';
@@ -197,6 +197,8 @@ export interface EngineEvents {
   vectorSelection: VectorSelectionInfo;
   /** Brush symmetry changed (mode, segments or centre). */
   symmetry: Symmetry;
+  /** The reference image was loaded, moved, changed or removed. */
+  reference: ReferenceInfo | null;
 }
 
 export type Anchor = 'nw' | 'n' | 'ne' | 'w' | 'c' | 'e' | 'sw' | 's' | 'se';
@@ -1138,6 +1140,58 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     if (at) this.view.zoomAt(z, at.x, at.y);
     else this.view.zoomCentered(z);
     this.afterViewChange();
+  }
+
+  /** Turn the view (never the image) to this many degrees. */
+  setViewRotation(deg: number): void {
+    this.view.setRotation(deg);
+    this.afterViewChange();
+    this.invalidateOverlay();
+  }
+
+  rotateViewBy(deg: number): void {
+    this.setViewRotation(Math.round((this.view.rotation + deg) / 15) * 15);
+  }
+
+  // ---- reference image (view only) --------------------------------------------------------
+
+  private _reference: ReferenceInfo | null = null;
+  private referenceCanvas: OffscreenCanvas | null = null;
+
+  get reference(): ReferenceInfo | null {
+    return this._reference;
+  }
+
+  /** Show a picture to draw from over the canvas, fitted inside the image. */
+  setReference(img: { w: number; h: number; data: Uint8ClampedArray }, opacity = 0.5): void {
+    const c = new OffscreenCanvas(img.w, img.h);
+    const g = c.getContext('2d');
+    if (!g) return;
+    g.putImageData(new ImageData(new Uint8ClampedArray(img.data), img.w, img.h), 0, 0);
+    this.referenceCanvas = c;
+    const scale = Math.min(1, (this.doc.width * 0.8) / img.w, (this.doc.height * 0.8) / img.h);
+    this._reference = { w: img.w, h: img.h, x: (this.doc.width - img.w * scale) / 2, y: (this.doc.height - img.h * scale) / 2, scale, opacity, visible: true };
+    this.syncReference();
+  }
+
+  updateReference(change: Partial<Pick<ReferenceInfo, 'x' | 'y' | 'scale' | 'opacity' | 'visible'>>): void {
+    if (!this._reference) return;
+    this._reference = { ...this._reference, ...change };
+    this.syncReference();
+  }
+
+  clearReference(): void {
+    this._reference = null;
+    this.referenceCanvas = null;
+    this.syncReference();
+  }
+
+  private syncReference(): void {
+    const r = this._reference;
+    this.renderer.reference = r && r.visible && this.referenceCanvas ? { canvas: this.referenceCanvas, x: r.x, y: r.y, w: r.w, h: r.h, scale: r.scale, opacity: r.opacity } : null;
+    this.emit('reference', r ? { ...r } : null);
+    this.requestRender();
+    this.invalidateOverlay();
   }
 
   zoomToRect(r: Rect): void {

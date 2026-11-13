@@ -43,6 +43,8 @@ export function displayCombo(combo: string): string {
     .replace('Slash', '/')
     .replace('Period', '.')
     .replace('Comma', ',')
+    .replace('ArrowLeft', '←')
+    .replace('ArrowRight', '→')
     .replace(/^Mouse(\d)$/, 'Mouse $1')
     .replace(/\+(?=.)/g, ' + ')
     .replace(' +  + ', ' + +');

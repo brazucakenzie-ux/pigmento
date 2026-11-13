@@ -1,4 +1,17 @@
 import type { BrushSettings } from '../brush/types';
+
+/** A picture to draw from, shown over the canvas; never saved or exported. */
+export interface ReferenceInfo {
+  /** Size in its own pixels. */
+  w: number;
+  h: number;
+  /** Top-left corner in document coordinates. */
+  x: number;
+  y: number;
+  scale: number;
+  opacity: number;
+  visible: boolean;
+}
 import type { RGBA } from '../core/color';
 import type { Point, Rect } from '../core/geometry';
 import type { PaintDocument, Layer, VectorLayer } from '../doc/Document';
@@ -176,6 +189,11 @@ export interface ToolContext {
   floodFill(x: number, y: number, paint: RGBA | FillPattern, tolerance: number, contiguous: boolean): Promise<void>;
   zoomAt(zoom: number, sx: number, sy: number): void;
   zoomToRect(r: Rect): void;
+  /** Turn the view (never the image) to this many degrees. */
+  setViewRotation(deg: number): void;
+  /** The reference image floating over the canvas (view only), if one is loaded. */
+  readonly reference: ReferenceInfo | null;
+  updateReference(change: Partial<Pick<ReferenceInfo, 'x' | 'y' | 'scale' | 'opacity' | 'visible'>>): void;
   setCursor(css: string): void;
   /** Report the tool's hint text override (null restores the default hint). */
   setHint(key: I18nKey | null): void;

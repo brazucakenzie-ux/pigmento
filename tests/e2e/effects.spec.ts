@@ -1,5 +1,6 @@
+import { writeFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
-import { launchApp, pixel, ready, type AppHandle } from './harness';
+import { drag, launchApp, pixel, ready, tempFile, type AppHandle } from './harness';
 
 let h: AppHandle;
 
@@ -72,4 +73,71 @@ test('adjusts and filters the layer with a live preview, Apply/Cancel and undo',
   const levels = page.getByRole('dialog', { name: 'Levels' });
   await expect(levels.getByRole('img', { name: 'Histogram of the layer' })).toBeVisible();
   await levels.getByRole('button', { name: 'Cancel' }).click();
+});
+
+test('turns the view (not the picture) and shows a reference image that is never part of it', async () => {
+  h = await launchApp();
+  const { page } = h;
+  await ready(page);
+  await page.getByRole('tab', { name: 'View' }).click();
+  const ribbon = page.locator('.ribbon');
+
+  // Six 15° steps: a quarter turn. Painting still lands where the pointer is on the picture.
+  for (let i = 0; i < 6; i++) await page.keyboard.press('Control+Alt+ArrowRight');
+  expect(await page.evaluate(() => window.__pigmentoTest!.viewRotation())).toBe(90);
+  await expect(ribbon.getByRole('button', { name: 'Upright' })).toBeEnabled();
+  await page.getByRole('tab', { name: 'Home' }).click();
+  await page.getByRole('button', { name: /Colour #D7263D/ }).click();
+  await page.keyboard.press('b');
+  const size = page.locator('.optionsbar').getByRole('textbox', { name: 'Size' });
+  await size.fill('10');
+  await size.press('Enter');
+  await drag(page, [
+    [200, 300],
+    [400, 300],
+  ]);
+  expect((await pixel(page, 300, 300)).g).toBeLessThan(80);
+  expect(await pixel(page, 300, 330)).toEqual(WHITE);
+  // On screen the stroke runs top to bottom now.
+  const a = await page.evaluate(() => window.__pigmentoTest!.docToScreen(200, 300));
+  const b = await page.evaluate(() => window.__pigmentoTest!.docToScreen(400, 300));
+  expect(Math.abs(a.x - b.x)).toBeLessThan(1);
+  expect(b.y).toBeGreaterThan(a.y);
+  expect((await page.evaluate(() => window.__pigmentoTest!.displayPixel(300, 300))).g).toBeLessThan(80);
+  await page.getByRole('tab', { name: 'View' }).click();
+  await ribbon.getByRole('button', { name: 'Upright' }).click();
+  expect(await page.evaluate(() => window.__pigmentoTest!.viewRotation())).toBe(0);
+
+  // A reference image: shown over the canvas at half opacity, but not in the picture.
+  const png = await page.evaluate(async () => {
+    const c = new OffscreenCanvas(100, 100);
+    const g = c.getContext('2d')!;
+    g.fillStyle = '#0000ff';
+    g.fillRect(0, 0, 100, 100);
+    return Array.from(new Uint8Array(await (await c.convertToBlob({ type: 'image/png' })).arrayBuffer()));
+  });
+  const file = tempFile('ref.png');
+  writeFileSync(file, Buffer.from(png));
+  await h.app.evaluate(({ dialog }, fp) => {
+    dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [fp] })) as typeof dialog.showOpenDialog;
+  }, file);
+  await ribbon.getByRole('button', { name: 'Load reference…' }).click();
+  await expect.poll(() => page.evaluate(() => window.__pigmentoTest!.tool())).toBe('reference');
+  // The picture is 1280×800, the reference 100×100 in its middle.
+  const shown = await page.evaluate(() => window.__pigmentoTest!.displayPixel(640, 400));
+  expect(shown.b).toBeGreaterThan(200);
+  expect(shown.r).toBeGreaterThan(100);
+  expect(shown.r).toBeLessThan(160);
+  expect(await pixel(page, 640, 400)).toEqual(WHITE);
+  // Moved with its tool, then hidden.
+  await drag(page, [
+    [640, 400],
+    [840, 400],
+  ]);
+  expect((await page.evaluate(() => window.__pigmentoTest!.displayPixel(840, 400))).b).toBeGreaterThan(200);
+  expect(await page.evaluate(() => window.__pigmentoTest!.displayPixel(640, 400))).toEqual(WHITE);
+  await ribbon.getByRole('button', { name: 'Show', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__pigmentoTest!.displayPixel(840, 400))).toEqual(WHITE);
+  await ribbon.getByRole('button', { name: 'Remove', exact: true }).click();
+  await expect(ribbon.getByRole('button', { name: 'Show', exact: true })).toBeDisabled();
 });

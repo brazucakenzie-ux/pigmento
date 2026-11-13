@@ -79,6 +79,7 @@ export function bindEngine(settings: Settings): void {
   engine.on('path', (path) => useUi.setState({ path }));
   engine.on('patterns', (patterns) => useUi.setState({ patterns }));
   engine.on('guides', (guides) => useUi.setState({ guides }));
+  engine.on('reference', (reference) => useUi.setState({ reference }));
   engine.on('symmetry', (symmetry) => {
     useUi.setState({ symmetry });
     // Mode and segments are remembered; the centre belongs to the image.

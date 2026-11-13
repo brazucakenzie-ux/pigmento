@@ -340,7 +340,7 @@ test('strokes the selection outline and a shape’s outline with the brush, one 
   await page.keyboard.press('Enter');
   await page.evaluate(() => {
     const t = window.__pigmentoTest!;
-    const [shape] = t.vectorObjects();
+    const shape = t.vectorObjects()![0];
     t.setVectorSelection([shape.id]);
   });
   const layersBefore = (await page.evaluate(() => window.__pigmentoTest!.layers())).count;

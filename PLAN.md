@@ -207,7 +207,7 @@ Each item is ticked in the same commit as its work.
 - [x] 3.8 `FilterRegistry` and a worker pool: filters run in Web Workers on tiles with progress and Cancel; dialogs with live preview (downscaled while dragging) and Apply/Cancel; apply to the selection or the whole layer, undoable (+ worker protocol tests)
 - [x] 3.9 Adjustments: brightness/contrast, hue/saturation/lightness (with colourise), levels, curves, colour balance, grayscale, sepia, invert, posterize, threshold (+ known-input tests for each)
 - [x] 3.10 Filters and effects: gaussian blur, motion blur, sharpen (unsharp mask), noise, pixelate, emboss, edge detect, vignette, drop shadow, outer glow, outline (+ known-input tests for each)
-- [ ] 3.11 Reference image overlay (load, move, scale, opacity, hide; never exported or saved into the image) and view-only canvas rotation (free angle, 15° steps with Shift, reset; tools, guides and cursors stay correct)
+- [x] 3.11 Reference image overlay (load, move, scale, opacity, hide; never exported or saved into the image) and view-only canvas rotation (free angle, 15° steps with Shift, reset; tools, guides and cursors stay correct)
 - [ ] 3.12 Performance: in-app performance overlay (hidden shortcut) with frame time, pointer-to-pixel latency, memory; measured budgets on a 4000×3000 canvas (brush latency < 16 ms, flood fill < 300 ms), app load < 3 s, no leak across 500 undo/redo cycles; fix what misses (+ perf e2e)
 - [ ] 3.13 Golden-image tests for every built-in brush; e2e for creating and using a custom brush and for importing/exporting brush packs; `npm run check` green; report
 

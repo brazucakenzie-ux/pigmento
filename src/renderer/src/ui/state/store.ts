@@ -8,6 +8,7 @@ import type { DocInfo, HistoryInfo, Notice, PatternInfo, SavedSelectionInfo, Sel
 import type { TransformInfo } from '@engine/live/TransformObject';
 import type { PathInfo } from '@engine/live/ShapeObject';
 import type { Symmetry } from '@engine/brush/symmetry';
+import type { ReferenceInfo } from '@engine/tools/Tool';
 import type { SelectionModify } from '@engine/doc/Selection';
 import type { LayersInfo } from '@engine/doc/LayerController';
 import type { LiveKind } from '@engine/live/LiveObject';
@@ -91,6 +92,8 @@ export interface UiState {
   shapeLibrary: number;
   /** Brush symmetry. */
   symmetry: Symmetry;
+  /** The reference image over the canvas, if any. */
+  reference: ReferenceInfo | null;
   /** Bumped when personal brushes change (pickers re-read the library). */
   brushLibrary: number;
   patterns: PatternInfo[];
@@ -113,7 +116,7 @@ export const useUi = create<UiState>(() => ({
   file: { path: null, name: null, format: null },
   doc: { width: 1280, height: 800, dpi: 96, paper: { r: 255, g: 255, b: 255, a: 255 } },
   history: { index: 0, length: 0, canUndo: false, canRedo: false, dirty: false, entries: [], initialLabel: 'history.initial.new' },
-  view: { zoom: 1, panX: 0, panY: 0, width: 1, height: 1, docW: 1280, docH: 800 },
+  view: { zoom: 1, panX: 0, panY: 0, width: 1, height: 1, docW: 1280, docH: 800, rotation: 0 },
   cursor: null,
   selection: { bounds: null, floating: false },
   tool: 'pencil',
@@ -130,6 +133,7 @@ export const useUi = create<UiState>(() => ({
   path: null,
   shapeLibrary: 0,
   symmetry: { mode: 'off', segments: 6, center: null },
+  reference: null,
   brushLibrary: 0,
   patterns: [],
   guides: 0,

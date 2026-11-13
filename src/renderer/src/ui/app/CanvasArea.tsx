@@ -69,6 +69,8 @@ function Ruler({ axis }: { axis: 'x' | 'y' }) {
     if (!g) return;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, c.width, c.height);
+    // A turned view has no meaningful ruler marks (guides can still be dragged out).
+    if (view.rotation !== 0) return;
     const tick = cssVar('--ruler-tick');
     g.strokeStyle = tick;
     g.fillStyle = tick;
@@ -200,8 +202,12 @@ function TextEditor() {
 
   if (!text) return null;
   const z = view.zoom;
-  const sx = text.x * z + view.panX;
-  const sy = text.y * z + view.panY;
+  // Where the box's corner is on screen (turned with the view about its centre).
+  const ux = text.x * z + view.panX - view.width / 2;
+  const uy = text.y * z + view.panY - view.height / 2;
+  const a = (view.rotation * Math.PI) / 180;
+  const sx = view.width / 2 + ux * Math.cos(a) - uy * Math.sin(a);
+  const sy = view.height / 2 + ux * Math.sin(a) + uy * Math.cos(a);
   const font = text.fontCss.replace(`${text.fontPx}px`, `${text.fontPx * z}px`);
   return (
     <textarea
@@ -221,6 +227,8 @@ function TextEditor() {
         padding: `0 ${z}px`,
         textAlign: text.align,
         caretColor: text.color,
+        transform: view.rotation ? `rotate(${view.rotation}deg)` : undefined,
+        transformOrigin: '0 0',
       }}
       onChange={(e) => engine.updateText(e.target.value)}
       onKeyDown={(e) => {

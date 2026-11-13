@@ -15,6 +15,7 @@ const en = {
   'filter.palette': 'Palette (JSON, GIMP .gpl, Adobe .ase)',
   'filter.brushImage': 'PNG image',
   'filter.brushPack': 'Pigmento brush pack',
+  'filter.referenceImage': 'Images',
   'dialog.unsaved.message': 'Do you want to save changes to {name}?',
   'dialog.unsaved.detail': 'Your changes will be lost if you don’t save them.',
   'dialog.unsaved.save': 'Save',

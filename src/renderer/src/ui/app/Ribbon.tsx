@@ -429,10 +429,28 @@ function ViewTab() {
   return (
     <>
       <RibbonGroup label={t('group.zoom')}>
-        <ActionButton id="zoomIn" />
-        <ActionButton id="zoomOut" />
-        <ActionButton id="zoom100" />
         <ActionButton id="zoomFit" />
+        <div className="rb-stack">
+          <ActionButton id="zoomIn" variant="small" />
+          <ActionButton id="zoomOut" variant="small" />
+          <ActionButton id="zoom100" variant="small" />
+        </div>
+      </RibbonGroup>
+      <RibbonGroup label={t('group.rotateView')}>
+        <ActionButton id="tool.rotateView" />
+        <div className="rb-stack">
+          <ActionButton id="rotateViewLeft" variant="small" label={t('ribbon.turnLeft')} />
+          <ActionButton id="rotateViewRight" variant="small" label={t('ribbon.turnRight')} />
+          <ActionButton id="resetViewRotation" variant="small" />
+        </div>
+      </RibbonGroup>
+      <RibbonGroup label={t('group.reference')}>
+        <ActionButton id="loadReference" />
+        <div className="rb-stack">
+          <ActionButton id="tool.reference" variant="small" label={t('ribbon.referenceMove')} />
+          <ActionButton id="toggleReference" variant="small" label={t('ribbon.referenceShow')} />
+          <ActionButton id="removeReference" variant="small" label={t('ribbon.referenceRemove')} />
+        </div>
       </RibbonGroup>
       <RibbonGroup label={t('group.show')}>
         <div className="rb-stack">
@@ -468,13 +486,13 @@ function ViewTab() {
           <ActionButton id="historyPanel" variant="small" />
           <ActionButton id="navigatorPanel" variant="small" />
         </div>
-        <div className="rb-stack">
-          <ActionButton id="panelSide" variant="small" />
-        </div>
       </RibbonGroup>
       <RibbonGroup label={t('group.window')}>
-        <ActionButton id="fullscreen" />
-        <ActionButton id="newWindow" />
+        <div className="rb-stack">
+          <ActionButton id="fullscreen" variant="small" />
+          <ActionButton id="newWindow" variant="small" />
+          <ActionButton id="panelSide" variant="small" />
+        </div>
       </RibbonGroup>
       <RibbonGroup label={t('group.theme')}>
         <ThemePicker />
@@ -484,7 +502,7 @@ function ViewTab() {
           <ActionButton id="themeSystem" variant="small" />
         </div>
         <div className="rb-stack">
-          <ActionButton id="windowsAccent" variant="small" />
+          <ActionButton id="windowsAccent" variant="small" label={t('ribbon.windowsAccent')} />
         </div>
       </RibbonGroup>
     </>
@@ -494,6 +512,8 @@ function ViewTab() {
 export function Ribbon() {
   const tab = useUi((s) => s.tab);
   const onTabKey = (e: KeyboardEvent<HTMLButtonElement>, i: number) => {
+    // Arrows with Ctrl/Alt are shortcuts (e.g. turning the view), not tab moves.
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
     const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
     if (!d) return;
     e.preventDefault();

@@ -143,6 +143,7 @@ export class InputController {
   }
 
   private hitCanvasHandle(sp: Point): CanvasHandle | null {
+    if (this.engine.view.rotation !== 0) return null;
     const pts = this.handlePoints();
     for (const k of ['se', 'e', 's'] as CanvasHandle[]) {
       if (Math.abs(pts[k].x - sp.x) <= HANDLE_SIZE && Math.abs(pts[k].y - sp.y) <= HANDLE_SIZE) return k;
@@ -151,6 +152,8 @@ export class InputController {
   }
 
   drawOverlay(ov: Overlay): void {
+    // A turned view has no canvas resize handles (they work only upright).
+    if (this.engine.view.rotation !== 0) return;
     const c = ov.ctx;
     const pts = this.handlePoints();
     c.save();

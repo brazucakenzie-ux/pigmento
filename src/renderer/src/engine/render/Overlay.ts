@@ -123,7 +123,14 @@ export class Overlay {
     const s = this.view.toScreen(pos, pos);
     c.save();
     c.beginPath();
-    if (axis === 'x') {
+    if (this.view.rotation !== 0) {
+      // Turned: a long line through the guide (the viewport clips it).
+      const far = (w + h) / this.view.zoom + this.view.docW + this.view.docH;
+      const a = axis === 'x' ? this.view.toScreen(pos, -far) : this.view.toScreen(-far, pos);
+      const b = axis === 'x' ? this.view.toScreen(pos, far) : this.view.toScreen(far, pos);
+      c.moveTo(a.x, a.y);
+      c.lineTo(b.x, b.y);
+    } else if (axis === 'x') {
       const x = Math.round(s.x) + 0.5;
       c.moveTo(x, 0);
       c.lineTo(x, h);
@@ -145,7 +152,14 @@ export class Overlay {
     const b = axis === 'x' ? this.view.toScreen(pos, to) : this.view.toScreen(to, pos);
     c.save();
     c.beginPath();
-    if (axis === 'x') {
+    if (this.view.rotation !== 0) {
+      // Turned: along the line itself, 6 px past each end.
+      const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      const ux = (b.x - a.x) / len;
+      const uy = (b.y - a.y) / len;
+      c.moveTo(a.x - ux * 6, a.y - uy * 6);
+      c.lineTo(b.x + ux * 6, b.y + uy * 6);
+    } else if (axis === 'x') {
       const x = Math.round(a.x) + 0.5;
       c.moveTo(x, a.y - 6);
       c.lineTo(x, b.y + 6);
@@ -239,6 +253,22 @@ export class Overlay {
     const a = this.view.toScreen(x0, y0);
     const b = this.view.toScreen(x0 + s, y0 + s);
     const c = this.ctx;
+    if (this.view.rotation !== 0) {
+      // Turned: through the square's four corners.
+      const pts = [a, this.view.toScreen(x0 + s, y0), b, this.view.toScreen(x0, y0 + s)];
+      c.save();
+      c.beginPath();
+      pts.forEach((p, i) => (i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y)));
+      c.closePath();
+      c.lineWidth = 2;
+      c.strokeStyle = 'rgba(255,255,255,0.7)';
+      c.stroke();
+      c.lineWidth = 1;
+      c.strokeStyle = 'rgba(0,0,0,0.85)';
+      c.stroke();
+      c.restore();
+      return;
+    }
     c.save();
     c.lineWidth = 1;
     c.strokeStyle = 'rgba(0,0,0,0.85)';
@@ -259,6 +289,26 @@ export class Overlay {
     c.beginPath();
     const x0 = Math.ceil(vis.x / spacing) * spacing;
     const y0 = Math.ceil(vis.y / spacing) * spacing;
+    if (v.rotation !== 0) {
+      // Turned: each line between its two ends.
+      for (let x = x0; x <= vis.x + vis.w; x += spacing) {
+        const a = v.toScreen(x, vis.y);
+        const b = v.toScreen(x, vis.y + vis.h);
+        c.moveTo(a.x, a.y);
+        c.lineTo(b.x, b.y);
+      }
+      for (let y = y0; y <= vis.y + vis.h; y += spacing) {
+        const a = v.toScreen(vis.x, y);
+        const b = v.toScreen(vis.x + vis.w, y);
+        c.moveTo(a.x, a.y);
+        c.lineTo(b.x, b.y);
+      }
+      c.lineWidth = 1;
+      c.strokeStyle = this.theme.grid;
+      c.stroke();
+      c.restore();
+      return;
+    }
     const top = v.toScreen(0, vis.y).y;
     const bottom = v.toScreen(0, vis.y + vis.h).y;
     const left = v.toScreen(vis.x, 0).x;
