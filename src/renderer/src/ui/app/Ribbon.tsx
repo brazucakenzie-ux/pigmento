@@ -218,6 +218,12 @@ function BrushesTab() {
           </MenuButton>
         </div>
       </RibbonGroup>
+      <RibbonGroup label={t('group.stroke')}>
+        <div className="rb-stack">
+          <ActionButton id="strokeSelection" variant="small" />
+          <ActionButton id="strokePath" variant="small" />
+        </div>
+      </RibbonGroup>
       <RibbonGroup label={t('group.paintWith')}>
         <div className="rb-grid">
           {['brush', 'pencil', 'eraser', ...toolRegistry.byGroup('retouch').map((tool) => tool.id)].map((id) => (
@@ -279,6 +285,7 @@ function HomeTab() {
               <ActionMenuItem id="saveSelection" close={close} />
               <ActionMenuItem id="loadSelection" close={close} />
               <ActionMenuItem id="definePattern" close={close} />
+              <ActionMenuItem id="strokeSelection" close={close} />
               <ActionMenuItem id="selectionToShape" close={close} />
               <MenuSeparator />
               <ActionMenuItem id="transparentSelection" close={close} />

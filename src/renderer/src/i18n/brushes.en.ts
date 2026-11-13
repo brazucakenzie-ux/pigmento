@@ -79,6 +79,20 @@ export const brushesEn = {
   'group.paintWith': 'Paint with',
   'brushes.forTool': 'for the {tool}',
 
+  // Stroking outlines and paths
+  'group.stroke': 'Stroke',
+  'action.strokeSelection': 'Stroke selection outline…',
+  'action.strokePath': 'Stroke path with brush…',
+  'history.strokeSelection': 'Stroke selection',
+  'history.strokePath': 'Stroke path',
+  'dialog.strokeOutline.selection': 'Stroke selection outline',
+  'dialog.strokeOutline.path': 'Stroke path',
+  'dialog.strokeOutline.with': 'Paints with the {tool}’s brush: {brush}, {size} px.',
+  'dialog.strokeOutline.taper': 'Taper the ends (simulate pen pressure)',
+  'dialog.strokeOutline.newLayer': 'The stroke goes on a new pixel layer above the shapes.',
+  'dialog.strokeOutline.confirm': 'Stroke',
+  'notice.strokeNothing': 'There’s no outline there to stroke.',
+
   // Personal brushes
   'brushes.copyName': '{name} copy',
   'brushes.manage': 'Manage brush',

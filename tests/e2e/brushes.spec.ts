@@ -302,3 +302,60 @@ test('picks brushes from the library, with favourites, for the Brush and the Era
   ]);
   expect(await pixel(page, 200, 100)).toEqual(WHITE);
 });
+
+test('strokes the selection outline and a shape’s outline with the brush, one undo step each', async () => {
+  h = await launchApp();
+  const { page } = h;
+  await ready(page);
+  await brush(page);
+  const hist = () => page.evaluate(() => window.__pigmentoTest!.history().index);
+  await page.evaluate(() => window.__pigmentoTest!.selectRect(100, 100, 200, 100));
+  const before = await hist();
+  await page.getByRole('tab', { name: 'Brushes' }).click();
+  await page.locator('.ribbon').getByRole('button', { name: 'Stroke selection outline…' }).click();
+  const dlg = page.getByRole('dialog', { name: 'Stroke selection outline' });
+  await expect(dlg).toContainText('Paints with the Brush’s brush: Round, 10 px.');
+  await dlg.getByRole('checkbox', { name: 'Taper the ends (simulate pen pressure)' }).uncheck();
+  await dlg.getByRole('button', { name: 'Stroke' }).click();
+  // Along the edge (both sides of it), not inside.
+  expect(await pixel(page, 200, 100)).toEqual(RED);
+  expect(await pixel(page, 200, 97)).toEqual(RED);
+  expect(await pixel(page, 300, 150)).toEqual(RED);
+  expect(await pixel(page, 200, 150)).toEqual(WHITE);
+  expect(await hist()).toBe(before + 1);
+  await page.keyboard.press('Control+z');
+  expect(await pixel(page, 200, 100)).toEqual(WHITE);
+
+  // A shape on a shape layer: the stroke goes on a new pixel layer above it.
+  await page.keyboard.press('Escape');
+  await page.getByRole('tab', { name: 'Home' }).click();
+  await page.getByRole('button', { name: 'Ellipse', exact: true }).click();
+  await page.getByRole('radio', { name: 'Shape layer (stays editable)' }).click();
+  // Filled with the secondary colour (white), so only the brush stroke shows.
+  await page.getByRole('radio', { name: 'Fill', exact: true }).click();
+  await drag(page, [
+    [500, 300],
+    [700, 500],
+  ]);
+  await page.keyboard.press('Enter');
+  await page.evaluate(() => {
+    const t = window.__pigmentoTest!;
+    const [shape] = t.vectorObjects();
+    t.setVectorSelection([shape.id]);
+  });
+  const layersBefore = (await page.evaluate(() => window.__pigmentoTest!.layers())).count;
+  await page.getByRole('tab', { name: 'Brushes' }).click();
+  await page.locator('.ribbon').getByRole('button', { name: 'Stroke path with brush…' }).click();
+  const pathDlg = page.getByRole('dialog', { name: 'Stroke path' });
+  await expect(pathDlg).toContainText('new pixel layer');
+  await pathDlg.getByRole('button', { name: 'Stroke' }).click();
+  const layers = await page.evaluate(() => window.__pigmentoTest!.layers());
+  expect(layers.count).toBe(layersBefore + 1);
+  expect(await page.evaluate(() => window.__pigmentoTest!.activeLayerKind())).toBe('raster');
+  // The left of the ellipse (a little inside its box, past the outline's inset).
+  const left = await pixel(page, 501, 400);
+  expect(left.r).toBeGreaterThan(150);
+  expect(left.g).toBeLessThan(150);
+  await page.keyboard.press('Control+z');
+  expect((await page.evaluate(() => window.__pigmentoTest!.layers())).count).toBe(layersBefore);
+});

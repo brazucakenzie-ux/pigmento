@@ -221,6 +221,12 @@ export function createBrushTool(cfg: BrushToolConfig): Tool {
     options: cfg.options,
     paints: true,
     symmetry: true,
+    strokeBrush: cfg.direct
+      ? undefined
+      : (ctx) => {
+          const b = cfg.brush(ctx);
+          return { settings: b.settings, size: b.size, opacity: b.opacity, op: cfg.op };
+        },
     cursor: (ctx) => cfg.cursor(ctx),
 
     pointerDown(ctx, e) {

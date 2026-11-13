@@ -1,3 +1,4 @@
+import type { BrushSettings } from '../brush/types';
 import type { RGBA } from '../core/color';
 import type { Point, Rect } from '../core/geometry';
 import type { PaintDocument, Layer, VectorLayer } from '../doc/Document';
@@ -218,6 +219,11 @@ export interface Tool {
   readonly options: OptionSpec[];
   /** Tool records a history step and benefits from the pen's eraser end override. */
   readonly paints?: boolean;
+  /**
+   * The brush this tool lays paint with, for stroking outlines and paths (Brush, Pencil,
+   * Eraser). Tools that change pixels in place (Smudge, Blur…) have none.
+   */
+  strokeBrush?(ctx: ToolContext): { settings: BrushSettings; size: number; opacity: number; op: 'over' | 'erase' };
   cursor(ctx: ToolContext, p: Point | null): string;
   activate?(ctx: ToolContext): void;
   deactivate?(ctx: ToolContext): void;

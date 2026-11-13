@@ -10,7 +10,7 @@ import { GradientDialog } from '../dialogs/GradientDialog';
 import { DeleteShapeDialog, SaveShapeDialog } from '../dialogs/ShapeDialogs';
 import { loadCustomShapes } from '../services/shapes';
 import { loadCustomBrushes } from '../services/brushes';
-import { BrushDesignerDialog, DeleteBrushDialog } from '../dialogs/BrushDesigner';
+import { BrushDesignerDialog, DeleteBrushDialog, StrokeOutlineDialog } from '../dialogs/BrushDesigner';
 import { loadSavedPatterns } from '../services/patterns';
 import { ColorRangeDialog, LoadSelectionDialog, ModifySelectionDialog, SaveSelectionDialog } from '../dialogs/SelectionDialogs';
 import { confirmDiscard, openPath } from '../services/files';
@@ -140,6 +140,8 @@ function DialogHost() {
       return <BrushDesignerDialog id={d.id} from={d.from} />;
     case 'deleteBrush':
       return <DeleteBrushDialog id={d.id} />;
+    case 'strokeOutline':
+      return <StrokeOutlineDialog source={d.source} />;
   }
 }
 

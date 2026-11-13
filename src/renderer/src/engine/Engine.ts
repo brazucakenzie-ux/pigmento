@@ -34,7 +34,8 @@ import type { LiveKind, LiveObject } from './live/LiveObject';
 import type { TextObject } from './live/TextObject';
 import { ShapeObject, type PathInfo, type ShapeStyle } from './live/ShapeObject';
 import { shapeOutline } from './vector/convert';
-import { toUnitBox, type SubPath } from './vector/pathData';
+import { flattenPath, outlinesToLines, strokeLines, type Polyline } from './brush/strokePath';
+import { toCmds, toUnitBox, type SubPath } from './vector/pathData';
 import {
   alignNodes,
   arrangeNodes,
@@ -1449,6 +1450,54 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     if (!outline) return null;
     const u = toUnitBox(outline.subpaths);
     return u ? { unit: u.subs, aspect: u.aspect, fillRule: outline.fillRule } : null;
+  }
+
+  /**
+   * Paint along the selection's outline, or along the selected shapes (or the path being drawn),
+   * with the active tool's brush (the Brush's if it has none), as one undo step. Shapes on a
+   * shape layer are stroked onto a new pixel layer above it. `taper` simulates pen pressure.
+   */
+  strokeOutline(source: 'selection' | 'path', taper: boolean): boolean {
+    let lines: Polyline[] = [];
+    if (source === 'selection') {
+      const sel = this.doc.selection;
+      if (!sel) return false;
+      lines = outlinesToLines(sel.outlines);
+    } else {
+      const live = this._live instanceof ShapeObject ? this._live : null;
+      const outlines = live ? [shapeOutline(live)] : this.selectedVectorNodes().flatMap((n) => [...walkShapes([n])].map((s) => shapeOutline(s)));
+      for (const o of outlines) if (o) lines.push(...flattenPath(toCmds(o.subpaths)));
+    }
+    if (!lines.length) return false;
+    const tool = this.activeTool.strokeBrush ? this.activeTool : toolRegistry.get('brush');
+    const b = tool?.strokeBrush?.(this);
+    if (!b) return false;
+    const onShapes = this.doc.activeLayer.kind === 'vector';
+    if (!onShapes && !this.canPaint()) return false;
+    const stroke = new Surface(this.doc.width, this.doc.height);
+    const target = () => this.doc.activeRaster;
+    const dirty = strokeLines(stroke, lines, { settings: b.settings, size: b.size, color: this.primary }, taper, (x, y) => target()?.surface.getPixel(Math.floor(x), Math.floor(y)) ?? null);
+    const area = dirty ? rectIntersect(dirty, this.doc.bounds) : null;
+    if (!area) return false;
+    // A path stroke keeps to the selection, like painting; an outline stroke straddles it.
+    const clip = source === 'path' ? (this.doc.selection?.maskView() ?? null) : null;
+    const label = source === 'selection' ? 'history.strokeSelection' : 'history.strokePath';
+    const paint = () => {
+      const layer = target();
+      if (!layer) return;
+      const surf = layer.surface;
+      surf.beginEdit();
+      stroke.forEachTile(area, (sv, sub) => surf.compositeImage(sub, sv, b.op, b.opacity, clip), false, true);
+      this.pushPixels(label, layer, surf.endEdit());
+      this.layerChanged(layer, area);
+    };
+    if (onShapes) {
+      this.history.group(label, () => {
+        this.layers.add();
+        paint();
+      });
+    } else paint();
+    return true;
   }
 
   /** Put an imported SVG drawing on a new shape layer, scaled down to fit the image if larger. */

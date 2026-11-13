@@ -40,6 +40,8 @@ export type DialogState =
   /** The Brush Designer: edit personal brush `id`, or make a new one starting from brush `from`. */
   | { kind: 'brushDesigner'; id?: string; from?: string }
   | { kind: 'deleteBrush'; id: string }
+  /** Paint along the selection's outline or the selected shapes/path with the brush in use. */
+  | { kind: 'strokeOutline'; source: 'selection' | 'path' }
   | { kind: 'shortcuts' }
   | { kind: 'about' };
 

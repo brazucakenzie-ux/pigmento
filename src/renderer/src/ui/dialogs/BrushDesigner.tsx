@@ -10,8 +10,10 @@ import { Dialog } from '../components/Dialog';
 import { Checkbox, Segmented, Slider } from '../components/Controls';
 import { Icon } from '../icons/Icon';
 import { engine } from '../state/engine';
-import { closeDialog } from '../state/store';
-import { brushTarget, customBrushCount, customBrushFile, deleteBrush, draftOf, resolveMasks, saveBrushDraft, type BrushDraft } from '../services/brushes';
+import { closeDialog, showToast, useUi } from '../state/store';
+import { brushRegistry } from '@engine/brush/BrushRegistry';
+import { toolRegistry } from '@engine/tools/ToolRegistry';
+import { brushName, brushTarget, customBrushCount, customBrushFile, deleteBrush, draftOf, resolveMasks, saveBrushDraft, type BrushDraft } from '../services/brushes';
 
 /** While the Designer is open its own tip and texture are kept under these ids (for previews). */
 const STAGE_TIP = 'designer-tip';
@@ -631,6 +633,32 @@ export function DeleteBrushDialog({ id }: { id: string }) {
   return (
     <Dialog title={t('dialog.deleteBrush.title')} onCancel={closeDialog} onSubmit={submit} submitLabel={t('dialog.deleteBrush.confirm')}>
       <p>{t('dialog.deleteBrush.body', { name: f?.name ?? '' })}</p>
+    </Dialog>
+  );
+}
+
+/** Whether outline strokes taper (kept while the app runs). */
+let taperOutlines = true;
+
+/** Stroke the selection's outline, or the selected shapes / path, with the brush in use. */
+export function StrokeOutlineDialog({ source }: { source: 'selection' | 'path' }) {
+  const [taper, setTaper] = useState(taperOutlines);
+  const active = toolRegistry.get(useUi.getState().tool);
+  const tool = active?.strokeBrush ? active : toolRegistry.get('brush');
+  const b = tool?.strokeBrush?.(engine);
+  const brushId = tool ? engine.options(tool.id).brushId : undefined;
+  const def = typeof brushId === 'string' ? brushRegistry.get(brushId) : undefined;
+  const onShapes = source === 'path' && engine.doc.activeLayer.kind === 'vector';
+  const submit = () => {
+    taperOutlines = taper;
+    closeDialog();
+    if (!engine.strokeOutline(source, taper)) showToast({ kind: 'info', key: 'notice.strokeNothing' });
+  };
+  return (
+    <Dialog title={t(source === 'selection' ? 'dialog.strokeOutline.selection' : 'dialog.strokeOutline.path')} onCancel={closeDialog} onSubmit={submit} submitLabel={t('dialog.strokeOutline.confirm')}>
+      {tool && b ? <p>{t('dialog.strokeOutline.with', { tool: t(tool.labelKey), brush: def ? brushName(def) : t(tool.labelKey), size: Math.round(b.size) })}</p> : null}
+      <Checkbox checked={taper} onChange={setTaper} label={t('dialog.strokeOutline.taper')} />
+      {onShapes ? <p className="dialog-note">{t('dialog.strokeOutline.newLayer')}</p> : null}
     </Dialog>
   );
 }

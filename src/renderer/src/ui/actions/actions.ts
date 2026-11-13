@@ -293,6 +293,8 @@ const base: Action[] = [
     enabled: customBrush,
   },
   { id: 'deleteBrush', labelKey: 'action.deleteBrush', icon: 'delete', group: 'tools', run: () => openDialog({ kind: 'deleteBrush', id: brushTarget().brushId }), enabled: customBrush },
+  { id: 'strokeSelection', labelKey: 'action.strokeSelection', icon: 'select', group: 'image', run: () => selectionDialog({ kind: 'strokeOutline', source: 'selection' }), enabled: hasSelection },
+  { id: 'strokePath', labelKey: 'action.strokePath', icon: 'pen', group: 'image', run: () => openDialog({ kind: 'strokeOutline', source: 'path' }), enabled: (s) => s.vectorSelection.count > 0 || s.live === 'shape' },
   { id: 'importBrushPack', labelKey: 'action.importBrushPack', icon: 'open', group: 'file', run: () => void importBrushPack() },
   // Enabled once My brushes has something in it.
   { id: 'exportBrushPack', labelKey: 'action.exportBrushPack', icon: 'export', group: 'file', run: () => void exportBrushPack(), enabled: (s) => s.brushLibrary >= 0 && hasCustomBrushes() },
