@@ -1,3 +1,5 @@
+import { brushRegistry } from '@engine/brush/BrushRegistry';
+import { brushPreview } from '@engine/brush/preview';
 import { Selection } from '@engine/doc/Selection';
 import type { VectorNode } from '@engine/vector/model';
 import { engine } from '../state/engine';
@@ -32,17 +34,43 @@ async function shapeSheet(cell: number, cols: number): Promise<{ ids: string[]; 
   return { ids: defs.map((d) => d.id), w, h, png: Array.from(png) };
 }
 
+/**
+ * Every built-in brush's sample stroke (seeded, so it never changes unless the brush does), in
+ * cells of cellW×cellH on white.
+ */
+async function brushSheet(cellW: number, cellH: number, cols: number): Promise<{ ids: string[]; w: number; h: number; png: number[] }> {
+  const defs = brushRegistry.all().filter((d) => !d.custom);
+  const w = cols * cellW;
+  const h = Math.ceil(defs.length / cols) * cellH;
+  const data = new Uint8ClampedArray(w * h * 4).fill(255);
+  defs.forEach((d, i) => {
+    const p = brushPreview(d.settings, cellW - 8, cellH - 8);
+    const ox = (i % cols) * cellW + 4;
+    const oy = Math.floor(i / cols) * cellH + 4;
+    for (let y = 0; y < p.h; y++) {
+      for (let x = 0; x < p.w; x++) {
+        const s = (y * p.w + x) * 4;
+        const a = p.data[s + 3] / 255;
+        const t = ((oy + y) * w + ox + x) * 4;
+        for (let c = 0; c < 3; c++) data[t + c] = Math.round(p.data[s + c] * a + 255 * (1 - a));
+      }
+    }
+  });
+  const png = await engine.codecs.encode('png', w, h, data, 100, 96);
+  return { ids: defs.map((d) => d.id), w, h, png: Array.from(png) };
+}
+
 /** Pixels per cell that differ (any channel by more than 24) between two sheets. */
-async function compareSheets(a: number[], b: number[], cell: number, cols: number): Promise<number[]> {
+async function compareSheets(a: number[], b: number[], cell: number, cols: number, cellH = cell): Promise<number[]> {
   const [x, y] = await Promise.all([engine.codecs.decode(new Uint8Array(a)), engine.codecs.decode(new Uint8Array(b))]);
   if (x.w !== y.w || x.h !== y.h) return [-1];
-  const rows = Math.ceil(x.h / cell);
+  const rows = Math.ceil(x.h / cellH);
   const counts = new Array<number>(rows * cols).fill(0);
   for (let py = 0; py < x.h; py++) {
     for (let px = 0; px < x.w; px++) {
       const i = (py * x.w + px) * 4;
       const d = Math.max(Math.abs(x.data[i] - y.data[i]), Math.abs(x.data[i + 1] - y.data[i + 1]), Math.abs(x.data[i + 2] - y.data[i + 2]), Math.abs(x.data[i + 3] - y.data[i + 3]));
-      if (d > 24) counts[Math.floor(py / cell) * cols + Math.floor(px / cell)]++;
+      if (d > 24) counts[Math.floor(py / cellH) * cols + Math.floor(px / cell)]++;
     }
   }
   return counts;
@@ -56,6 +84,7 @@ export function installTestHook(): void {
   (window as unknown as Record<string, unknown>).__pigmentoTest = {
     pixel: (x: number, y: number) => engine.sampleColor(x, y),
     shapeSheet,
+    brushSheet,
     compareSheets,
     doc: () => ({ width: engine.doc.width, height: engine.doc.height }),
     history: () => {

@@ -210,7 +210,7 @@ Each item is ticked in the same commit as its work.
 - [x] 3.11 Reference image overlay (load, move, scale, opacity, hide; never exported or saved into the image) and view-only canvas rotation (free angle, 15° steps with Shift, reset; tools, guides and cursors stay correct)
 - [x] 3.12 Performance: in-app performance overlay (hidden shortcut) with frame time, pointer-to-pixel latency, memory; measured budgets on a 4000×3000 canvas (brush latency < 16 ms, flood fill < 300 ms), app load < 3 s, no leak across 500 undo/redo cycles; fix what misses (+ perf e2e)
 - Measured on this PC (3.12): a 32 px brush on 4000×3000 takes a median of 13.3 ms per pointer event including the next frame; flood-filling the whole 4000×3000 canvas takes about 250 ms (it took 420 ms before tiles that the fill covers completely were written in one go and exact-colour pixels were compared as one word); the app is ready 1.3 s after launch; the script heap grows by 0.1 MB over 500 undo/redo cycles of 10 strokes.
-- [ ] 3.13 Golden-image tests for every built-in brush; e2e for creating and using a custom brush and for importing/exporting brush packs; `npm run check` green; report
+- [x] 3.13 Golden-image tests for every built-in brush; e2e for creating and using a custom brush and for importing/exporting brush packs; `npm run check` green; report
 
 ### Milestone 4 — Polish, accessibility, packaging
 Onboarding, Simple/Full mode, shortcut editor, UI scale, full a11y pass, error handling, 100 MP open, 500-cycle memory test, perf overlay polish, NSIS + portable builds, file associations, README, user guide, changelog, final feature report.

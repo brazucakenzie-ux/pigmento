@@ -5,6 +5,7 @@ export interface PigmentoTestHook {
   pixel(x: number, y: number): { r: number; g: number; b: number; a: number };
   doc(): { width: number; height: number };
   history(): { index: number; length: number; dirty: boolean };
+  brushSheet(cellW: number, cellH: number, cols: number): Promise<{ ids: string[]; w: number; h: number; png: number[] }>;
   tool(): string;
   docToScreen(x: number, y: number): { x: number; y: number };
   liveKind(): string | null;
@@ -18,7 +19,7 @@ export interface PigmentoTestHook {
   vectorObjects(id?: string): VectorObject[] | null;
   vectorSelection(): string[];
   shapeSheet(cell: number, cols: number): Promise<{ ids: string[]; w: number; h: number; png: number[] }>;
-  compareSheets(a: number[], b: number[], cell: number, cols: number): Promise<number[]>;
+  compareSheets(a: number[], b: number[], cell: number, cols: number, cellH?: number): Promise<number[]>;
   pathInfo(): { drawing: boolean; closed: boolean; selected: { smooth: boolean } | null; anchors: number } | null;
   setVectorSelection(ids: string[]): void;
   activeLayerKind(): 'raster' | 'group' | 'vector';

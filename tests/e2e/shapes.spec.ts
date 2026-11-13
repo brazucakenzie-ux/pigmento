@@ -100,7 +100,8 @@ test('keeps library shapes editable on a shape layer, sliders included', async (
   let objs = await objects(page);
   expect(objs).toHaveLength(1);
   expect(objs[0]).toMatchObject({ shape: 'parametric', shapeId: 'star-5', params: { inner: 60 } });
-  expect(await pixel(page, 200, 200)).toEqual(BLUE);
+  // The shape layer redraws on the next frame.
+  await expect.poll(() => pixel(page, 200, 200)).toEqual(BLUE);
 
   // Move tool: select the star, and its slider edits the object (one undo step).
   await page.keyboard.press('v');
@@ -152,11 +153,14 @@ test('stars favourites and remembers them', async () => {
   await expect(page.getByRole('button', { name: 'Shape: Gear' })).toBeVisible();
 
   // Settings reach the disk after two short debounces and a flushed write; wait for the file.
-  const saved = () =>
-    JSON.parse(readFileSync(path.join(h.userData, 'settings.json'), 'utf8')) as {
-      shapes?: { favorites?: string[] };
-      tools?: Record<string, { shapeId?: string }>;
-    };
+  // Until the first write (or mid-write) there is nothing to read yet: keep polling.
+  const saved = (): { shapes?: { favorites?: string[] }; tools?: Record<string, { shapeId?: string }> } => {
+    try {
+      return JSON.parse(readFileSync(path.join(h.userData, 'settings.json'), 'utf8')) as ReturnType<typeof saved>;
+    } catch {
+      return {};
+    }
+  };
   await expect.poll(() => saved().shapes?.favorites, { timeout: 10000 }).toEqual(['snowflake']);
   await expect.poll(() => saved().tools?.shape?.shapeId, { timeout: 10000 }).toBe('gear');
   await h.app.evaluate(({ BrowserWindow }) =>

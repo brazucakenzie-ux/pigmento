@@ -47,6 +47,40 @@ test('every built-in shape matches its golden image', async () => {
   expect(changed).toEqual([]);
 });
 
+const BRUSH_W = 160;
+const BRUSH_H = 56;
+const BRUSH_COLS = 7;
+
+/**
+ * Every built-in brush's seeded sample stroke against the committed sheet. A brush whose marks
+ * change fails by name; after an intended change, run with PIGMENTO_UPDATE_GOLDEN=1 and review
+ * tests/golden/brushes.png.
+ */
+test('every built-in brush matches its golden image', async () => {
+  h = await launchApp();
+  const { page } = h;
+  await ready(page);
+  const sheet = await page.evaluate(([w, hh, k]) => window.__pigmentoTest!.brushSheet(w, hh, k), [BRUSH_W, BRUSH_H, BRUSH_COLS] as const);
+  const png = path.join(GOLDEN, 'brushes.png');
+  const meta = path.join(GOLDEN, 'brushes.json');
+  if (process.env.PIGMENTO_UPDATE_GOLDEN) {
+    mkdirSync(GOLDEN, { recursive: true });
+    writeFileSync(png, Buffer.from(sheet.png));
+    writeFileSync(meta, `${JSON.stringify({ cellW: BRUSH_W, cellH: BRUSH_H, cols: BRUSH_COLS, ids: sheet.ids }, null, 1)}\n`);
+    test.info().annotations.push({ type: 'golden', description: `wrote ${sheet.ids.length} brushes to ${png}` });
+    return;
+  }
+  expect(existsSync(png), 'Golden image missing: run with PIGMENTO_UPDATE_GOLDEN=1').toBe(true);
+  const saved = JSON.parse(readFileSync(meta, 'utf8')) as { ids: string[] };
+  expect(sheet.ids).toEqual(saved.ids);
+  const counts = await page.evaluate(([a, b, w, k, hh]) => window.__pigmentoTest!.compareSheets([...a], [...b], w, k, hh), [sheet.png, [...readFileSync(png)], BRUSH_W, BRUSH_COLS, BRUSH_H] as const);
+  expect(counts[0], 'The brush sheet changed size').not.toBe(-1);
+  const limit = BRUSH_W * BRUSH_H * 0.01;
+  const changed = counts.map((n, i) => ({ id: sheet.ids[i], pixels: n })).filter((c) => c.id && c.pixels > limit);
+  if (changed.length) writeFileSync(test.info().outputPath('brushes-actual.png'), Buffer.from(sheet.png));
+  expect(changed).toEqual([]);
+});
+
 const objects = async (page: Page) => (await page.evaluate(() => window.__pigmentoTest!.vectorObjects())) ?? [];
 
 async function click(page: Page, x: number, y: number): Promise<void> {
