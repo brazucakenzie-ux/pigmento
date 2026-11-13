@@ -207,6 +207,16 @@ function BrushesTab() {
           <ActionButton id="duplicateBrush" variant="small" />
           <ActionButton id="deleteBrush" variant="small" />
         </div>
+        <div className="rb-stack">
+          <MenuButton label={t('brushes.files')} icon="folder">
+            {(close) => (
+              <>
+                <ActionMenuItem id="importBrushPack" close={close} />
+                <ActionMenuItem id="exportBrushPack" close={close} />
+              </>
+            )}
+          </MenuButton>
+        </div>
       </RibbonGroup>
       <RibbonGroup label={t('group.paintWith')}>
         <div className="rb-grid">

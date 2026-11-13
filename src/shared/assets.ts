@@ -7,6 +7,7 @@ export const ASSET_KINDS = {
   svg: { open: ['svg'], save: 'svg', maxBytes: 20 * 1024 * 1024, filterKey: 'filter.svg' },
   shapePack: { open: ['pigmshapes', 'json'], save: 'pigmshapes', maxBytes: 20 * 1024 * 1024, filterKey: 'filter.shapePack' },
   palette: { open: ['json', 'gpl', 'ase'], save: 'json', maxBytes: 4 * 1024 * 1024, filterKey: 'filter.palette' },
+  brushPack: { open: ['pigmbrush'], save: 'pigmbrush', maxBytes: 50 * 1024 * 1024, filterKey: 'filter.brushPack' },
   /** A PNG for a brush tip or grain texture (decoded and size-checked in the codec worker). */
   brushImage: { open: ['png'], save: 'png', maxBytes: 8 * 1024 * 1024, filterKey: 'filter.brushImage' },
 } as const;

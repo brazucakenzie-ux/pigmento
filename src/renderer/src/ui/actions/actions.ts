@@ -1,6 +1,6 @@
 import { exportSvgFile, importSvgFile } from '../services/svg';
 import { exportShapePack, hasCustomShapes, importShapePack } from '../services/shapes';
-import { brushTarget, duplicateBrush, isCustomBrush } from '../services/brushes';
+import { brushTarget, duplicateBrush, exportBrushPack, hasCustomBrushes, importBrushPack, isCustomBrush } from '../services/brushes';
 import type { ThemeMode } from '@shared/settings';
 import { toolRegistry } from '@engine/tools/ToolRegistry';
 import { reportEngineError } from '@engine/input/InputController';
@@ -293,6 +293,9 @@ const base: Action[] = [
     enabled: customBrush,
   },
   { id: 'deleteBrush', labelKey: 'action.deleteBrush', icon: 'delete', group: 'tools', run: () => openDialog({ kind: 'deleteBrush', id: brushTarget().brushId }), enabled: customBrush },
+  { id: 'importBrushPack', labelKey: 'action.importBrushPack', icon: 'open', group: 'file', run: () => void importBrushPack() },
+  // Enabled once My brushes has something in it.
+  { id: 'exportBrushPack', labelKey: 'action.exportBrushPack', icon: 'export', group: 'file', run: () => void exportBrushPack(), enabled: (s) => s.brushLibrary >= 0 && hasCustomBrushes() },
   { id: 'ungroupShapes', labelKey: 'action.ungroupShapes', icon: 'ungroup', group: 'image', run: () => engine.ungroupVector(), enabled: (s) => s.vectorSelection.groups > 0 },
   // Colours
   { id: 'swapColors', labelKey: 'action.swapColors', icon: 'swap', group: 'colors', shortcut: ['X'], run: () => engine.swapColors() },

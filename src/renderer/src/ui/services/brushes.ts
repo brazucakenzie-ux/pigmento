@@ -8,6 +8,7 @@ import {
   BRUSH_FORMAT,
   BRUSH_FORMAT_VERSION,
   CustomBrushSchema,
+  MAX_CUSTOM_BRUSHES,
   decodeMaskData,
   encodeMaskData,
   OWN_MASK,
@@ -15,7 +16,9 @@ import {
   type CustomBrushFile,
   type MaskFile,
 } from '@shared/brushFormat';
+import { readBrushPack, writeBrushPack } from '@engine/io/brushPack';
 import { t } from '../../i18n';
+import { pngCodec } from './files';
 import { runAction } from '../actions/actions';
 import { engine } from '../state/engine';
 import { showToast, updateSettings, useUi, type UiState } from '../state/store';
@@ -208,4 +211,65 @@ export async function deleteBrush(id: string): Promise<void> {
 
 export function customBrushCount(): number {
   return files.size;
+}
+
+/** Save every personal brush to a brush pack (to share, or to move to another PC). */
+export async function exportBrushPack(): Promise<boolean> {
+  const list = [...files.values()].sort((a, b) => a.createdAt - b.createdAt);
+  if (!list.length) {
+    showToast({ kind: 'info', key: 'notice.brushPackEmpty' });
+    return false;
+  }
+  let bytes: Uint8Array;
+  try {
+    bytes = await writeBrushPack(t('brushes.packName'), list.map((f) => draftOf(f.id)), pngCodec);
+  } catch {
+    showToast({ kind: 'error', key: 'error.brushSave' });
+    return false;
+  }
+  let saved: string | null;
+  try {
+    saved = await window.pigmento.files.saveAsset('brushPack', `${t('brushes.packName')}.pigmbrush`, bytes);
+  } catch {
+    showToast({ kind: 'error', key: 'error.brushSave' });
+    return false;
+  }
+  if (!saved) return false;
+  showToast({ kind: 'info', key: 'notice.brushPackExported', params: { count: list.length, name: saved.split(/[\\/]/).pop() ?? saved } });
+  return true;
+}
+
+/** Add the brushes in a brush pack to My brushes (each gets a new id). */
+export async function importBrushPack(): Promise<number> {
+  let file: { name: string; bytes: Uint8Array } | null;
+  try {
+    file = await window.pigmento.files.openAsset('brushPack');
+  } catch {
+    showToast({ kind: 'error', key: 'error.brushPackRefused' });
+    return 0;
+  }
+  if (!file) return 0;
+  let pack: { brushes: BrushDraft[] };
+  try {
+    pack = await readBrushPack(file.bytes, pngCodec);
+  } catch {
+    showToast({ kind: 'error', key: 'error.brushPackInvalid', params: { name: file.name } });
+    return 0;
+  }
+  const room = Math.max(0, MAX_CUSTOM_BRUSHES - files.size);
+  let added = 0;
+  let first: string | null = null;
+  for (const b of pack.brushes.slice(0, room)) {
+    const id = `my-${crypto.randomUUID()}`;
+    if (!(await store(fileOf(b, id, Date.now() + added)))) break;
+    first ??= id;
+    added++;
+  }
+  if (first) pickBrush(brushTarget().toolId, first);
+  showToast({ kind: 'info', key: 'notice.brushPackImported', params: { count: added } });
+  return added;
+}
+
+export function hasCustomBrushes(): boolean {
+  return files.size > 0;
 }

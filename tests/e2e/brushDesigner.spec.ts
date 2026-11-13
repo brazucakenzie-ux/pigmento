@@ -254,3 +254,69 @@ test('imports a PNG as a tip (its alpha) and as a grain texture', async () => {
   expect(file.settings.texture?.id).toBe('own');
   expect(file.texture).toMatchObject({ w: 16, h: 16 });
 });
+
+test('exports My brushes as a pack and imports it into another profile', async () => {
+  h = await launchApp();
+  let page = h.page;
+  await ready(page);
+  await page.getByRole('tab', { name: 'Brushes' }).click();
+  const files = page.locator('.ribbon').getByRole('button', { name: 'Brush packs' });
+  // Nothing to export yet.
+  await files.click();
+  await expect(page.getByRole('menuitem', { name: 'Export my brushes…' })).toBeDisabled();
+  await page.keyboard.press('Escape');
+
+  // One brush with a drawn tip, one with a built-in tip.
+  const make = async (name: string, tip: 'draw' | string) => {
+    await page.locator('.ribbon').getByRole('button', { name: 'New brush…' }).click();
+    const dlg = page.getByRole('dialog', { name: 'New brush' });
+    await dlg.getByRole('textbox', { name: 'Name' }).fill(name);
+    if (tip === 'draw') await dlg.getByRole('button', { name: 'Draw a tip' }).click();
+    else await dlg.getByRole('radio', { name: tip }).click();
+    await dlg.getByRole('button', { name: 'Save' }).click();
+    await expect(page.locator('.toast', { hasText: `Saved “${name}” to My brushes.` })).toBeVisible();
+  };
+  await make('Disc', 'draw');
+  await make('Chalky', 'Chalk');
+
+  const out = tempFile('mine.pigmbrush');
+  await h.app.evaluate(({ dialog }, fp) => {
+    dialog.showSaveDialog = (async () => ({ canceled: false, filePath: fp })) as typeof dialog.showSaveDialog;
+  }, out);
+  await files.click();
+  await page.getByRole('menuitem', { name: 'Export my brushes…' }).click();
+  await expect(page.locator('.toast', { hasText: 'Saved My brushes to mine.pigmbrush (brushes: 2).' })).toBeVisible();
+  const zip = readFileSync(out);
+  expect([zip[0], zip[1]]).toEqual([0x50, 0x4b]);
+
+  // Another PC (a fresh profile): a broken file is refused, the pack is added.
+  await h.close();
+  h = await launchApp();
+  page = h.page;
+  await ready(page);
+  await page.getByRole('tab', { name: 'Brushes' }).click();
+  const bad = tempFile('bad.pigmbrush');
+  writeFileSync(bad, 'nope');
+  await stubOpen(bad);
+  await page.locator('.ribbon').getByRole('button', { name: 'Brush packs' }).click();
+  await page.getByRole('menuitem', { name: 'Import brush pack…' }).click();
+  await expect(page.locator('.toast', { hasText: 'bad.pigmbrush isn’t a Pigmento brush pack.' })).toBeVisible();
+  await stubOpen(out);
+  await page.locator('.ribbon').getByRole('button', { name: 'Brush packs' }).click();
+  await page.getByRole('menuitem', { name: 'Import brush pack…' }).click();
+  await expect(page.locator('.toast', { hasText: 'Brushes added to My brushes: 2.' })).toBeVisible();
+  await expect.poll(() => brushFiles().map((f) => f.name)).toEqual(['Disc', 'Chalky']);
+  const [disc, chalky] = brushFiles();
+  expect(disc.tip).toMatchObject({ w: 48, h: 48 });
+  expect(chalky.settings.tip).toEqual({ kind: 'image', id: 'chalk' });
+  expect(chalky.tip).toBeNull();
+
+  // The first one is ready to paint with.
+  await expect(page.locator('.brush-pick')).toContainText('Disc');
+  await page.getByRole('button', { name: /Colour #D7263D/ }).click();
+  await drag(page, [
+    [200, 300],
+    [500, 300],
+  ]);
+  expect(await pixel(page, 350, 300)).toEqual(RED);
+});

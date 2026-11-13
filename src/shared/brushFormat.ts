@@ -99,7 +99,7 @@ export const BrushBodySchema = z.object({
 });
 
 /** A brush that uses its own tip or texture must carry it. */
-export function checkOwnMasks(b: { settings: BrushSettingsFile; tip: MaskFile | null; texture: MaskFile | null }, ctx: z.RefinementCtx): void {
+export function checkOwnMasks(b: { settings: BrushSettingsFile; tip: unknown; texture: unknown }, ctx: z.RefinementCtx): void {
   if (b.settings.tip.kind === 'image' && b.settings.tip.id === OWN_MASK && !b.tip) ctx.addIssue({ code: 'custom', message: 'The brush uses its own tip but has none' });
   if (b.settings.texture?.id === OWN_MASK && !b.texture) ctx.addIssue({ code: 'custom', message: 'The brush uses its own texture but has none' });
 }
@@ -126,3 +126,33 @@ export function decodeMaskData(b64: string): Uint8Array {
   for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
   return out;
 }
+
+/**
+ * A brush pack (`.pigmbrush`): a zip holding `pack.json` (below) and the brushes' own tips
+ * and textures as PNGs (`tips/<n>.png`: the mask in the alpha channel; `textures/<n>.png`:
+ * grey). Brushes get new ids when a pack is imported.
+ */
+export const BRUSH_PACK_FORMAT = 'pigmento-brush-pack';
+export const MAX_PACK_BRUSHES = MAX_CUSTOM_BRUSHES;
+/** Limits on what a pack's zip may hold (checked before anything is unpacked). */
+export const MAX_PACK_ENTRY_BYTES = 8 * 1024 * 1024;
+export const MAX_PACK_TOTAL_BYTES = 200 * 1024 * 1024;
+
+export const PACK_TIP_PATH = /^tips\/\d{1,4}\.png$/;
+export const PACK_TEXTURE_PATH = /^textures\/\d{1,4}\.png$/;
+
+export const PackBrushSchema = BrushBodySchema.extend({
+  tip: z.string().regex(PACK_TIP_PATH).nullable(),
+  texture: z.string().regex(PACK_TEXTURE_PATH).nullable(),
+}).superRefine(checkOwnMasks);
+
+export type PackBrush = z.infer<typeof PackBrushSchema>;
+
+export const BrushPackSchema = z.object({
+  format: z.literal(BRUSH_PACK_FORMAT),
+  version: z.literal(BRUSH_FORMAT_VERSION),
+  name: z.string().trim().min(1).max(80),
+  brushes: z.array(PackBrushSchema).min(1).max(MAX_PACK_BRUSHES),
+});
+
+export type BrushPack = z.infer<typeof BrushPackSchema>;
