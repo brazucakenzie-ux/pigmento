@@ -194,7 +194,7 @@ export function ShortcutsDialog() {
   const groups = useMemo(() => {
     const out = new Map<ActionGroup, { label: string; keys: string[] }[]>();
     for (const a of actions().values()) {
-      if (!a.shortcut?.length) continue;
+      if (!a.shortcut?.length || a.hidden) continue;
       const label = t(a.labelKey);
       if (filter && !label.toLowerCase().includes(filter.toLowerCase())) continue;
       const list = out.get(a.group) ?? [];

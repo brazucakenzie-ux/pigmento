@@ -21,5 +21,13 @@ export const viewEn = {
   'ribbon.referenceRemove': 'Remove',
   'ribbon.windowsAccent': 'Windows accent',
   'notice.referenceNone': 'Load a reference image first (View → Load reference).',
+  'action.perfOverlay': 'Performance overlay',
+  'perf.title': 'Performance',
+  'perf.frame': 'Frame',
+  'perf.latency': 'Pointer → pixels',
+  'perf.fps': 'Frames a second',
+  'perf.heap': 'Script memory',
+  'perf.image': 'Image ({layers} layers)',
+  'perf.history': 'Undo',
   'error.reference': 'Pigmento couldn’t open {name} as a reference image.',
 } as const;

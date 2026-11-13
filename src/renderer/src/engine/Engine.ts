@@ -38,6 +38,7 @@ import { flattenPath, outlinesToLines, strokeLines, type Polyline } from './brus
 import { filterRegistry } from './filters/FilterRegistry';
 import { FilterPool } from './filters/FilterPool';
 import { FilterSession } from './filters/FilterSession';
+import { PerfMonitor } from './PerfMonitor';
 import { toCmds, toUnitBox, type SubPath } from './vector/pathData';
 import {
   alignNodes,
@@ -394,8 +395,10 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.frame = requestAnimationFrame(() => {
       this.frame = 0;
       this.renderer.interactive = this.input?.isBusy ?? false;
+      const t0 = performance.now();
       this.renderer.render();
       this.renderOverlay();
+      this.perf.frame(t0, performance.now());
       // After interaction ends, redraw once at full downscale quality.
       window.clearTimeout(this.settleTimer);
       if (this.renderer.interactive) this.settleTimer = window.setTimeout(() => this.requestRender(), 160);
@@ -403,6 +406,17 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   }
 
   private settleTimer = 0;
+
+  /** Frame and input timing for the performance overlay (records only while it's shown). */
+  readonly perf = new PerfMonitor();
+
+  /** Memory held by the picture's pixels and by undo (bytes). */
+  memoryUse(): { image: number; history: number; layers: number } {
+    let tiles = 0;
+    const layers = this.doc.rasterLayers();
+    for (const l of layers) for (const t of l.surface.tiles) if (t) tiles++;
+    return { image: tiles * 256 * 256 * 4, history: this.history.bytes, layers: layers.length };
+  }
 
   invalidate(r: Rect | null): void {
     this.renderer.invalidate(r);

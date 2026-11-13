@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as Reac
 import { t } from '../../i18n';
 import { engine } from '../state/engine';
 import { updateSettings, useUi } from '../state/store';
+import { PerfOverlay } from './PerfOverlay';
 import { viewOptionsOf } from '../state/engine';
 import { openDroppedFile } from '../services/files';
 
@@ -285,6 +286,7 @@ export function CanvasArea() {
         }}
       >
         <TextEditor />
+        <PerfOverlay />
       </div>
       <Scrollbar axis="x" />
       <Scrollbar axis="y" />

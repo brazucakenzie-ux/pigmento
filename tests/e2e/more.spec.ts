@@ -236,6 +236,6 @@ test('draws a long stroke on a 4000×3000 canvas within the frame budget', async
   });
   console.warn('4000×3000 brush stroke timing (ms):', JSON.stringify(stats));
   // One frame at 60 Hz is ~16.7 ms; handling + render must fit comfortably.
-  expect(stats.median).toBeLessThan(20);
+  expect(stats.median).toBeLessThan(16);
   expect((await hist()).length).toBe(1);
 });

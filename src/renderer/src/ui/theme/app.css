@@ -2543,3 +2543,32 @@ kbd {
     background: Highlight;
   }
 }
+
+/* Performance overlay (Ctrl+Alt+Shift+P): small readings over the canvas's top-left corner. */
+.perf-overlay {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 5;
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.perf-overlay > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+.perf-overlay span {
+  color: var(--text-muted);
+}
+.perf-overlay b {
+  font-weight: 600;
+}

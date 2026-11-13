@@ -187,6 +187,7 @@ export class InputController {
   // ---- pointer events -------------------------------------------------------------------
 
   private onDown = (e: PointerEvent): void => {
+    this.engine.perf.input(e.timeStamp);
     const engine = this.engine;
     if (e.pointerType === 'pen') this.lastPenTime = e.timeStamp;
     if (e.pointerType === 'touch') {
@@ -250,6 +251,7 @@ export class InputController {
   }
 
   private onMove = (e: PointerEvent): void => {
+    this.engine.perf.input(e.timeStamp);
     const engine = this.engine;
     const sp = this.local(e);
     if (e.pointerType === 'pen') this.lastPenTime = e.timeStamp;

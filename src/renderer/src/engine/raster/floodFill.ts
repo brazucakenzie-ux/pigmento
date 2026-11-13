@@ -41,8 +41,12 @@ export function floodFill(
   const tb = data[si + 2] * sa;
   const ta = data[si + 3];
 
+  // Most pixels of a big fill are exactly the seed's colour: one 32-bit compare settles those.
+  const d32 = data.byteOffset % 4 === 0 ? new Uint32Array(data.buffer, data.byteOffset, w * h) : null;
+  const seed = d32 ? d32[sy * w + sx] : 0;
   const matches = (p: number): boolean => {
     if (clip && clip[p] === 0) return false;
+    if (d32 && d32[p] === seed) return true;
     const i = p * 4;
     const a = data[i + 3];
     const pa = a / 255;

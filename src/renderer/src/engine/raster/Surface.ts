@@ -78,6 +78,26 @@ export class TileDelta {
  * RGBA8 raster split into 256×256 tiles. `null` tiles are fully transparent.
  * Writes inside beginEdit()/endEdit() are copy-on-write so the edit can be undone cheaply.
  */
+/** True when every mask value over `r` is 255 (no mask counts as covered). */
+function fullyCovered(mask: MaskView | null, r: Rect): boolean {
+  if (!mask) return true;
+  if (r.x < mask.ox || r.y < mask.oy || r.x + r.w > mask.ox + mask.w || r.y + r.h > mask.oy + mask.h) return false;
+  for (let y = r.y; y < r.y + r.h; y++) {
+    const row = (y - mask.oy) * mask.stride + (r.x - mask.ox);
+    for (let i = row; i < row + r.w; i++) if (mask.data[i] !== 255) return false;
+  }
+  return true;
+}
+
+/** Fill `r` of a view with one RGBA word (little-endian bytes r, g, b, a). */
+function fillWord(view: PixelView, r: Rect, word: number): void {
+  const d32 = new Uint32Array(view.data.buffer, view.data.byteOffset, view.data.length >> 2);
+  for (let y = r.y; y < r.y + r.h; y++) {
+    const start = (y - view.oy) * view.stride + (r.x - view.ox);
+    d32.fill(word, start, start + r.w);
+  }
+}
+
 export class Surface {
   readonly cols: number;
   readonly rows: number;
@@ -253,9 +273,14 @@ export class Surface {
     opacity: number,
     clip?: MaskView | null,
   ): void {
+    // An opaque colour over a part the mask covers completely is just that colour (big fills).
+    const solid = op === 'over' && opacity >= 1 && color.a === 255 && !clip ? (color.r | (color.g << 8) | (color.b << 16) | (255 << 24)) >>> 0 : null;
     this.forEachTile(
       r,
-      (view, sub) => applyColorMask(view, sub, color, mask, op, opacity, clip),
+      (view, sub) => {
+        if (solid !== null && fullyCovered(mask, sub)) fillWord(view, sub, solid);
+        else applyColorMask(view, sub, color, mask, op, opacity, clip);
+      },
       true,
       op === 'erase',
     );

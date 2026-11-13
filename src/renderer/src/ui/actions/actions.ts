@@ -26,6 +26,8 @@ export interface Action {
   run(): void | Promise<void>;
   enabled?(s: UiState): boolean;
   checked?(s: UiState): boolean;
+  /** Left out of the shortcuts list (a hidden developer shortcut). */
+  hidden?: boolean;
 }
 
 const hasSelection = (s: UiState) => s.selection.bounds !== null;
@@ -317,6 +319,15 @@ const base: Action[] = [
     checked: (s) => s.reference?.visible === true,
   },
   { id: 'removeReference', labelKey: 'action.removeReference', icon: 'delete', group: 'view', run: () => engine.clearReference(), enabled: (s) => s.reference !== null },
+  {
+    id: 'perfOverlay',
+    labelKey: 'action.perfOverlay',
+    group: 'view',
+    shortcut: ['Ctrl+Alt+Shift+P'],
+    hidden: true,
+    run: () => useUi.setState((s) => ({ perfOverlay: !s.perfOverlay })),
+    checked: (s) => s.perfOverlay,
+  },
   { id: 'importBrushPack', labelKey: 'action.importBrushPack', icon: 'open', group: 'file', run: () => void importBrushPack() },
   // Enabled once My brushes has something in it.
   { id: 'exportBrushPack', labelKey: 'action.exportBrushPack', icon: 'export', group: 'file', run: () => void exportBrushPack(), enabled: (s) => s.brushLibrary >= 0 && hasCustomBrushes() },
