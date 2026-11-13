@@ -7,6 +7,7 @@ import { clearOwnAutosave, offerRecovery, startAutosave } from '../services/auto
 import { CanvasSizeDialog, NewImageDialog, PropertiesDialog, ResizeDialog, RotateDialog } from '../dialogs/ImageDialogs';
 import { ExportDialog } from '../dialogs/ExportDialog';
 import { GradientDialog } from '../dialogs/GradientDialog';
+import { FilterDialog } from '../dialogs/FilterDialog';
 import { DeleteShapeDialog, SaveShapeDialog } from '../dialogs/ShapeDialogs';
 import { loadCustomShapes } from '../services/shapes';
 import { loadCustomBrushes } from '../services/brushes';
@@ -140,6 +141,8 @@ function DialogHost() {
       return <BrushDesignerDialog id={d.id} from={d.from} />;
     case 'deleteBrush':
       return <DeleteBrushDialog id={d.id} />;
+    case 'filter':
+      return <FilterDialog key={d.id} id={d.id} />;
     case 'strokeOutline':
       return <StrokeOutlineDialog source={d.source} />;
   }

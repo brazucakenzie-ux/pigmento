@@ -35,6 +35,9 @@ import type { TextObject } from './live/TextObject';
 import { ShapeObject, type PathInfo, type ShapeStyle } from './live/ShapeObject';
 import { shapeOutline } from './vector/convert';
 import { flattenPath, outlinesToLines, strokeLines, type Polyline } from './brush/strokePath';
+import { filterRegistry } from './filters/FilterRegistry';
+import { FilterPool } from './filters/FilterPool';
+import { FilterSession } from './filters/FilterSession';
 import { toCmds, toUnitBox, type SubPath } from './vector/pathData';
 import {
   alignNodes,
@@ -1498,6 +1501,26 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       });
     } else paint();
     return true;
+  }
+
+  private _filterPool: FilterPool | null = null;
+
+  /**
+   * Start an adjustment or filter on the active pixel layer (inside the selection, if any): the
+   * dialog previews and applies through the session. Null if the layer can't be painted.
+   */
+  startFilter(id: string): FilterSession | null {
+    const def = filterRegistry.get(id);
+    if (!def) return null;
+    this.commitLive(true);
+    if (!this.canPaint()) return null;
+    const layer = this.doc.activeRaster;
+    if (!layer) return null;
+    const sel = this.doc.selection;
+    const region = sel ? rectIntersect(sel.bounds, this.doc.bounds) : this.doc.bounds;
+    if (!region) return null;
+    this._filterPool ??= new FilterPool();
+    return new FilterSession(this, this._filterPool, def, layer, region, sel?.maskView() ?? null);
   }
 
   /** Put an imported SVG drawing on a new shape layer, scaled down to fit the image if larger. */

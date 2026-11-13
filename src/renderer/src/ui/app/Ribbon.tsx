@@ -22,6 +22,7 @@ const TABS: { id: RibbonTab; labelKey: I18nKey }[] = [
   { id: 'home', labelKey: 'tab.home' },
   { id: 'shapes', labelKey: 'tab.shapes' },
   { id: 'brushes', labelKey: 'tab.brushes' },
+  { id: 'effects', labelKey: 'tab.effects' },
   { id: 'image', labelKey: 'tab.image' },
   { id: 'view', labelKey: 'tab.view' },
 ];
@@ -234,6 +235,34 @@ function BrushesTab() {
       <RibbonGroup label={t('group.colors')}>
         <ColorsGroup />
       </RibbonGroup>
+    </>
+  );
+}
+
+/** Effects tab: adjustments and filters in columns of three, by kind. */
+function EffectsTab() {
+  const groups: { label: I18nKey; ids: string[] }[] = [
+    { label: 'group.adjustTone', ids: ['brightnessContrast', 'levels', 'curves', 'posterize', 'threshold'] },
+    { label: 'group.adjustColor', ids: ['hueSaturation', 'colorBalance', 'grayscale', 'sepia', 'invert'] },
+    { label: 'group.filterBlur', ids: ['gaussianBlur', 'motionBlur', 'unsharpMask', 'noise'] },
+    { label: 'group.filterStylize', ids: ['pixelate', 'emboss', 'edgeDetect'] },
+    { label: 'group.filterLight', ids: ['vignette', 'dropShadow', 'outerGlow', 'outline'] },
+  ];
+  return (
+    <>
+      {groups.map((g) => (
+        <RibbonGroup key={g.label} label={t(g.label)}>
+          {[0, 3].map((start) =>
+            g.ids.length > start ? (
+              <div key={start} className="rb-stack">
+                {g.ids.slice(start, start + 3).map((id) => (
+                  <ActionButton key={id} id={`filter.${id}`} variant="small" />
+                ))}
+              </div>
+            ) : null,
+          )}
+        </RibbonGroup>
+      ))}
     </>
   );
 }
@@ -496,7 +525,7 @@ export function Ribbon() {
         <HelpMenu />
       </div>
       <div className="ribbon-panel" id="ribbon-panel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
-        {tab === 'home' ? <HomeTab /> : tab === 'shapes' ? <ShapesTab /> : tab === 'brushes' ? <BrushesTab /> : tab === 'image' ? <ImageTab /> : <ViewTab />}
+        {tab === 'home' ? <HomeTab /> : tab === 'shapes' ? <ShapesTab /> : tab === 'brushes' ? <BrushesTab /> : tab === 'effects' ? <EffectsTab /> : tab === 'image' ? <ImageTab /> : <ViewTab />}
       </div>
     </div>
   );

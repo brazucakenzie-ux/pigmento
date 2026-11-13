@@ -550,3 +550,30 @@ test('capture brush designer', async () => {
     await h.close();
   }
 });
+
+test('capture effects', async () => {
+  test.skip(!process.env.PIGMENTO_SCREENSHOT, 'Set PIGMENTO_SCREENSHOT=1 to capture screenshots');
+  const out = process.env.PIGMENTO_SCREENSHOT_DIR ?? path.resolve('test-results');
+  const h = await launchApp();
+  const { page } = h;
+  const shot = (name: string) => page.screenshot({ path: path.join(out, `${name}.png`) });
+  try {
+    await ready(page);
+    await page.evaluate(() => {
+      const t = window.__pigmentoTest!;
+      t.fillLayer(t.layers().activeId, { r: 40, g: 110, b: 200, a: 255 }, { x: 200, y: 150, w: 600, h: 400 });
+      t.fillLayer(t.layers().activeId, { r: 255, g: 140, b: 60, a: 255 }, { x: 450, y: 300, w: 300, h: 200 });
+    });
+    await page.getByRole('tab', { name: 'Effects' }).click();
+    await page.locator('.ribbon').getByRole('button', { name: 'Curves…' }).click();
+    await page.waitForTimeout(600);
+    await shot('effects-curves');
+    await page.keyboard.press('Escape');
+    await page.locator('.ribbon').getByRole('button', { name: 'Drop shadow…' }).click();
+    await page.waitForTimeout(800);
+    await shot('effects-shadow');
+    console.warn('errors:', JSON.stringify(h.errors));
+  } finally {
+    await h.close();
+  }
+});

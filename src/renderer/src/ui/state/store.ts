@@ -15,7 +15,7 @@ import type { ViewState } from '@engine/render/View';
 import type { TextEditState, ToolOptions } from '@engine/tools/Tool';
 import type { I18nKey } from '../../i18n';
 
-export type RibbonTab = 'home' | 'shapes' | 'brushes' | 'image' | 'view';
+export type RibbonTab = 'home' | 'shapes' | 'brushes' | 'effects' | 'image' | 'view';
 
 export type DialogState =
   | { kind: 'new' }
@@ -42,6 +42,8 @@ export type DialogState =
   | { kind: 'deleteBrush'; id: string }
   /** Paint along the selection's outline or the selected shapes/path with the brush in use. */
   | { kind: 'strokeOutline'; source: 'selection' | 'path' }
+  /** An adjustment's or filter's settings, with a live preview. */
+  | { kind: 'filter'; id: string }
   | { kind: 'shortcuts' }
   | { kind: 'about' };
 

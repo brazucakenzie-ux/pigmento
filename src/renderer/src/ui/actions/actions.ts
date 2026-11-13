@@ -9,6 +9,8 @@ import { engine, viewOptionsOf } from '../state/engine';
 import { openDialog, updateSettings, useUi, type UiState } from '../state/store';
 import * as files from '../services/files';
 import { makePatternFromSelection } from '../services/patterns';
+import { openFilter } from '../services/filters';
+import { filterRegistry } from '@engine/filters/FilterRegistry';
 import { THEME_FAMILIES } from '../theme/themes';
 
 export type ActionGroup = 'file' | 'edit' | 'view' | 'tools' | 'image' | 'colors';
@@ -310,6 +312,17 @@ const base: Action[] = [
   { id: 'about', labelKey: 'action.about', icon: 'info', group: 'view', run: () => openDialog({ kind: 'about' }) },
 ];
 
+/** One action per adjustment and filter (Effects tab). Settings-less ones apply at once. */
+function filterActions(): Action[] {
+  return filterRegistry.all().map((d) => ({
+    id: `filter.${d.id}`,
+    labelKey: `action.filter.${d.id}` as I18nKey,
+    icon: d.icon,
+    group: 'image' as const,
+    run: () => void openFilter(d.id),
+  }));
+}
+
 /** One action per theme family (the variant follows the Light/Dark/Match Windows mode). */
 function themeActions(): Action[] {
   return THEME_FAMILIES.map((f) => ({
@@ -338,7 +351,7 @@ function toolActions(): Action[] {
 let cache: Map<string, Action> | null = null;
 
 export function actions(): Map<string, Action> {
-  if (!cache) cache = new Map([...base, ...themeActions(), ...toolActions()].map((a) => [a.id, a]));
+  if (!cache) cache = new Map([...base, ...themeActions(), ...toolActions(), ...filterActions()].map((a) => [a.id, a]));
   return cache;
 }
 
