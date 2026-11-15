@@ -1,11 +1,13 @@
 import logoUrl from '@resources/logo.svg?url';
 import { t } from '../../i18n';
 import { action, runAction } from '../actions/actions';
+import { useShortcut } from '../actions/keymap';
 import { Icon } from '../icons/Icon';
 import { useUi } from '../state/store';
 
 function QuickButton({ id }: { id: string }) {
   const a = action(id);
+  const kbd = useShortcut(id);
   const enabled = useUi((s) => (a.enabled ? a.enabled(s) : true));
   const label = t(a.labelKey);
   return (
@@ -14,7 +16,7 @@ function QuickButton({ id }: { id: string }) {
       className="icon-btn"
       aria-label={label}
       data-tip={label}
-      data-kbd={a.shortcut?.[0]}
+      data-kbd={kbd}
       disabled={!enabled}
       onClick={() => runAction(id)}
     >

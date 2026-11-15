@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
+import { contextBridge, ipcRenderer, webFrame, webUtils, type IpcRendererEvent } from 'electron';
 import { IPC, type PigmentoApi, type RecentFile, type SystemTheme } from '@shared/ipc';
 
 function subscribe<T extends unknown[]>(channel: string, cb: (...args: T) => void): () => void {
@@ -42,6 +42,9 @@ const api: PigmentoApi = {
     showError: (title, message) => ipcRenderer.invoke(IPC.showError, title, message),
     close: () => ipcRenderer.invoke(IPC.closeWindow),
     requestClose: () => ipcRenderer.invoke(IPC.requestClose),
+    setUiScale: (scale) => {
+      if (typeof scale === 'number' && Number.isFinite(scale)) webFrame.setZoomFactor(Math.min(1.5, Math.max(0.8, scale)));
+    },
     setTitleBarOverlay: (color, symbolColor, height) =>
       ipcRenderer.invoke(IPC.setOverlay, color, symbolColor, height),
     toggleFullscreen: () => ipcRenderer.invoke(IPC.toggleFullscreen),

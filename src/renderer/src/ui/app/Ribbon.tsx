@@ -90,6 +90,7 @@ function FileMenu() {
           }
         </SubMenu>
         <ActionMenuItem id="properties" close={close} />
+        <ActionMenuItem id="settings" close={close} />
         <MenuSeparator />
         <MenuItem label={t('file.close')} icon="close" close={close} onSelect={() => void window.pigmento.window.requestClose()} />
       </Menu>

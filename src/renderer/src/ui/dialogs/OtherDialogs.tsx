@@ -8,7 +8,7 @@ import { Dialog } from '../components/Dialog';
 import { Segmented, Slider } from '../components/Controls';
 import { ColorFields, ColorPicker } from '../components/ColorPicker';
 import { actions, type ActionGroup } from '../actions/actions';
-import { displayCombo } from '../actions/keymap';
+import { displayCombo, shortcutsOf } from '../actions/keymap';
 import { engine } from '../state/engine';
 import { closeDialog, updateSettings, useUi, type DialogState } from '../state/store';
 import { rememberQuality } from '../services/files';
@@ -194,11 +194,12 @@ export function ShortcutsDialog() {
   const groups = useMemo(() => {
     const out = new Map<ActionGroup, { label: string; keys: string[] }[]>();
     for (const a of actions().values()) {
-      if (!a.shortcut?.length || a.hidden) continue;
+      const keys = [...shortcutsOf(a.id)];
+      if (!keys.length || a.hidden) continue;
       const label = t(a.labelKey);
       if (filter && !label.toLowerCase().includes(filter.toLowerCase())) continue;
       const list = out.get(a.group) ?? [];
-      list.push({ label, keys: a.shortcut });
+      list.push({ label, keys });
       out.set(a.group, list);
     }
     return out;

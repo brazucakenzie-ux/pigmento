@@ -214,7 +214,7 @@ Each item is ticked in the same commit as its work.
 
 ### Milestone 4 — Polish, accessibility, packaging
 Make it feel finished and install it. Each item is ticked in the same commit as its work.
-- [ ] 4.1 Settings dialog (File → Settings, Ctrl+,): General (UI scale 80–150 %, Simple/Full mode, replay the welcome tour) and Shortcuts: every action listed and searchable, record a new key combination, remove one, conflicts shown and resolved, reset one or all; stored in settings and used by the keymap, tooltips, menus and the cheat sheet (+ keymap unit tests, e2e)
+- [x] 4.1 Settings dialog (File → Settings, Ctrl+Alt+S): General (UI scale 80–150 %, Simple/Full mode, replay the welcome tour) and Shortcuts: every action listed and searchable, record a new key combination, remove one, conflicts shown and resolved, reset one or all; stored in settings and used by the keymap, tooltips, menus and the cheat sheet (+ keymap unit tests, e2e)
 - [ ] 4.2 Simple/Full mode: Simple keeps the Paint essentials (Home, Image and View tabs, no Layers panel, no advanced tool options such as symmetry and stabiliser); Full shows everything. Switching never changes the picture or loses settings; toggle in the View tab and Settings (+ e2e)
 - [ ] 4.3 First-run onboarding: a short welcome tour over the real UI (ribbon, tools, colours, canvas, panels, Help), keyboard-driven, skippable, reduced-motion aware, shown once and replayable from Help (+ e2e)
 - [ ] 4.4 Help and About: Help menu (user guide, keyboard shortcuts, welcome tour, About); the About dialog shows every third-party licence from `LICENSES.md` (bundled with the app)

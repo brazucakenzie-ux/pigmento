@@ -8,6 +8,7 @@ import { CanvasSizeDialog, NewImageDialog, PropertiesDialog, ResizeDialog, Rotat
 import { ExportDialog } from '../dialogs/ExportDialog';
 import { GradientDialog } from '../dialogs/GradientDialog';
 import { FilterDialog } from '../dialogs/FilterDialog';
+import { SettingsDialog } from '../dialogs/SettingsDialog';
 import { DeleteShapeDialog, SaveShapeDialog } from '../dialogs/ShapeDialogs';
 import { loadCustomShapes } from '../services/shapes';
 import { loadCustomBrushes } from '../services/brushes';
@@ -47,6 +48,8 @@ function resolveColor(varName: string): string {
 function useTheme(): void {
   const family = useUi((s) => s.settings.theme);
   const mode = useUi((s) => s.settings.themeMode);
+  const scale = useUi((s) => s.settings.ui.scale);
+  useLayoutEffect(() => window.pigmento.window.setUiScale(scale), [scale]);
   const useAccent = useUi((s) => s.settings.useWindowsAccent);
   const system = useUi((s) => s.system);
 
@@ -58,7 +61,7 @@ function useTheme(): void {
     // Canvas colours and the native caption buttons follow the theme.
     const top = rgbToHex(resolveColor('--bg-top'));
     const text = rgbToHex(resolveColor('--text'));
-    void window.pigmento.window.setTitleBarOverlay(top, text, 40);
+    void window.pigmento.window.setTitleBarOverlay(top, text, Math.round(40 * scale));
     const saved = useUi.getState().settings.chrome;
     if (!forced && (saved?.bg !== top || saved?.fg !== text)) updateSettings({ chrome: { bg: top, fg: text } });
     engine.setTheme(
@@ -76,7 +79,7 @@ function useTheme(): void {
         grid: resolveColor('--grid-line'),
       },
     );
-  }, [family, mode, useAccent, system]);
+  }, [family, mode, useAccent, system, scale]);
 
   useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -141,6 +144,8 @@ function DialogHost() {
       return <BrushDesignerDialog id={d.id} from={d.from} />;
     case 'deleteBrush':
       return <DeleteBrushDialog id={d.id} />;
+    case 'settings':
+      return <SettingsDialog page={d.page} />;
     case 'filter':
       return <FilterDialog key={d.id} id={d.id} />;
     case 'strokeOutline':

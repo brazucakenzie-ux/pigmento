@@ -12,6 +12,9 @@ export type ThemeMode = z.infer<typeof ThemeMode>;
 
 const hex6 = z.string().regex(/^#[0-9a-f]{6}$/i);
 
+/** A key combination as stored: optional Ctrl, Alt, Shift, then one key ("Ctrl+Shift+S", "F1", "Mouse5"). */
+export const SHORTCUT_COMBO = /^(Ctrl\+)?(Alt\+)?(Shift\+)?(\[|\]|[A-Za-z0-9]{1,12})$/;
+
 export const SettingsSchema = z.object({
   version: z.literal(1).default(1),
   theme: ThemeFamilyId.default('pigmento'),
@@ -110,6 +113,10 @@ export const SettingsSchema = z.object({
     })
     .default({ jpegQuality: 90, webpQuality: 90, format: 'png', scale: 1, resample: 'bicubic' }),
   resample: z.enum(['nearest', 'bilinear', 'bicubic']).default('bicubic'),
+  /** Keyboard shortcuts the user changed: action id → its key combinations ([] = none). */
+  shortcuts: z.record(z.string().max(80), z.array(z.string().max(40).regex(SHORTCUT_COMBO)).max(4)).default({}),
+  /** The interface: its scale (80–150 %). */
+  ui: z.object({ scale: z.number().min(0.8).max(1.5).default(1) }).default({ scale: 1 }),
   window: z
     .object({
       x: z.number().optional(),

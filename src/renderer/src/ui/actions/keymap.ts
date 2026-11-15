@@ -1,6 +1,7 @@
 import { engine } from '../state/engine';
 import { useUi } from '../state/store';
 import { actions, runAction } from './actions';
+import { effectiveShortcuts, type ShortcutAction, type ShortcutOverrides } from './shortcuts';
 
 const NAMED: Record<string, string> = {
   '+': 'Plus',
@@ -51,13 +52,32 @@ export function displayCombo(combo: string): string {
 }
 
 let comboMap: Map<string, string[]> | null = null;
+let mapFor: ShortcutOverrides | null = null;
+
+/** Every action with its default shortcuts (for the shortcut rules and the editor). */
+export function shortcutActions(): ShortcutAction[] {
+  return [...actions().values()].map((a) => ({ id: a.id, tool: a.id.startsWith('tool.'), defaults: a.shortcut ?? [] }));
+}
+
+/** An action's shortcuts as they are now (its defaults, or the user's changes). */
+export function shortcutsOf(id: string, overrides: ShortcutOverrides = useUi.getState().settings.shortcuts): readonly string[] {
+  const a = actions().get(id);
+  return a ? effectiveShortcuts({ id, tool: id.startsWith('tool.'), defaults: a.shortcut ?? [] }, overrides) : [];
+}
+
+/** The first shortcut of an action, kept current when shortcuts are changed (tooltips, menus). */
+export function useShortcut(id: string): string | undefined {
+  return useUi((s) => shortcutsOf(id, s.settings.shortcuts)[0]);
+}
 
 /** Shortcut → action ids. Tools of one family share a letter (S: rectangle/ellipse select). */
 function map(): Map<string, string[]> {
-  if (comboMap) return comboMap;
+  const overrides = useUi.getState().settings.shortcuts;
+  if (comboMap && mapFor === overrides) return comboMap;
   comboMap = new Map();
+  mapFor = overrides;
   for (const a of actions().values()) {
-    for (const s of a.shortcut ?? []) comboMap.set(s, [...(comboMap.get(s) ?? []), a.id]);
+    for (const s of shortcutsOf(a.id, overrides)) comboMap.set(s, [...(comboMap.get(s) ?? []), a.id]);
   }
   return comboMap;
 }
@@ -71,7 +91,7 @@ export function actionForCombo(combo: string, currentTool: string): string | und
 }
 
 export function shortcutFor(actionId: string): string | undefined {
-  return actions().get(actionId)?.shortcut?.[0];
+  return shortcutsOf(actionId)[0];
 }
 
 function isTypingTarget(t: EventTarget | null): boolean {

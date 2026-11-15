@@ -45,6 +45,8 @@ export type DialogState =
   | { kind: 'strokeOutline'; source: 'selection' | 'path' }
   /** An adjustment's or filter's settings, with a live preview. */
   | { kind: 'filter'; id: string }
+  /** Settings: the interface and keyboard shortcuts. */
+  | { kind: 'settings'; page?: 'general' | 'shortcuts' }
   | { kind: 'shortcuts' }
   | { kind: 'about' };
 

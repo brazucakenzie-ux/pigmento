@@ -2572,3 +2572,79 @@ kbd {
 .perf-overlay b {
   font-weight: 600;
 }
+
+/* Settings dialog */
+.dialog.settings-dialog {
+  width: min(680px, 94vw);
+}
+.settings-dialog .dialog-foot .spacer {
+  flex: 1;
+}
+.settings-page {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+}
+.shortcut-list {
+  max-height: min(52vh, 460px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.shortcut-list h3 {
+  margin: 10px 0 4px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.sc-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+}
+.sc-row:hover {
+  background: var(--bg-hover);
+}
+.shortcut-keys {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.kbd-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 2px 1px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+}
+.kbd-chip kbd {
+  font-family: inherit;
+  font-size: var(--fs-xs);
+}
+.icon-btn.small {
+  width: 18px;
+  height: 18px;
+}
+.shortcut-waiting {
+  color: var(--accent-fg);
+  font-size: var(--fs-xs);
+}
+.shortcut-clash {
+  padding: 8px 10px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+}
+.shortcut-clash p {
+  margin: 0 0 6px;
+}
+.shortcut-clash .row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}

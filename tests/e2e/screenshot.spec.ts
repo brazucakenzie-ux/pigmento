@@ -601,3 +601,23 @@ test('capture turned view', async () => {
     await h.close();
   }
 });
+
+test('capture settings', async () => {
+  test.skip(!process.env.PIGMENTO_SCREENSHOT, 'Set PIGMENTO_SCREENSHOT=1 to capture screenshots');
+  const out = process.env.PIGMENTO_SCREENSHOT_DIR ?? path.resolve('test-results');
+  const h = await launchApp();
+  const { page } = h;
+  try {
+    await ready(page);
+    await page.keyboard.press('Control+Alt+s');
+    const dlg = page.getByRole('dialog', { name: 'Settings' });
+    await dlg.getByRole('tab', { name: 'Keyboard shortcuts' }).click();
+    await dlg.getByRole('group', { name: 'Pencil', exact: true }).getByRole('button', { name: 'Add a shortcut for Pencil' }).click();
+    await page.keyboard.press('b');
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: path.join(out, 'settings-shortcuts.png') });
+    console.warn('errors:', JSON.stringify(h.errors));
+  } finally {
+    await h.close();
+  }
+});

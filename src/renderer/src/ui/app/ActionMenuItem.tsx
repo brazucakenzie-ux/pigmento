@@ -1,5 +1,6 @@
 import { t } from '../../i18n';
 import { action, runAction } from '../actions/actions';
+import { useShortcut } from '../actions/keymap';
 import { MenuItem } from '../components/Menu';
 import { useUi } from '../state/store';
 
@@ -8,11 +9,12 @@ export function ActionMenuItem({ id, close, label }: { id: string; close: () => 
   const a = action(id);
   const enabled = useUi((s) => (a.enabled ? a.enabled(s) : true));
   const checked = useUi((s) => (a.checked ? a.checked(s) : undefined));
+  const shortcut = useShortcut(id);
   return (
     <MenuItem
       label={label ?? t(a.labelKey)}
       icon={a.icon}
-      shortcut={a.shortcut?.[0]}
+      shortcut={shortcut}
       checked={checked}
       disabled={!enabled}
       close={close}

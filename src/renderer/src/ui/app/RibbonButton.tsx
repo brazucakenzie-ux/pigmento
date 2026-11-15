@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { t } from '../../i18n';
 import { action, runAction } from '../actions/actions';
+import { useShortcut } from '../actions/keymap';
 import { Icon } from '../icons/Icon';
 import { Menu } from '../components/Menu';
 import { useUi } from '../state/store';
@@ -12,6 +13,7 @@ const ICON_SIZE: Record<RbVariant, number> = { large: 26, compact: 16, small: 16
 /** Ribbon button bound to an action: label, icon, shortcut tooltip, enabled/pressed state. */
 export function ActionButton({ id, variant = 'large', label, icon }: { id: string; variant?: RbVariant; label?: string; icon?: string }) {
   const a = action(id);
+  const kbd = useShortcut(id);
   const enabled = useUi((s) => (a.enabled ? a.enabled(s) : true));
   const checked = useUi((s) => (a.checked ? a.checked(s) : undefined));
   const text = label ?? t(a.labelKey);
@@ -22,7 +24,7 @@ export function ActionButton({ id, variant = 'large', label, icon }: { id: strin
       aria-pressed={checked}
       disabled={!enabled}
       data-tip={text}
-      data-kbd={a.shortcut?.[0]}
+      data-kbd={kbd}
       onClick={() => runAction(id)}
     >
       <Icon name={icon ?? a.icon ?? 'info'} size={ICON_SIZE[variant]} />
@@ -97,6 +99,7 @@ export function SplitButton({
   children: (close: () => void) => ReactNode;
 }) {
   const a = action(id);
+  const kbd = useShortcut(id);
   const ref = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
@@ -113,7 +116,7 @@ export function SplitButton({
         disabled={!enabled}
         aria-label={text}
         data-tip={text}
-        data-kbd={a.shortcut?.[0]}
+        data-kbd={kbd}
         onClick={() => runAction(id)}
       >
         <Icon name={icon ?? a.icon ?? 'info'} size={26} />

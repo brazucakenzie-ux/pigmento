@@ -168,6 +168,8 @@ export interface PigmentoApi {
     /** Ask to close, as if the title-bar X was clicked (runs the unsaved-changes check). */
     requestClose(): Promise<void>;
     setTitleBarOverlay(color: string, symbolColor: string, height: number): Promise<void>;
+    /** Scale the whole interface (0.8–1.5). */
+    setUiScale(scale: number): void;
     toggleFullscreen(): Promise<boolean>;
     newWindow(): Promise<void>;
     getLaunchFile(): Promise<string | null>;

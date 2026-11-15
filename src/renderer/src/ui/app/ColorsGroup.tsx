@@ -2,6 +2,7 @@ import { parseHex, toCss, toHex6, type RGBA } from '@engine/core/color';
 import { t } from '../../i18n';
 import { Icon } from '../icons/Icon';
 import { action, runAction } from '../actions/actions';
+import { useShortcut } from '../actions/keymap';
 import { engine } from '../state/engine';
 import { openDialog, useUi } from '../state/store';
 import { useCallback, useRef, useState } from 'react';
@@ -43,6 +44,7 @@ export function ColorsGroup() {
   const colors = useUi((s) => s.colors);
   const custom = useUi((s) => s.settings.colors.custom);
   const swap = action('swapColors');
+  const swapKey = useShortcut('swapColors');
   const slots = Array.from({ length: CUSTOM_SLOTS }, (_, i) => custom[i] ?? null);
   const palette = useUi((s) => s.settings.colors.palette) ?? PALETTE;
   return (
@@ -71,7 +73,7 @@ export function ColorsGroup() {
           className="swap"
           aria-label={t(swap.labelKey)}
           data-tip={t(swap.labelKey)}
-          data-kbd={swap.shortcut?.[0]}
+          data-kbd={swapKey}
           onClick={() => runAction('swapColors')}
         >
           <Icon name="swap" size={13} />
