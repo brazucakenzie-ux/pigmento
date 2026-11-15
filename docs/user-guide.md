@@ -2,6 +2,11 @@
 
 Pigmento is a painting app for Windows 11 with the classic Paint layout, plus layers, shapes, brushes and effects when you want them. This guide follows the window from top to bottom. Press F1 at any time for the full list of keyboard shortcuts.
 
+## Installing
+
+- **The installer** (`Pigmento Setup 1.0.0.exe`) installs Pigmento for your account only. It adds Start menu and desktop shortcuts, opens `.pigm` projects with a double-click, and adds Pigmento to "Open with" for PNG, JPEG, BMP, GIF and WebP without changing your usual image viewer. Uninstall it from Windows Settings → Apps.
+- **The portable version** (`Pigmento-1.0.0-portable.exe`) runs without installing.
+
 ## Getting started
 
 The window has five parts:
@@ -72,7 +77,7 @@ The Select button in Home holds the selection tools and commands: Select (rectan
 - Hold Shift to add to a selection, Alt to take away from it, or both to keep only the overlap.
 - Drag inside a selection to move its pixels; the arrow keys nudge it (Shift for 10 px).
 - **Free transform** (Ctrl+T) scales, rotates, skews and distorts the selection, or the whole layer when nothing is selected. Enter applies the change and Esc cancels it.
-- **Modify selection** feathers, grows, shrinks or turns it into a border.
+- **Modify selection** feathers (Ctrl+Alt+D), grows, shrinks or turns it into a border.
 - **Save selection** and **Load selection** keep selections inside the project.
 - **Transparent selection** leaves colour 2 behind when you move pixels.
 - **Make pattern from selection** turns the selected pixels into a fill pattern.
@@ -180,8 +185,13 @@ Everything Pigmento remembers lives in `%APPDATA%\Pigmento`:
 - `recent.json`: the recent files list.
 - `shapes`, `brushes` and `patterns`: My shapes, My brushes and your patterns.
 - `autosave`: recovery copies.
+- `logs`: a record of any errors (useful if you report a problem).
 
 Deleting the folder resets Pigmento to how it was when first installed.
+
+## If something goes wrong
+
+Pigmento tells you in plain words when something fails, such as a file it can't read or a picture too big for the memory that's free. If the window itself runs into trouble, it offers to save a copy of your picture and reload. Work you hadn't saved is offered back from the recovery copy. Details go to the log in `%APPDATA%\Pigmento\logs`.
 
 ## Tips
 

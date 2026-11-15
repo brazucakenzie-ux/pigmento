@@ -15,6 +15,16 @@ The components below are bundled into the app. Their full licence texts ship ins
 | gifenc | 1.0.3 | MIT | Matt DesLauriers | GIF encoding |
 | fflate | 0.8.3 | MIT | Arjun Barrett | ZIP container for `.pigm` projects |
 
+## The installer
+
+| Component | Licence | Copyright | Used for |
+|---|---|---|---|
+| NSIS (Nullsoft Scriptable Install System), via electron-builder | zlib/libpng | Nullsoft and NSIS contributors | The Windows installer and uninstaller |
+
+## Build and test tools (not shipped)
+
+These are used to build and test Pigmento and are not part of the app: electron-builder and electron-vite (MIT), Vite (MIT), TypeScript (Apache-2.0), ESLint (MIT), Vitest (MIT), Playwright (Apache-2.0), axe-core (MPL-2.0), resvg-js (MPL-2.0) and Prettier (MIT).
+
 ## Theme palettes
 
 The optional themes in View → Theme reproduce the colours of these projects. Only the colour values are used (no code, icons or other assets), and the names are trademarks of their owners, used here only to describe each palette.
