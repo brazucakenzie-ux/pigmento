@@ -47,6 +47,7 @@ export type DialogState =
   | { kind: 'filter'; id: string }
   /** Settings: the interface and keyboard shortcuts. */
   | { kind: 'settings'; page?: 'general' | 'shortcuts' }
+  | { kind: 'userGuide' }
   | { kind: 'shortcuts' }
   | { kind: 'about' };
 

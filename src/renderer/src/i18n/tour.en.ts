@@ -1,6 +1,9 @@
 /** The first-run welcome tour. */
 export const tourEn = {
   'action.welcomeTour': 'Welcome tour',
+  'help.guide': 'User guide',
+  'help.contents': 'Contents',
+  'dialog.about.licences': 'Third-party licences',
   'tour.count': '{n} of {total}',
   'tour.skip': 'Skip tour',
   'tour.back': 'Back',

@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect } from 'react';
 import { t } from '../../i18n';
 import { handleGlobalKey, handleGlobalPointer } from '../actions/keymap';
 import { TooltipLayer } from '../components/Tooltips';
-import { AboutDialog, EditColorsDialog, PasteLargerDialog, QualityDialog, RecoverDialog, ShortcutsDialog } from '../dialogs/OtherDialogs';
+import { EditColorsDialog, PasteLargerDialog, QualityDialog, RecoverDialog, ShortcutsDialog } from '../dialogs/OtherDialogs';
 import { clearOwnAutosave, offerRecovery, startAutosave } from '../services/autosave';
 import { CanvasSizeDialog, NewImageDialog, PropertiesDialog, ResizeDialog, RotateDialog } from '../dialogs/ImageDialogs';
 import { ExportDialog } from '../dialogs/ExportDialog';
@@ -10,6 +10,7 @@ import { GradientDialog } from '../dialogs/GradientDialog';
 import { FilterDialog } from '../dialogs/FilterDialog';
 import { SettingsDialog } from '../dialogs/SettingsDialog';
 import { WelcomeTour } from './WelcomeTour';
+import { AboutDialog, UserGuideDialog } from '../dialogs/HelpDialogs';
 import { DeleteShapeDialog, SaveShapeDialog } from '../dialogs/ShapeDialogs';
 import { loadCustomShapes } from '../services/shapes';
 import { loadCustomBrushes } from '../services/brushes';
@@ -145,6 +146,8 @@ function DialogHost() {
       return <BrushDesignerDialog id={d.id} from={d.from} />;
     case 'deleteBrush':
       return <DeleteBrushDialog id={d.id} />;
+    case 'userGuide':
+      return <UserGuideDialog />;
     case 'settings':
       return <SettingsDialog page={d.page} />;
     case 'filter':

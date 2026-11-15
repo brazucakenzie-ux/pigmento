@@ -112,8 +112,10 @@ function HelpMenu() {
         {t('help.menu')}
       </button>
       <Menu anchor={ref} open={open} onClose={close} label={t('help.menu')}>
+        <ActionMenuItem id="userGuide" close={close} />
         <ActionMenuItem id="shortcuts" close={close} />
         <ActionMenuItem id="welcomeTour" close={close} />
+        <MenuSeparator />
         <ActionMenuItem id="about" close={close} />
       </Menu>
     </>

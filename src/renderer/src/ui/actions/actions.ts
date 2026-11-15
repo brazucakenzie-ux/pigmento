@@ -330,6 +330,7 @@ const base: Action[] = [
     },
     checked: (s) => s.settings.ui.mode === 'simple',
   },
+  { id: 'userGuide', labelKey: 'help.guide', icon: 'help', group: 'view', run: () => openDialog({ kind: 'userGuide' }) },
   { id: 'welcomeTour', labelKey: 'action.welcomeTour', icon: 'tour', group: 'view', run: () => useUi.setState({ tour: true }) },
   { id: 'settings', labelKey: 'action.settings', icon: 'settings', group: 'file', shortcut: ['Ctrl+Alt+S'], run: () => openDialog({ kind: 'settings' }) },
   {

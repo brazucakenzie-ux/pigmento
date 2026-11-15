@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FORMATS, type ImageFormat } from '@shared/formats';
-import type { AppInfo, AutosaveEntry } from '@shared/ipc';
+import type { AutosaveEntry } from '@shared/ipc';
 import { colorEquals, parseHex, toCss, toHex8, type RGBA } from '@engine/core/color';
-import logoUrl from '@resources/logo.svg?url';
 import { t, type I18nKey } from '../../i18n';
 import { Dialog } from '../components/Dialog';
 import { Segmented, Slider } from '../components/Controls';
@@ -260,37 +259,6 @@ export function ShortcutsDialog() {
   );
 }
 
-export function AboutDialog() {
-  const [info, setInfo] = useState<AppInfo | null>(null);
-  useEffect(() => {
-    void window.pigmento.system.appInfo().then(setInfo);
-  }, []);
-  return (
-    <Dialog
-      title={t('dialog.about.title')}
-      onCancel={closeDialog}
-      footer={
-        <button type="button" className="btn primary" onClick={closeDialog}>
-          {t('dialog.close')}
-        </button>
-      }
-    >
-      <div className="about">
-        <img src={logoUrl} alt="" />
-        <h3>{t('app.name')}</h3>
-        <div className="tagline">{t('app.tagline')}</div>
-        {info ? (
-          <>
-            <p>{t('dialog.about.version', { version: info.version })}</p>
-            <p>{t('dialog.about.built', { electron: info.electron, chrome: info.chrome, node: info.node })}</p>
-          </>
-        ) : null}
-        <p style={{ marginTop: 10 }}>{t('dialog.about.credits')}: Electron, React, Zustand, Zod, Lucide (ISC), Inter (OFL-1.1), gifenc (MIT).</p>
-        <p>{t('dialog.about.licenses')}</p>
-      </div>
-    </Dialog>
-  );
-}
 
 function RecoverItem({ entry, onDone }: { entry: AutosaveEntry; onDone: (restored: boolean) => void }) {
   const [url, setUrl] = useState<string | null>(null);
