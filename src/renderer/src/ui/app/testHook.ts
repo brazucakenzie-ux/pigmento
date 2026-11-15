@@ -153,6 +153,7 @@ export function installTestHook(): void {
       return { r: d[0], g: d[1], b: d[2], a: d[3] };
     },
     viewRotation: () => engine.view.rotation,
+    breakInterface: () => useUi.setState({ testCrash: true }),
     /** Fill a raster layer (or part of it) with a colour (test setup; recorded as no history step). */
     fillLayer: (id: string, c: { r: number; g: number; b: number; a: number }, r?: { x: number; y: number; w: number; h: number }) => {
       const layer = engine.doc.layerById(id);

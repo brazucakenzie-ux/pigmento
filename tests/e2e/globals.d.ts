@@ -32,6 +32,7 @@ export interface PigmentoTestHook {
   screenPixel(x: number, y: number): Promise<{ r: number; g: number; b: number; a: number }>;
   displayPixel(x: number, y: number): Promise<{ r: number; g: number; b: number; a: number }>;
   viewRotation(): number;
+  breakInterface(): void;
   fillLayer(id: string, c: { r: number; g: number; b: number; a: number }, r?: { x: number; y: number; w: number; h: number }): void;
   selectRect(x: number, y: number, w: number, h: number): void;
   addLayer(): string;

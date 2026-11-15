@@ -1,4 +1,5 @@
 import { app, BrowserWindow, nativeTheme, screen, systemPreferences } from 'electron';
+import { watchWindow } from './errors';
 import path from 'node:path';
 import { IPC, type SystemTheme } from '@shared/ipc';
 import { APP_ORIGIN } from './protocol';
@@ -107,6 +108,7 @@ export function createWindow(launchFile: string | null): BrowserWindow {
     win.webContents.send(IPC.evCloseRequested);
   });
 
+  watchWindow(win);
   win.on('enter-full-screen', () => win.webContents.send(IPC.evFullscreen, true));
   win.on('leave-full-screen', () => win.webContents.send(IPC.evFullscreen, false));
 

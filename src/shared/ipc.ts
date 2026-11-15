@@ -33,6 +33,8 @@ export const IPC = {
   print: 'system:print',
   wallpaper: 'system:wallpaper',
   appInfo: 'app:info',
+  logError: 'log:error',
+  memory: 'system:memory',
   autosaveRegister: 'autosave:register',
   autosaveWrite: 'autosave:write',
   autosaveClear: 'autosave:clear',
@@ -52,6 +54,7 @@ export const IPC = {
   // main -> renderer events
   evCloseRequested: 'ev:close-requested',
   evOpenFile: 'ev:open-file',
+  evNotice: 'ev:notice',
   evThemeChanged: 'ev:theme-changed',
   evFullscreen: 'ev:fullscreen',
   evRecentChanged: 'ev:recent-changed',
@@ -217,5 +220,11 @@ export interface PigmentoApi {
     print(req: PrintRequest): Promise<boolean>;
     setWallpaper(png: Uint8Array, style: WallpaperStyle): Promise<void>;
     appInfo(): Promise<AppInfo>;
+    /** Memory the system has (bytes): free now, and in all. */
+    memory(): Promise<{ free: number; total: number }>;
+    /** Record an error in the app's log. */
+    logError(where: string, message: string): void;
+    /** A notice from the main process (e.g. it hit an error). */
+    onNotice(cb: (n: { kind: 'error' | 'info'; key: string }) => void): Unsubscribe;
   };
 }

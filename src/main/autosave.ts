@@ -36,8 +36,13 @@ export function registerSession(id: string): void {
   live.add(id);
 }
 
-export function releaseSession(id: string): void {
+/**
+ * The window that owned a session let go of it. After a crash or a reload (`offerAgain`), its
+ * work is offered back to the window that comes up again.
+ */
+export function releaseSession(id: string, offerAgain = false): void {
   live.delete(id);
+  if (offerAgain) offered = false;
 }
 
 export async function writeAutosave(id: string, project: Uint8Array, thumbnail: Uint8Array | null, meta: AutosaveMeta): Promise<void> {

@@ -11,6 +11,7 @@ import { engine } from '../state/engine';
 import { closeDialog, updateSettings, useUi } from '../state/store';
 import { newImage } from '../services/files';
 import { reportEngineError } from '@engine/input/InputController';
+import { hasMemoryFor } from '../services/memory';
 
 function run(fn: () => void): void {
   try {
@@ -177,16 +178,18 @@ export function ResizeDialog() {
     setH(v);
     if (keep) setW(Math.max(1, Math.round((v * baseW) / baseH)));
   };
-  const submit = () =>
+  const submit = async () => {
+    if ((w !== baseW || h !== baseH) && !(await hasMemoryFor(w, h))) return;
     run(() => {
       updateSettings({ resample: method });
       if (w !== baseW || h !== baseH) engine.resize(w, h, method);
       if (skewH !== 0 || skewV !== 0) engine.skew(skewH, skewV);
     });
+  };
 
   const pct = (v: number, base: number) => Math.round((v / base) * 1000) / 10;
   return (
-    <Dialog title={t('dialog.resize.title')} onCancel={closeDialog} onSubmit={submit}>
+    <Dialog title={t('dialog.resize.title')} onCancel={closeDialog} onSubmit={() => void submit()}>
       <p className="dialog-note">{t(sel ? 'dialog.resize.target.selection' : 'dialog.resize.target.image')}</p>
       <fieldset className="fieldset">
         <legend>{t('action.resize')}</legend>
@@ -267,7 +270,7 @@ export function CanvasSizeDialog() {
   const [unit, setUnit] = useState<Unit>('px');
   const [anchor, setAnchor] = useState<Anchor>('c');
   return (
-    <Dialog title={t('dialog.canvas.title')} onCancel={closeDialog} onSubmit={() => run(() => engine.canvasSize(w, h, anchor))}>
+    <Dialog title={t('dialog.canvas.title')} onCancel={closeDialog} onSubmit={() => void hasMemoryFor(w, h).then((ok) => ok && run(() => engine.canvasSize(w, h, anchor)))}>
       <p className="dialog-note">{t('dialog.canvas.current', { w: doc.width, h: doc.height })}</p>
       <SizeFields w={w} h={h} setW={setW} setH={setH} unit={unit} setUnit={setUnit} dpi={doc.dpi} />
       <div className="field">

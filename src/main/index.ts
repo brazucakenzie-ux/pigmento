@@ -9,6 +9,7 @@ import { applySecurityPolicy } from './security';
 import { flushSettings, loadSettings } from './settings';
 import { IPC } from '@shared/ipc';
 import { broadcastTheme, createWindow, openFileInApp } from './windows';
+import { installErrorHandlers } from './errors';
 
 const userDataOverride = process.env.PIGMENTO_USER_DATA;
 app.setName('Pigmento');
@@ -17,6 +18,7 @@ if (process.platform === 'win32') app.setAppUserModelId('app.pigmento.desktop');
 
 registerSchemes();
 
+installErrorHandlers();
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();

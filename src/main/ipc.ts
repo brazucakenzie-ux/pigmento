@@ -7,6 +7,7 @@ import {
   ipcMain,
   type IpcMainInvokeEvent,
 } from 'electron';
+import { logError } from './errors';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { FILE_FORMATS, OPENABLE_EXTENSIONS, isOpenablePath, type FileFormat } from '@shared/formats';
@@ -290,6 +291,16 @@ export function registerIpc(): void {
   });
 
   ipcMain.handle(IPC.systemTheme, () => systemTheme());
+  ipcMain.handle(IPC.memory, () => {
+    // Tests can pretend memory is short (to see the friendly refusal).
+    const fake = Number(process.env.PIGMENTO_E2E === '1' ? process.env.PIGMENTO_E2E_FREE_MB : NaN);
+    const info = process.getSystemMemoryInfo();
+    const free = Number.isFinite(fake) ? fake * 1024 * 1024 : info.free * 1024;
+    return { free, total: info.total * 1024 };
+  });
+  ipcMain.on(IPC.logError, (_e, where: unknown, message: unknown) => {
+    if (typeof where === 'string' && typeof message === 'string') void logError(`window: ${where.slice(0, 80)}`, message.slice(0, 8000));
+  });
 
   ipcMain.handle(IPC.print, async (e, req: PrintRequest) => {
     const win = senderWindow(e);
@@ -316,8 +327,12 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.autosaveRegister, (e, id: unknown) => {
     if (typeof id !== 'string') throw new Error('Invalid session id');
     registerSession(id);
-    // A window that goes away for any reason stops owning its session.
+    // A window that goes away for any reason stops owning its session; one whose page reloads
+    // or crashes gets the session's work offered back.
+    const again = () => releaseSession(id, true);
     e.sender.once('destroyed', () => releaseSession(id));
+    e.sender.once('render-process-gone', again);
+    e.sender.once('did-start-loading', again);
   });
   ipcMain.handle(IPC.autosaveWrite, async (_e, id: unknown, project: unknown, thumb: unknown, meta: unknown) => {
     if (typeof id !== 'string' || typeof meta !== 'object' || meta === null) throw new Error('Invalid autosave');

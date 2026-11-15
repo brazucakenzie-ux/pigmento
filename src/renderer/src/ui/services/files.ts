@@ -9,6 +9,7 @@ import type { ImageBuf } from '@engine/raster/transform';
 import { t } from '../../i18n';
 import { engine } from '../state/engine';
 import { openDialog, showToast, updateSettings, useUi } from '../state/store';
+import { hasMemoryFor } from './memory';
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -34,6 +35,7 @@ export async function confirmDiscard(): Promise<boolean> {
 
 export async function newImage(width: number, height: number, paper: RGBA | null, dpi: number): Promise<boolean> {
   if (!(await confirmDiscard())) return false;
+  if (!(await hasMemoryFor(width, height))) return false;
   try {
     engine.newDocument(width, height, paper, dpi);
   } catch (err) {
@@ -115,6 +117,7 @@ async function loadBytes(path: string, bytes: Uint8Array, name: string): Promise
   }
   const img = await decode(bytes, name);
   if (!img) return false;
+  if (!(await hasMemoryFor(img.w, img.h))) return false;
   try {
     engine.loadImage(img);
   } catch (err) {

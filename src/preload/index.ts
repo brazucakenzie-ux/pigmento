@@ -83,6 +83,9 @@ const api: PigmentoApi = {
     print: (req) => ipcRenderer.invoke(IPC.print, req),
     setWallpaper: (png, style) => ipcRenderer.invoke(IPC.wallpaper, png, style),
     appInfo: () => ipcRenderer.invoke(IPC.appInfo),
+    memory: () => ipcRenderer.invoke(IPC.memory),
+    logError: (where, message) => ipcRenderer.send(IPC.logError, String(where).slice(0, 80), String(message).slice(0, 8000)),
+    onNotice: (cb) => subscribe<[{ kind: 'error' | 'info'; key: string }]>(IPC.evNotice, cb),
   },
 };
 

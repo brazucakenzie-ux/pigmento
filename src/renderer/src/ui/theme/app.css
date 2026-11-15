@@ -2887,3 +2887,44 @@ dialog.tour::backdrop {
   align-self: stretch;
   gap: inherit;
 }
+
+/* The error screen (if the interface itself fails) */
+.crash {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--bg-workspace);
+  color: var(--text);
+}
+.crash-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(480px, 90vw);
+  padding: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-3);
+}
+.crash-card h1 {
+  margin: 0;
+  font-size: 20px;
+}
+.crash-card p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.crash-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.crash-card pre {
+  max-height: 160px;
+  overflow: auto;
+  font-size: var(--fs-xs);
+  white-space: pre-wrap;
+}

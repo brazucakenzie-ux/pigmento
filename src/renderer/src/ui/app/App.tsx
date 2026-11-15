@@ -19,7 +19,7 @@ import { loadSavedPatterns } from '../services/patterns';
 import { ColorRangeDialog, LoadSelectionDialog, ModifySelectionDialog, SaveSelectionDialog } from '../dialogs/SelectionDialogs';
 import { confirmDiscard, openPath } from '../services/files';
 import { bindEngine, engine } from '../state/engine';
-import { updateSettings, useUi } from '../state/store';
+import { showToast, updateSettings, useUi } from '../state/store';
 import { applyTheme, resolveTheme, schemeFor } from '../theme/themes';
 import { CanvasArea } from './CanvasArea';
 import { OptionsBar } from './OptionsBar';
@@ -170,6 +170,7 @@ async function loadFonts(): Promise<void> {
 }
 
 export function App() {
+  if (useUi((s) => s.testCrash)) throw new Error('Interface stopped (test)');
   const tour = useUi((s) => s.tour);
   const ready = useUi((s) => s.ready);
   const panelsLeft = useUi((s) => s.settings.panels.side === 'left');
@@ -225,12 +226,28 @@ export function App() {
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     window.addEventListener('keydown', handleGlobalKey);
+    // Anything that slips through: logged, and the user told in plain words (at most every 5 s).
+    let lastNotice = 0;
+    const onUnexpected = (err: unknown) => {
+      const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
+      window.pigmento.system.logError('script', msg);
+      if (Date.now() - lastNotice < 5000) return;
+      lastNotice = Date.now();
+      showToast({ kind: 'error', key: 'error.unexpected' });
+    };
+    const onError = (e: ErrorEvent) => onUnexpected(e.error ?? e.message);
+    const onRejection = (e: PromiseRejectionEvent) => onUnexpected(e.reason);
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onRejection);
+    offs.push(window.pigmento.system.onNotice((n) => showToast({ kind: n.kind, key: n.key as never })));
     // Capture phase: the canvas never sees the side buttons, so they can't start a stroke.
     for (const type of ['pointerdown', 'pointermove', 'pointerup'] as const) window.addEventListener(type, handleGlobalPointer, true);
     return () => {
       cancelled = true;
       offs.forEach((off) => off());
       window.removeEventListener('keydown', handleGlobalKey);
+      window.removeEventListener('error', onError);
+      window.removeEventListener('unhandledrejection', onRejection);
       for (const type of ['pointerdown', 'pointermove', 'pointerup'] as const) window.removeEventListener(type, handleGlobalPointer, true);
       window.removeEventListener('beforeunload', onBeforeUnload);
     };

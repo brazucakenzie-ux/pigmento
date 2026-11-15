@@ -75,6 +75,8 @@ export interface UiState {
   perfOverlay: boolean;
   /** The welcome tour is showing. */
   tour: boolean;
+  /** Tests only: makes the interface fail, to exercise the error screen. */
+  testCrash: boolean;
   file: FileState;
   // Engine mirrors
   doc: DocInfo;
@@ -122,6 +124,7 @@ export const useUi = create<UiState>(() => ({
   fullscreen: false,
   perfOverlay: false,
   tour: false,
+  testCrash: false,
   file: { path: null, name: null, format: null },
   doc: { width: 1280, height: 800, dpi: 96, paper: { r: 255, g: 255, b: 255, a: 255 } },
   history: { index: 0, length: 0, canUndo: false, canRedo: false, dirty: false, entries: [], initialLabel: 'history.initial.new' },
