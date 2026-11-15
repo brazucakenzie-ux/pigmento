@@ -112,12 +112,49 @@ const NUDGE: Record<string, [number, number]> = {
   ArrowDown: [0, 1],
 };
 
+const FOCUSABLE = 'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
+
+/** The window's regions in F6 order, and what in each takes the focus. */
+const REGIONS: readonly { region: string; focus: string | null }[] = [
+  { region: '.ribbon', focus: '[role="tab"][aria-selected="true"]' },
+  { region: '.optionsbar', focus: FOCUSABLE },
+  { region: '.canvas-host', focus: null },
+  { region: '.sidepanel', focus: FOCUSABLE },
+  { region: '.statusbar', focus: FOCUSABLE },
+];
+
+/** F6 / Shift+F6: move the focus to the next (or previous) region that has something to focus. */
+export function cycleRegion(dir: 1 | -1): boolean {
+  const regions = REGIONS.map((r) => ({ ...r, el: document.querySelector<HTMLElement>(r.region) })).filter((r) => r.el);
+  if (!regions.length) return false;
+  const active = document.activeElement;
+  let i = regions.findIndex((r) => r.el!.contains(active));
+  if (i < 0) i = dir > 0 ? -1 : regions.length;
+  for (let k = 1; k <= regions.length; k++) {
+    const r = regions[(((i + dir * k) % regions.length) + regions.length) % regions.length];
+    const target = r.focus ? r.el!.querySelector<HTMLElement>(r.focus) : r.el;
+    if (target && target.getClientRects().length > 0) {
+      target.focus();
+      return true;
+    }
+  }
+  return false;
+}
+
+/** How far the arrow keys move the view while the canvas has the focus (Shift: further). */
+const PAN_STEP = 40;
+
 /** Window-level shortcut handler. Dialogs and text fields keep their own keys. */
 export function handleGlobalKey(e: KeyboardEvent): void {
   if (e.defaultPrevented || (e.repeat && !NUDGE[e.key] && e.key !== '[' && e.key !== ']')) return;
   const state = useUi.getState();
   if (state.dialog) return;
   if (document.querySelector('.menu:popover-open')) return;
+  // F6 works everywhere, even from a text field.
+  if (e.key === 'F6' && !e.ctrlKey && !e.altKey) {
+    if (cycleRegion(e.shiftKey ? -1 : 1)) e.preventDefault();
+    return;
+  }
   if (isTypingTarget(e.target)) return;
 
   // The active tool gets first refusal on Enter/Escape/Backspace (commit, cancel, undo point).
@@ -133,6 +170,13 @@ export function handleGlobalKey(e: KeyboardEvent): void {
       e.preventDefault();
       return;
     }
+  }
+  // With the canvas focused and nothing to nudge, the arrows move around the picture.
+  if (n && !e.ctrlKey && !e.altKey && e.target instanceof HTMLElement && e.target.classList.contains('canvas-host')) {
+    const k = PAN_STEP * (e.shiftKey ? 5 : 1);
+    engine.panBy(-n[0] * k, -n[1] * k);
+    e.preventDefault();
+    return;
   }
 
   if (e.key === 'Escape') {

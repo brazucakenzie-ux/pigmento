@@ -12,6 +12,8 @@ The window has five parts:
 - **The side panel** on the right has the Navigator, Layers and History. View → Side panel shows or hides it.
 - **The status bar** at the bottom shows the pointer position, the selection size, the picture size and the zoom.
 
+Everything works from the keyboard: F6 and Shift+F6 move between these parts, Tab moves within one, and with the picture focused the arrow keys move around it (Shift moves further).
+
 The first time Pigmento starts, a short tour points these out. Help → Welcome tour shows it again.
 
 ### Simple and Full mode
@@ -168,6 +170,7 @@ These are the defaults; F1 always shows the current ones.
 | Swap colours, Reset colours | X, D |
 | Settings | Ctrl+Alt+S |
 | Keyboard shortcuts | F1 |
+| Move between the ribbon, options bar, picture, side panel and status bar | F6, Shift+F6 |
 
 ## Where Pigmento keeps things
 

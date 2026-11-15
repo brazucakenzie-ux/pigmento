@@ -1,6 +1,7 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { parseInline, parseMarkdown, slug } from '@ui/components/mdParse';
+import guideMd from '../../docs/user-guide.md?raw';
+import licencesMd from '../../LICENSES.md?raw';
 
 describe('the app’s Markdown reader', () => {
   it('reads headings, paragraphs, lists, tables, code and rules', () => {
@@ -54,11 +55,11 @@ describe('the app’s Markdown reader', () => {
   });
 
   it('reads the bundled user guide and licences into sections and tables', () => {
-    const guide = parseMarkdown(readFileSync('docs/user-guide.md', 'utf8'));
+    const guide = parseMarkdown(guideMd);
     const sections = guide.filter((b) => b.kind === 'heading' && b.level === 2).map((b) => (b.kind === 'heading' ? b.text : ''));
     expect(sections).toContain('Getting started');
     expect(sections).toContain('Keyboard shortcuts');
-    const licences = parseMarkdown(readFileSync('LICENSES.md', 'utf8'));
+    const licences = parseMarkdown(licencesMd);
     const table = licences.find((b) => b.kind === 'table');
     expect(table?.kind === 'table' && table.rows.some((r) => r[0] === 'Electron')).toBe(true);
   });

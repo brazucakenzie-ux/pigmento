@@ -163,7 +163,7 @@ test('modifies, saves and loads selections, and keeps them in the project', asyn
   expect(await bounds()).toEqual({ x: 90, y: 90, w: 220, h: 220 });
   expect(await at(90, 90)).toBe(0); // grown corners are round
 
-  await page.keyboard.press('Shift+F6');
+  await page.keyboard.press('Control+Alt+d');
   const feather = page.getByRole('dialog', { name: 'Feather selection' });
   await feather.getByLabel('Radius').fill('8');
   await feather.getByLabel('Radius').press('Enter');
