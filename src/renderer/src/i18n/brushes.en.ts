@@ -52,6 +52,7 @@ export const brushesEn = {
   'brush.paper-grain': 'Paper grain',
   'brush.noise-brush': 'Noise',
   'brush.sponge': 'Sponge',
+  'brush.distress': 'Distress',
   'brush.calligraphy': 'Calligraphy',
   'brush.splatter': 'Splatter',
   'brush.fur': 'Fur',

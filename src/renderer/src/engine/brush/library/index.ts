@@ -56,6 +56,8 @@ export const BUILTIN_BRUSHES: BrushDef[] = [
   defineBrush('paper-grain', 'textured', { size: 30, hardness: 0.5, spacing: 0.08, texture: grain('paper', 0.8, 1.5), dynamics: dyn({ size: pressure(0.5) }) }, ['grain', 'tooth']),
   defineBrush('noise-brush', 'textured', { size: 28, hardness: 0.7, spacing: 0.08, texture: grain('noise', 0.7) }, ['grit', 'static']),
   defineBrush('sponge', 'textured', { tip: image('sponge'), size: 46, spacing: 0.3, angleJitter: 1, sizeJitter: 0.25, opacityJitter: 0.3 }, ['dab', 'foliage']),
+  // The Distress eraser's worn, scattered marks, as paint.
+  defineBrush('distress', 'textured', { size: 30, hardness: 0.5, flow: 0.7, scatter: 0.4, dynamics: dyn({ flow: random(0.2) }) }, ['grunge', 'worn', 'rough']),
 
   // ---- Artistic ------------------------------------------------------------------------------
   defineBrush('calligraphy', 'artistic', { size: 20, hardness: 0.95, roundness: 0.15, angle: 45, spacing: 0.04, dynamics: dyn({ size: pressure(0.4) }) }, ['nib', 'lettering']),
