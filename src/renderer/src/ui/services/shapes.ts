@@ -113,29 +113,39 @@ export function isCustom(def: ShapeDef | undefined): boolean {
   return def?.custom === true && files.has(def.id);
 }
 
-/** Save every personal shape to a shape pack file (to share or move to another PC). */
-export async function exportShapePack(): Promise<boolean> {
-  const list = [...files.values()].sort((a, b) => a.createdAt - b.createdAt);
+/** A suggested file name without the characters Windows refuses. */
+function fileSafe(name: string): string {
+  // eslint-disable-next-line no-control-regex
+  return name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '').trim() || t('shapes.packName');
+}
+
+/** Save personal shapes to a shape pack file (to share or move to another PC): all of them, or just the one with `id`. */
+export async function exportShapePack(id?: string): Promise<boolean> {
+  const one = id === undefined ? undefined : files.get(id);
+  const list = id === undefined ? [...files.values()].sort((a, b) => a.createdAt - b.createdAt) : one ? [one] : [];
   if (!list.length) {
     showToast({ kind: 'info', key: 'notice.shapePackEmpty' });
     return false;
   }
+  const packName = one ? one.name : t('shapes.packName');
   const pack: ShapePack = {
     format: SHAPE_PACK_FORMAT,
     version: SHAPE_FORMAT_VERSION,
-    name: t('shapes.packName'),
+    name: packName,
     shapes: list.map((f) => ({ name: f.name, category: f.category, aspect: f.aspect, fillRule: f.fillRule, outline: f.outline })),
   };
   const bytes = new TextEncoder().encode(JSON.stringify(pack, null, 1));
   let saved: string | null;
   try {
-    saved = await window.pigmento.files.saveAsset('shapePack', `${t('shapes.packName')}.pigmshapes`, bytes);
+    saved = await window.pigmento.files.saveAsset('shapePack', `${fileSafe(packName)}.pigmshapes`, bytes);
   } catch {
     showToast({ kind: 'error', key: 'error.shapeSave' });
     return false;
   }
   if (!saved) return false;
-  showToast({ kind: 'info', key: 'notice.shapePackExported', params: { count: list.length, name: saved.split(/[\\/]/).pop() ?? saved } });
+  const fileName = saved.split(/[\\/]/).pop() ?? saved;
+  if (one) showToast({ kind: 'info', key: 'notice.shapeExported', params: { shape: one.name, name: fileName } });
+  else showToast({ kind: 'info', key: 'notice.shapePackExported', params: { count: list.length, name: fileName } });
   return true;
 }
 

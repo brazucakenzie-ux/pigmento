@@ -43,7 +43,7 @@ const api: PigmentoApi = {
     close: () => ipcRenderer.invoke(IPC.closeWindow),
     requestClose: () => ipcRenderer.invoke(IPC.requestClose),
     setUiScale: (scale) => {
-      if (typeof scale === 'number' && Number.isFinite(scale)) webFrame.setZoomFactor(Math.min(1.5, Math.max(0.8, scale)));
+      if (typeof scale === 'number' && Number.isFinite(scale)) webFrame.setZoomFactor(Math.min(2, Math.max(0.8, scale)));
     },
     setTitleBarOverlay: (color, symbolColor, height) =>
       ipcRenderer.invoke(IPC.setOverlay, color, symbolColor, height),

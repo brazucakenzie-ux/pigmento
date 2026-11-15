@@ -91,7 +91,7 @@ Home → Shapes has Line, Curve, Rectangle, Rounded rectangle, Ellipse and Polyg
 - **Draw as: Shape layer** keeps shapes editable: use the Move tool (V) to select, move, resize, rotate or recolour them later. **Pixels** paints them straight into the layer.
 - The **Pen** (N) draws your own paths: click for corners, drag for curves.
 - **Save as my shape** keeps a shape in My shapes, which you can rename, duplicate or delete.
-- **Shape packs** (`.pigmshapes`) share My shapes between PCs, and **Import SVG** brings in a drawing's shapes as editable paths.
+- **Shape packs** (`.pigmshapes`) share My shapes, or a single shape, between PCs, and **Import SVG** brings in a drawing's shapes as editable paths.
 
 ## Layers
 
@@ -153,7 +153,7 @@ The Image tab resizes the picture or the canvas, crops, rotates and flips, and i
 
 File → Settings (Ctrl+Alt+S) has two pages:
 
-- **General** sets the interface size (80–150 %) and Simple or Full mode.
+- **General** sets the interface size (80–200 %) and Simple or Full mode.
 - **Keyboard shortcuts** lists every command. Press **+** on a row, then press the keys you want, or a mouse side button. If the keys are already taken, Pigmento asks whether to move them over; tools can also share a letter, and pressing it again switches between them. Remove a shortcut with its ×, or reset one command or all of them.
 
 ## Keyboard shortcuts

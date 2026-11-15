@@ -35,7 +35,7 @@ function GeneralPage() {
       <div className="field">
         <span className="label">{t('settings.uiScale')}</span>
         <div className="row">
-          <Slider label={t('settings.uiScale')} value={Math.round(scale * 100)} min={80} max={150} step={10} unit="%" onChange={(v) => updateSettings({ ui: { ...useUi.getState().settings.ui, scale: v / 100 } })} />
+          <Slider label={t('settings.uiScale')} value={Math.round(scale * 100)} min={80} max={200} step={5} unit="%" onChange={(v) => updateSettings({ ui: { ...useUi.getState().settings.ui, scale: v / 100 } })} />
         </div>
       </div>
       <p className="dialog-note">{t('settings.uiScaleHint')}</p>

@@ -616,6 +616,22 @@ test('capture settings', async () => {
     await page.keyboard.press('b');
     await page.waitForTimeout(200);
     await page.screenshot({ path: path.join(out, 'settings-shortcuts.png') });
+    // The biggest interface size.
+    await page.keyboard.press('Escape');
+    await dlg.getByRole('tab', { name: 'General' }).click();
+    const size = dlg.getByRole('textbox', { name: 'Interface size' });
+    await size.fill('200');
+    await size.press('Tab');
+    await page.waitForTimeout(300);
+    // Playwright's screenshot keeps the old viewport size after a zoom, so capture the window itself.
+    const capture = async (name: string): Promise<void> => {
+      const png = await h.app.evaluate(async ({ BrowserWindow }) => (await BrowserWindow.getAllWindows()[0].webContents.capturePage()).toPNG().toString('base64'));
+      writeFileSync(path.join(out, name), Buffer.from(png, 'base64'));
+    };
+    await capture('settings-scale-200.png');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+    await capture('scale-200.png');
     console.warn('errors:', JSON.stringify(h.errors));
   } finally {
     await h.close();

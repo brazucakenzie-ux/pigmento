@@ -106,6 +106,24 @@ test('turns a selection into a shape, then shares it as a shape pack', async () 
   expect(json.format).toBe('pigmento-shape-pack');
   expect(json.shapes.map((s) => s.name)).toEqual(['Panel']);
 
+  // One shape on its own: a copy of Panel, exported from its menu, then deleted.
+  await gallery.getByRole('option', { name: 'Panel' }).click();
+  await page.getByRole('button', { name: 'My shape', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Duplicate' }).click();
+  await gallery.getByRole('option', { name: 'Panel copy' }).click();
+  const single = tempFile('one.pigmshapes');
+  await stubSave(single);
+  await page.getByRole('button', { name: 'My shape', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Export as shape pack…' }).click();
+  await expect.poll(() => existsSync(single)).toBe(true);
+  const one = JSON.parse(readFileSync(single, 'utf8')) as { name: string; shapes: { name: string }[] };
+  expect(one.name).toBe('Panel copy');
+  expect(one.shapes.map((s) => s.name)).toEqual(['Panel copy']);
+  await page.getByRole('button', { name: 'My shape', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Delete…' }).click();
+  await page.getByRole('dialog', { name: 'Delete shape' }).getByRole('button', { name: 'Delete' }).click();
+  await expect(gallery.getByRole('option')).toHaveCount(1);
+
   await gallery.getByRole('option', { name: 'Panel' }).click();
   await page.getByRole('button', { name: 'My shape', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Delete…' }).click();

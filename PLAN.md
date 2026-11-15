@@ -214,7 +214,7 @@ Each item is ticked in the same commit as its work.
 
 ### Milestone 4 — Polish, accessibility, packaging
 Make it feel finished and install it. Each item is ticked in the same commit as its work.
-- [x] 4.1 Settings dialog (File → Settings, Ctrl+Alt+S): General (UI scale 80–150 %, Simple/Full mode, replay the welcome tour) and Shortcuts: every action listed and searchable, record a new key combination, remove one, conflicts shown and resolved, reset one or all; stored in settings and used by the keymap, tooltips, menus and the cheat sheet (+ keymap unit tests, e2e)
+- [x] 4.1 Settings dialog (File → Settings, Ctrl+Alt+S): General (UI scale 80–200 %, Simple/Full mode, replay the welcome tour) and Shortcuts: every action listed and searchable, record a new key combination, remove one, conflicts shown and resolved, reset one or all; stored in settings and used by the keymap, tooltips, menus and the cheat sheet (+ keymap unit tests, e2e)
 - [x] 4.2 Simple/Full mode: Simple keeps the Paint essentials (Home, Image and View tabs, no Layers panel, no advanced tool options such as symmetry and stabiliser); Full shows everything. Switching never changes the picture or loses settings; a toggle beside the ribbon tabs (always in reach) and in Settings (+ e2e)
 - [x] 4.3 First-run onboarding: a short welcome tour over the real UI (ribbon, tools, colours, canvas, panels, Help), keyboard-driven, skippable, reduced-motion aware, shown once and replayable from Help (+ e2e)
 - [x] 4.4 Help and About: Help menu (user guide, keyboard shortcuts, welcome tour, About); the About dialog shows every third-party licence from `LICENSES.md` (bundled with the app)
@@ -226,4 +226,5 @@ Make it feel finished and install it. Each item is ticked in the same commit as 
 - [x] 4.9 Packaging: electron-builder config for an NSIS installer (per user) and a portable `.exe`, app icon, `.pigm` file association and "Open with" for PNG, JPEG, BMP, GIF and WebP; `npm run dist` builds both
 - [x] 4.10 Install the NSIS build and smoke-test it (start, draw, save a `.pigm`, reopen it through the file association, open an image with "Open with", uninstall cleanly)
 - [x] 4.11 Docs: README with screenshots and build instructions, user guide in `docs/user-guide.md`, `CHANGELOG.md`
-- [ ] 4.12 `npm run check` clean; final report listing every feature from the brief with its status
+- [x] 4.12 `npm run check` clean; final report listing every feature from the brief with its status
+- Checking the brief feature by feature (4.12) found and fixed: the interface size now reaches 200 % in 5 % steps (the brief lists 100/125/150/200 %); one of My shapes can be exported as a pack on its own; a short side panel scrolls instead of squashing its sections; and the ribbon tabs wrap rather than run off the edge of a narrow window. The installer was rebuilt from the final code and smoke-tested again (15 checks, clean uninstall).

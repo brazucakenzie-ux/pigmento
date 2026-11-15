@@ -54,7 +54,7 @@ A shape whose subpaths are all open is drawn as lines only. There are at most 50
 
 ## A shape pack (`.pigmshapes`)
 
-Shapes tab → Shape files → Export my shapes saves all of them. Import shape pack adds a pack's shapes to My shapes with new ids, up to the 500-shape limit.
+Shapes tab → Shape files → Export my shapes saves all of them; a shape's own menu (My shape → Export as shape pack) saves just that one. Import shape pack adds a pack's shapes to My shapes with new ids, up to the 500-shape limit.
 
 ```json
 {

@@ -23,7 +23,7 @@ test('Help has the user guide, shortcuts, the tour and About with every licence'
   await menu.getByRole('menuitem', { name: /User guide/ }).click();
   const guide = page.getByRole('dialog', { name: 'User guide' });
   const contents = guide.getByRole('navigation', { name: 'Contents' });
-  await expect(contents.getByRole('button', { name: 'Getting started' })).toHaveAttribute('aria-current', 'true');
+  await expect(contents.getByRole('button', { name: 'Installing' })).toHaveAttribute('aria-current', 'true');
   await contents.getByRole('button', { name: 'Brushes' }).click();
   await expect(contents.getByRole('button', { name: 'Brushes' })).toHaveAttribute('aria-current', 'true');
   await expect(guide.getByRole('heading', { name: 'Making your own brushes' })).toBeInViewport();

@@ -10,7 +10,7 @@ import { Slider } from '../components/Controls';
 import { engine } from '../state/engine';
 import { openDialog, updateSettings, useUi } from '../state/store';
 import { runAction } from '../actions/actions';
-import { duplicateMyShape, isCustom } from '../services/shapes';
+import { duplicateMyShape, exportShapePack, isCustom } from '../services/shapes';
 import { ActionButton, MenuButton, RibbonGroup } from './RibbonButton';
 import { ColorsGroup } from './ColorsGroup';
 import { ActionMenuItem } from './ActionMenuItem';
@@ -154,7 +154,7 @@ function AllShapesMenu({ current }: { current: string }) {
   );
 }
 
-/** Rename, duplicate and delete for one of My shapes (one small menu, so the tab stays one screen wide). */
+/** Rename, duplicate, export and delete for one of My shapes (one small menu, so the tab stays one screen wide). */
 function ManageShape({ def }: { def: ShapeDef }) {
   return (
     <MenuButton label={t('shapes.manage')} icon="properties">
@@ -162,6 +162,7 @@ function ManageShape({ def }: { def: ShapeDef }) {
         <>
           <MenuItem label={t('shapes.rename')} icon="text" close={close} onSelect={() => openDialog({ kind: 'saveShape', id: def.id })} />
           <MenuItem label={t('shapes.duplicate')} icon="copy" close={close} onSelect={() => void duplicateMyShape(def.id, t('shape.copyName', { name: shapeName(def) }))} />
+          <MenuItem label={t('shapes.exportOne')} icon="export" close={close} onSelect={() => void exportShapePack(def.id)} />
           <MenuItem label={t('shapes.delete')} icon="delete" close={close} onSelect={() => openDialog({ kind: 'deleteShape', id: def.id })} />
         </>
       )}
