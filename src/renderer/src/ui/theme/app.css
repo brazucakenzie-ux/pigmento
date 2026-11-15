@@ -2580,6 +2580,17 @@ kbd {
 .perf-overlay b {
   font-weight: 600;
 }
+.perf-overlay .btn {
+  justify-self: start;
+  margin-top: 4px;
+  pointer-events: auto;
+}
+.perf-graph {
+  display: block;
+  margin-top: 4px;
+  color: var(--accent);
+  border-top: 1px solid var(--danger);
+}
 
 /* Settings dialog */
 .dialog.settings-dialog {

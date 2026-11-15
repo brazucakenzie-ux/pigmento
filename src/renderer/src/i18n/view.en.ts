@@ -29,5 +29,10 @@ export const viewEn = {
   'perf.heap': 'Script memory',
   'perf.image': 'Image ({layers} layers)',
   'perf.history': 'Undo',
+  'perf.size': 'Picture',
+  'perf.graph': 'Recent frame times; the line is one frame at 60 Hz',
+  'perf.copy': 'Copy readings',
+  'perf.copied': 'Readings copied.',
+  'perf.copyFailed': 'Pigmento couldn’t copy the readings.',
   'error.reference': 'Pigmento couldn’t open {name} as a reference image.',
 } as const;

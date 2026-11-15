@@ -1,5 +1,6 @@
+import { writeFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
-import { drag, launchApp, ready, type AppHandle } from './harness';
+import { drag, launchApp, ready, tempFile, type AppHandle } from './harness';
 
 let h: AppHandle;
 
@@ -69,6 +70,14 @@ test('shows frame time, latency and memory on a hidden shortcut, and 500 undo/re
   }
   await expect(overlay).toContainText(/Pointer → pixels\s*\d+\.\d ms/);
   await expect(overlay).toContainText('Image (1 layers)');
+  await expect(overlay).toContainText('1280 × 800 (1.0 MP)');
+  await expect(overlay.getByRole('img', { name: /Recent frame times/ })).toBeVisible();
+  // Copying would overwrite the real clipboard, so it's tried only when tests may.
+  await expect(overlay.getByRole('button', { name: 'Copy readings' })).toBeVisible();
+  if (process.env.PIGMENTO_E2E_CLIPBOARD) {
+    await overlay.getByRole('button', { name: 'Copy readings' }).click();
+    await expect(page.locator('.toast', { hasText: 'Readings copied.' })).toBeVisible();
+  }
   // Not in the shortcuts list.
   await page.keyboard.press('F1');
   await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).not.toContainText('Performance overlay');
@@ -99,4 +108,55 @@ test('shows frame time, latency and memory on a hidden shortcut, and 500 undo/re
   console.warn('heap before/after 500 undo/redo cycles (MB):', (before / 1048576).toFixed(1), (after / 1048576).toFixed(1));
   expect(hist).toMatchObject({ index: 10, length: 10 });
   expect(after - before).toBeLessThan(5 * 1024 * 1024);
+});
+
+test('opens a 100-megapixel image within its time and memory budget', async () => {
+  test.setTimeout(180_000);
+  h = await launchApp();
+  const { page, app } = h;
+  await ready(page);
+  // A 10000 × 10000 gradient, so every tile holds real pixels.
+  const png = await page.evaluate(async () => {
+    const c = new OffscreenCanvas(10000, 10000);
+    const g = c.getContext('2d')!;
+    const grad = g.createLinearGradient(0, 0, 10000, 10000);
+    grad.addColorStop(0, '#4b4be0');
+    grad.addColorStop(1, '#ff8a3d');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 10000, 10000);
+    // As base64 text (a list of numbers this size would swamp the test runner).
+    const blob = await c.convertToBlob({ type: 'image/png' });
+    return await new Promise<string>((res) => {
+      const r = new FileReader();
+      r.onload = () => res(String(r.result).split(',')[1]);
+      r.readAsDataURL(blob);
+    });
+  });
+  const file = tempFile('big.png');
+  writeFileSync(file, Buffer.from(png, 'base64'));
+  await h.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.reload());
+  await page.waitForLoadState('domcontentloaded');
+  await ready(page);
+  const t0 = Date.now();
+  await app.evaluate(({ dialog }, fp) => {
+    dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [fp] })) as typeof dialog.showOpenDialog;
+  }, file);
+  await page.keyboard.press('Control+o');
+  await expect.poll(() => page.evaluate(() => window.__pigmentoTest!.doc())).toEqual({ width: 10000, height: 10000 });
+  // Shown on screen, not just loaded.
+  await page.evaluate(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
+  const ms = Date.now() - t0;
+  const metrics = await app.evaluate(({ app: a }) => a.getAppMetrics().map((m) => ({ type: m.type, mb: Math.round(m.memory.workingSetSize / 1024) })));
+  const renderer = Math.max(...metrics.filter((m) => m.type === 'Tab').map((m) => m.mb));
+  console.warn('100 MP open (ms):', ms, 'renderer working set (MB):', renderer, JSON.stringify(metrics));
+  // Measured on this PC: about 2 s and 1.4 GB (the GPU process holds the screen copies besides).
+  expect(ms).toBeLessThan(8000);
+  expect(renderer).toBeLessThan(2500);
+  // Still responsive: a stroke on it lands.
+  await page.keyboard.press('b');
+  await drag(page, [
+    [100, 100],
+    [300, 100],
+  ]);
+  await expect.poll(() => page.evaluate(() => window.__pigmentoTest!.history().length)).toBe(1);
 });

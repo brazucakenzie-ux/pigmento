@@ -67,6 +67,11 @@ export class PerfMonitor {
     }
   }
 
+  /** The latest frame times (ms), oldest first (for the overlay's graph). */
+  recentFrames(n = 120): number[] {
+    return this.frames.slice(-n);
+  }
+
   stats(now: number): PerfStats {
     return {
       frame: quantile(this.frames, 0.5),
