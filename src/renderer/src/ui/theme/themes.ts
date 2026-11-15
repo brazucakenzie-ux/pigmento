@@ -1,6 +1,6 @@
 import type { ThemeFamilyId, ThemeMode } from '@shared/settings';
 import type { I18nKey } from '../../i18n';
-import { bestOn, contrast, ensureContrast, mix, parseColor, withAlpha } from './colorMath';
+import { bestOn, contrast, ensureContrast, mix, over, parseColor, toHex, withAlpha } from './colorMath';
 
 /** Every colour token the stylesheet reads (see tokens.css for the pre-JS fallback). */
 export const TOKENS = [
@@ -24,6 +24,7 @@ export const TOKENS = [
   'accent-fg',
   'accent-soft',
   'accent-2',
+  'accent-2-fg',
   'focus',
   'danger',
   'danger-soft',
@@ -108,8 +109,10 @@ function derive(p: Palette, scheme: Scheme): Tokens {
     p.accentText && contrast(p.accentText, p.accent) >= MIN_TEXT_CONTRAST
       ? p.accentText
       : bestOn(p.accent, ['#ffffff', '#141414']);
-  const accentFg =
-    p.accentFg ?? ensureContrast(p.accent, surfaces, MIN_TEXT_CONTRAST, dark ? '#ffffff' : '#000000');
+  const selected = p.selected ?? withAlpha(p.accent, dark ? 0.22 : 0.14);
+  // Accent text must read on the surfaces and on selected items (the selected tint over them).
+  const selectedOn = [p.ribbon, p.panel].map((bg) => toHex(over(selected, bg)));
+  const accentFg = ensureContrast(p.accentFg ?? p.accent, [...surfaces, ...selectedOn], MIN_TEXT_CONTRAST, dark ? '#ffffff' : '#000000');
   const t: Tokens = {
     'bg-top': p.top,
     'bg-ribbon': p.ribbon,
@@ -119,7 +122,7 @@ function derive(p: Palette, scheme: Scheme): Tokens {
     'bg-input': p.input,
     'bg-hover': p.hover ?? withAlpha(p.text, dark ? 0.08 : 0.06),
     'bg-pressed': p.pressed ?? withAlpha(p.text, dark ? 0.14 : 0.11),
-    'bg-selected': p.selected ?? withAlpha(p.accent, dark ? 0.22 : 0.14),
+    'bg-selected': selected,
     border: p.border,
     'border-strong': p.borderStrong,
     text: p.text,
@@ -131,6 +134,8 @@ function derive(p: Palette, scheme: Scheme): Tokens {
     'accent-fg': accentFg,
     'accent-soft': withAlpha(p.accent, dark ? 0.18 : 0.12),
     'accent-2': p.accent2,
+    // The second accent as text (darkened or lightened until it reads).
+    'accent-2-fg': ensureContrast(p.accent2, surfaces, MIN_TEXT_CONTRAST, dark ? '#ffffff' : '#000000'),
     focus: accentFg,
     danger: p.danger,
     'danger-soft': withAlpha(p.danger, dark ? 0.16 : 0.1),

@@ -36,7 +36,7 @@ test('adds, renames, hides, reorders, merges and deletes layers', async () => {
   await panel.getByRole('button', { name: 'New layer' }).click();
   await expect(rows()).toHaveCount(2);
   await expect(rows().first()).toContainText('Layer 2');
-  await expect(rows().first()).toHaveAttribute('aria-selected', 'true');
+  await expect(rows().first().locator('.layer-name')).toHaveAttribute('aria-current', 'true');
 
   // Paint red on Layer 2, then hide it: the canvas shows white paper again.
   await page.keyboard.press('r');

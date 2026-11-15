@@ -44,6 +44,7 @@
   --accent-fg: #4b4be0;
   --accent-soft: rgba(75, 75, 224, 0.12);
   --accent-2: var(--brand-cadmium);
+  --accent-2-fg: #b4521a;
   --focus: #4b4be0;
   --danger: #c4314b;
   --danger-soft: rgba(196, 49, 75, 0.1);
@@ -94,6 +95,7 @@
     --accent-hover: Highlight;
     --accent-text: HighlightText;
     --accent-fg: Highlight;
+    --accent-2-fg: CanvasText;
     --accent-soft: Canvas;
     --focus: Highlight;
     --danger: CanvasText;

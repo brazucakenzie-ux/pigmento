@@ -57,11 +57,13 @@ describe('theme registry', () => {
       }
       for (const bg of [t['bg-ribbon'], t['bg-panel'], t['bg-top']]) {
         expect(contrast(t['accent-fg'], bg), 'accent text').toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
+        expect(contrast(t['accent-2-fg'], bg), 'second accent text').toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
         expect(contrast(t.focus, bg), 'focus ring').toBeGreaterThanOrEqual(3);
       }
       expect(contrast(t['accent-text'], t.accent), 'text on accent').toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
       // Selected items (accent-fg text on the selected tint) must stay readable too.
-      expect(contrast(t['accent-fg'], mixOver(t['bg-selected'], t['bg-ribbon']))).toBeGreaterThanOrEqual(3);
+      expect(contrast(t['accent-fg'], mixOver(t['bg-selected'], t['bg-ribbon'])), 'accent text on selected').toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
+      expect(contrast(t['accent-fg'], mixOver(t['bg-selected'], t['bg-panel'])), 'accent text on selected panel items').toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
       // White paper must stand out from the workspace behind it.
       expect(contrast('#ffffff', t['bg-workspace']), 'paper vs workspace').toBeGreaterThan(1.15);
     });

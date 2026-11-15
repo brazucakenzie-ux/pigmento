@@ -547,8 +547,9 @@ export function Ribbon() {
   };
   return (
     <div className="ribbon" aria-label={t('a11y.ribbon')}>
-      <div className="ribbon-tabs" role="tablist" aria-label={t('a11y.ribbon')}>
+      <div className="ribbon-tabs">
         <FileMenu />
+        <div className="ribbon-tablist" role="tablist" aria-label={t('a11y.ribbon')}>
         {tabs.map((tb, i) => (
           <button
             key={tb.id}
@@ -565,6 +566,7 @@ export function Ribbon() {
             {t(tb.labelKey)}
           </button>
         ))}
+        </div>
         <span className="spacer" />
         <ModeToggle />
         <HelpMenu />

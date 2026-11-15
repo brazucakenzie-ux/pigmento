@@ -169,6 +169,9 @@ export function SidePanel() {
         role="separator"
         aria-orientation="vertical"
         aria-label={t('a11y.panelResize')}
+        aria-valuenow={Math.round(width)}
+        aria-valuemin={180}
+        aria-valuemax={600}
         tabIndex={0}
         onPointerDown={onResize}
         onKeyDown={(e) => {

@@ -232,7 +232,7 @@
 }
 .ribbon-group-label {
   font-size: var(--fs-2xs);
-  color: var(--text-faint);
+  color: var(--text-muted);
   text-align: center;
   padding: 2px 0 4px;
   white-space: nowrap;
@@ -490,7 +490,7 @@
 }
 .opt-hint {
   font-size: var(--fs-xs);
-  color: var(--text-faint);
+  color: var(--text-muted);
   /* Hints give way first so Apply/Cancel stay visible on narrow windows. */
   flex: 0 1 auto;
   min-width: 40px;
@@ -614,7 +614,7 @@
   border-color: transparent;
 }
 .unit {
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-size: var(--fs-2xs);
   margin-left: -4px;
 }
@@ -869,11 +869,12 @@
   font-weight: 600;
 }
 .history-list button.future {
-  color: var(--text-faint);
+  color: var(--text-muted);
+  font-style: italic;
 }
 .history-empty {
   font-size: var(--fs-xs);
-  color: var(--text-faint);
+  color: var(--text-muted);
   padding: 4px 8px 8px;
 }
 .navigator {
@@ -1007,7 +1008,7 @@
   white-space: nowrap;
 }
 .menu-item .mi-shortcut {
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-size: var(--fs-xs);
 }
 .menu-item .mi-icon {
@@ -1027,14 +1028,14 @@
 .menu-heading {
   padding: 6px 10px 2px;
   font-size: var(--fs-2xs);
-  color: var(--text-faint);
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
 .menu-note {
   padding: 4px 10px 6px;
   font-size: var(--fs-xs);
-  color: var(--text-faint);
+  color: var(--text-muted);
 }
 
 /* ---------- Dialogs ---------- */
@@ -1462,7 +1463,7 @@
   font-size: var(--fs-xs);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--text-faint);
+  color: var(--text-muted);
 }
 .shortcut-row {
   display: flex;
@@ -1499,7 +1500,7 @@ kbd {
   font-size: var(--fs-xl);
 }
 .about .tagline {
-  color: var(--accent-2);
+  color: var(--accent-2-fg);
   font-weight: 600;
 }
 .about p {
@@ -1759,6 +1760,13 @@ kbd {
 .layer-name {
   flex: 1;
   min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  align-items: flex-start;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1767,7 +1775,7 @@ kbd {
 }
 .layer-meta {
   font-size: var(--fs-2xs);
-  color: var(--text-faint);
+  color: var(--text-muted);
 }
 .layer-name-input {
   flex: 1;
@@ -1922,7 +1930,7 @@ kbd {
 .shape-gallery-empty {
   grid-column: 1 / -1;
   padding: 8px;
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-size: var(--fs-sm);
 }
 .shape-expand {
@@ -2204,7 +2212,7 @@ kbd {
 .brush-gallery-empty {
   grid-column: 1 / -1;
   padding: 8px;
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-size: var(--fs-sm);
 }
 @media (forced-colors: active) {
@@ -2240,7 +2248,7 @@ kbd {
 }
 .brush-current-tool {
   font-size: var(--fs-2xs);
-  color: var(--text-faint);
+  color: var(--text-muted);
 }
 
 /* Brush Designer */
@@ -2393,7 +2401,7 @@ kbd {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 .bd-target-src {
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-size: var(--fs-xs);
 }
 .bd-dyn-edit {
@@ -2870,4 +2878,12 @@ dialog.tour::backdrop {
 }
 .md th {
   background: var(--bg-input);
+}
+
+/* The ribbon's tab list (File, the mode toggle and Help sit beside it) */
+.ribbon-tablist {
+  display: flex;
+  align-items: flex-end;
+  align-self: stretch;
+  gap: inherit;
 }

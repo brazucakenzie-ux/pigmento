@@ -29,16 +29,19 @@ export function StatusBar() {
   return (
     <footer className="statusbar" aria-label={t('a11y.statusBar')}>
       <span className="hint">{hint ? t(hint) : ''}</span>
-      <span className="status-item" aria-label={t('status.cursor')} data-tip={t('status.cursor')}>
+      <span className="status-item" data-tip={t('status.cursor')}>
         <Icon name="plus" size={13} />
+        <span className="sr-only">{t('status.cursor')}: </span>
         {cursor ? t('status.pos', { x: cursor.x, y: cursor.y }) : ''}
       </span>
-      <span className="status-item" aria-label={t('status.selection')} data-tip={t('status.selection')}>
+      <span className="status-item" data-tip={t('status.selection')}>
         <Icon name="select" size={13} />
+        <span className="sr-only">{t('status.selection')}: </span>
         {sel ? t('status.px', { w: Math.round(sel.w), h: Math.round(sel.h) }) : ''}
       </span>
-      <span className="status-item" aria-label={t('status.canvas')} data-tip={t('status.canvas')}>
+      <span className="status-item" data-tip={t('status.canvas')}>
         <Icon name="canvas-size" size={13} />
+        <span className="sr-only">{t('status.canvas')}: </span>
         {t('status.px', { w: size.w, h: size.h })}
       </span>
       <span className="status-zoom">
@@ -60,7 +63,7 @@ export function StatusBar() {
         <button type="button" className="icon-btn" aria-label={t('action.zoomIn')} data-tip={t('action.zoomIn')} onClick={() => runAction('zoomIn')}>
           <Icon name="plus" size={14} />
         </button>
-        <button type="button" className="pct" aria-label={t('status.zoom')} data-tip={t('action.zoom100')} data-kbd="Ctrl+1" onClick={() => runAction('zoom100')}>
+        <button type="button" className="pct" aria-label={`${t('status.zoom')} ${formatZoom(zoom)}`} data-tip={t('action.zoom100')} data-kbd="Ctrl+1" onClick={() => runAction('zoom100')}>
           {formatZoom(zoom)}
         </button>
         <button type="button" className="icon-btn" aria-label={t('action.zoomFit')} data-tip={t('action.zoomFit')} data-kbd="Ctrl+0" onClick={() => runAction('zoomFit')}>

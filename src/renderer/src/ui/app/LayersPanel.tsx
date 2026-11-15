@@ -98,9 +98,6 @@ function LayerRow({
       className={`layer-row ${active ? 'active' : ''} ${drop ? `drop-${drop}` : ''} ${node.visible ? '' : 'hidden-layer'}`}
       style={{ paddingLeft: 6 + node.depth * 16 }}
       draggable={!editing}
-      role="option"
-      aria-selected={active}
-      aria-level={node.depth + 1}
       id={`layer-row-${node.id}`}
       onClick={() => engine.layers.setActive(node.id)}
       onDoubleClick={() => setEditing(true)}
@@ -175,7 +172,7 @@ function LayerRow({
           }}
         />
       ) : (
-        <span className="layer-name">
+        <button type="button" className="layer-name" aria-current={active ? 'true' : undefined} onClick={() => engine.layers.setActive(node.id)}>
           {name}
           {node.blend !== 'normal' || node.opacity < 1 ? (
             <span className="layer-meta">
@@ -183,7 +180,7 @@ function LayerRow({
               {node.opacity < 1 ? ` ${Math.round(node.opacity * 100)}%` : ''}
             </span>
           ) : null}
-        </span>
+        </button>
       )}
       <button
         type="button"
@@ -256,13 +253,14 @@ export function LayersPanel() {
     const i = rows.findIndex((r) => r.id === info.activeId);
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       const next = rows[Math.min(rows.length - 1, Math.max(0, i + (e.key === 'ArrowDown' ? 1 : -1)))];
-      if (next) engine.layers.setActive(next.id);
+      if (next) {
+        engine.layers.setActive(next.id);
+        // Keep the keyboard on the selected layer's row.
+        requestAnimationFrame(() => document.querySelector<HTMLElement>(`#layer-row-${CSS.escape(next.id)} .layer-name`)?.focus());
+      }
       e.preventDefault();
     } else if (e.key === 'F2') {
       document.getElementById(`layer-row-${info.activeId}`)?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
-      e.preventDefault();
-    } else if (e.key === ' ' && active) {
-      engine.layers.setProps(active.id, { visible: !active.visible });
       e.preventDefault();
     }
   };
@@ -299,7 +297,7 @@ export function LayersPanel() {
           />
         </div>
       ) : null}
-      <ul className="layer-list" role="listbox" aria-label={t('panel.layers')} tabIndex={0} ref={list} onKeyDown={onKey}>
+      <ul className="layer-list" aria-label={t('panel.layers')} ref={list} onKeyDown={onKey}>
         {rows.map((n) => (
           <LayerRow
             key={n.id}
