@@ -213,4 +213,16 @@ Each item is ticked in the same commit as its work.
 - [x] 3.13 Golden-image tests for every built-in brush; e2e for creating and using a custom brush and for importing/exporting brush packs; `npm run check` green; report
 
 ### Milestone 4 — Polish, accessibility, packaging
-Onboarding, Simple/Full mode, shortcut editor, UI scale, full a11y pass, error handling, 100 MP open, 500-cycle memory test, perf overlay polish, NSIS + portable builds, file associations, README, user guide, changelog, final feature report.
+Make it feel finished and install it. Each item is ticked in the same commit as its work.
+- [ ] 4.1 Settings dialog (File → Settings, Ctrl+,): General (UI scale 80–150 %, Simple/Full mode, replay the welcome tour) and Shortcuts: every action listed and searchable, record a new key combination, remove one, conflicts shown and resolved, reset one or all; stored in settings and used by the keymap, tooltips, menus and the cheat sheet (+ keymap unit tests, e2e)
+- [ ] 4.2 Simple/Full mode: Simple keeps the Paint essentials (Home, Image and View tabs, no Layers panel, no advanced tool options such as symmetry and stabiliser); Full shows everything. Switching never changes the picture or loses settings; toggle in the View tab and Settings (+ e2e)
+- [ ] 4.3 First-run onboarding: a short welcome tour over the real UI (ribbon, tools, colours, canvas, panels, Help), keyboard-driven, skippable, reduced-motion aware, shown once and replayable from Help (+ e2e)
+- [ ] 4.4 Help and About: Help menu (user guide, keyboard shortcuts, welcome tour, About); the About dialog shows every third-party licence from `LICENSES.md` (bundled with the app)
+- [ ] 4.5 Keyboard navigation and focus: F6/Shift+F6 cycle the regions (ribbon, options bar, canvas, side panel, status bar), every control reachable and operable by keyboard, visible focus rings everywhere (+ keyboard-only e2e)
+- [ ] 4.6 ARIA and contrast pass: automated accessibility checks (axe-core) over the main UI, every tab and every dialog in light, dark and high-contrast themes; fix every violation; reduced-motion and Windows contrast themes respected (+ e2e)
+- [ ] 4.7 Friendly error handling everywhere: a React error boundary that offers to save a copy and reload, main-process errors logged to `%APPDATA%\Pigmento\logs` with a plain-language message, every file, codec, worker and IPC failure mapped to a friendly notice, and a guard for images too large for memory (+ tests)
+- [ ] 4.8 Big images and performance: open a 100-megapixel image within a time and memory budget (fix what misses), keep the 500-cycle undo/redo memory test, and polish the performance overlay (frame-time graph, image size, copy the readings) (+ e2e)
+- [ ] 4.9 Packaging: electron-builder config for an NSIS installer (per user) and a portable `.exe`, app icon, `.pigm` file association and "Open with" for PNG, JPEG, BMP, GIF and WebP; `npm run dist` builds both
+- [ ] 4.10 Install the NSIS build and smoke-test it (start, draw, save a `.pigm`, reopen it through the file association, open an image with "Open with", uninstall cleanly)
+- [ ] 4.11 Docs: README with screenshots and build instructions, user guide in `docs/user-guide.md`, `CHANGELOG.md`
+- [ ] 4.12 `npm run check` clean; final report listing every feature from the brief with its status
