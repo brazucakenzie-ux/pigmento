@@ -319,6 +319,17 @@ const base: Action[] = [
     checked: (s) => s.reference?.visible === true,
   },
   { id: 'removeReference', labelKey: 'action.removeReference', icon: 'delete', group: 'view', run: () => engine.clearReference(), enabled: (s) => s.reference !== null },
+  {
+    id: 'simpleMode',
+    labelKey: 'action.simpleMode',
+    icon: 'simple-mode',
+    group: 'view',
+    run: () => {
+      const ui = useUi.getState().settings.ui;
+      updateSettings({ ui: { ...ui, mode: ui.mode === 'simple' ? 'full' : 'simple' } });
+    },
+    checked: (s) => s.settings.ui.mode === 'simple',
+  },
   { id: 'settings', labelKey: 'action.settings', icon: 'settings', group: 'file', shortcut: ['Ctrl+Alt+S'], run: () => openDialog({ kind: 'settings' }) },
   {
     id: 'perfOverlay',

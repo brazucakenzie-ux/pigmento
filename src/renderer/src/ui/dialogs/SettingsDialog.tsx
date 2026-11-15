@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { t, type I18nKey } from '../../i18n';
 import { Dialog } from '../components/Dialog';
-import { Slider } from '../components/Controls';
+import { Segmented, Slider } from '../components/Controls';
 import { Icon } from '../icons/Icon';
 import { actions, type ActionGroup } from '../actions/actions';
 import { comboOf, displayCombo, shortcutActions, shortcutsOf } from '../actions/keymap';
@@ -14,8 +14,24 @@ const GROUPS: ActionGroup[] = ['file', 'edit', 'view', 'tools', 'image', 'colors
 
 function GeneralPage() {
   const scale = useUi((s) => s.settings.ui.scale);
+  const mode = useUi((s) => s.settings.ui.mode);
   return (
     <div className="settings-page">
+      <div className="field">
+        <span className="label">{t('settings.mode')}</span>
+        <div className="row">
+          <Segmented
+            label={t('settings.mode')}
+            value={mode}
+            choices={[
+              { value: 'simple', label: t('mode.simple') },
+              { value: 'full', label: t('mode.full') },
+            ]}
+            onChange={(v) => updateSettings({ ui: { ...useUi.getState().settings.ui, mode: v === 'simple' ? 'simple' : 'full' } })}
+          />
+        </div>
+      </div>
+      <p className="dialog-note">{t('settings.modeHint')}</p>
       <div className="field">
         <span className="label">{t('settings.uiScale')}</span>
         <div className="row">

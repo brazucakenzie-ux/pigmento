@@ -7,6 +7,7 @@ import { Menu, MenuHeading, MenuItem, MenuSeparator, SubMenu } from '../componen
 import { useUi, type RibbonTab } from '../state/store';
 import * as files from '../services/files';
 import { ActionMenuItem } from './ActionMenuItem';
+import { runAction } from '../actions/actions';
 import { ActionButton, MenuButton, RibbonGroup, SplitButton } from './RibbonButton';
 import { ColorsGroup } from './ColorsGroup';
 import { ThemePicker } from './ThemePicker';
@@ -17,6 +18,9 @@ import { Icon } from '../icons/Icon';
 import { brushRegistry } from '@engine/brush/BrushRegistry';
 import { brushTarget } from '../services/brushes';
 import { engine } from '../state/engine';
+
+/** Tabs only Full mode shows. */
+const FULL_ONLY = new Set<RibbonTab>(['shapes', 'brushes', 'effects']);
 
 const TABS: { id: RibbonTab; labelKey: I18nKey }[] = [
   { id: 'home', labelKey: 'tab.home' },
@@ -269,6 +273,7 @@ function EffectsTab() {
 }
 
 function HomeTab() {
+  const simple = useUi((s) => s.settings.ui.mode === 'simple');
   return (
     <>
       <RibbonGroup label={t('group.clipboard')}>
@@ -344,7 +349,7 @@ function HomeTab() {
       <RibbonGroup label={t('group.tools')}>
         <div className="rb-grid">
           <ToolButtons group="tools" variant="compact" />
-          <RetouchMenu />
+          {simple ? null : <RetouchMenu />}
         </div>
       </RibbonGroup>
       <RibbonGroup label={t('group.brushes')}>
@@ -510,15 +515,30 @@ function ViewTab() {
   );
 }
 
+/** Simple ⇄ Full, beside the tabs (so it's never more than a click away). */
+function ModeToggle() {
+  const simple = useUi((s) => s.settings.ui.mode === 'simple');
+  return (
+    <button type="button" className="mode-toggle" aria-pressed={simple} data-tip={t('mode.tip')} onClick={() => runAction('simpleMode')}>
+      <Icon name={simple ? 'simple-mode' : 'full-mode'} size={15} />
+      {t(simple ? 'mode.simple' : 'mode.full')}
+    </button>
+  );
+}
+
 export function Ribbon() {
-  const tab = useUi((s) => s.tab);
+  const simple = useUi((s) => s.settings.ui.mode === 'simple');
+  const tabs = simple ? TABS.filter((tb) => !FULL_ONLY.has(tb.id)) : TABS;
+  const current = useUi((s) => s.tab);
+  // A tab Simple mode hides falls back to Home.
+  const tab = simple && FULL_ONLY.has(current) ? 'home' : current;
   const onTabKey = (e: KeyboardEvent<HTMLButtonElement>, i: number) => {
     // Arrows with Ctrl/Alt are shortcuts (e.g. turning the view), not tab moves.
     if (e.ctrlKey || e.altKey || e.metaKey) return;
     const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
     if (!d) return;
     e.preventDefault();
-    const next = TABS[(i + d + TABS.length) % TABS.length];
+    const next = tabs[(i + d + tabs.length) % tabs.length];
     useUi.setState({ tab: next.id });
     requestAnimationFrame(() => document.getElementById(`tab-${next.id}`)?.focus());
   };
@@ -526,7 +546,7 @@ export function Ribbon() {
     <div className="ribbon" aria-label={t('a11y.ribbon')}>
       <div className="ribbon-tabs" role="tablist" aria-label={t('a11y.ribbon')}>
         <FileMenu />
-        {TABS.map((tb, i) => (
+        {tabs.map((tb, i) => (
           <button
             key={tb.id}
             id={`tab-${tb.id}`}
@@ -543,6 +563,7 @@ export function Ribbon() {
           </button>
         ))}
         <span className="spacer" />
+        <ModeToggle />
         <HelpMenu />
       </div>
       <div className="ribbon-panel" id="ribbon-panel" role="tabpanel" aria-labelledby={`tab-${tab}`}>

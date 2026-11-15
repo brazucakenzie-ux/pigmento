@@ -90,3 +90,37 @@ test('changes the interface size and the keyboard shortcuts, clashes and all', a
   await expect.poll(() => saved().shortcuts).toEqual({});
   await expect.poll(() => saved().ui?.scale).toBe(1.2);
 });
+
+test('Simple mode keeps the Paint essentials, and Full brings everything back', async () => {
+  h = await launchApp();
+  const { page } = h;
+  await ready(page);
+  const layersHead = page.locator('.panel-section-head', { hasText: 'Layers' });
+  await expect(layersHead).toBeVisible();
+  await page.getByRole('tab', { name: 'Effects' }).click();
+
+  await page.getByRole('button', { name: 'Full', exact: true }).click();
+  const toggle = page.getByRole('button', { name: 'Simple', exact: true });
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  // Only Home, Image and View; the hidden tab falls back to Home.
+  await expect(page.getByRole('tab')).toHaveText(['Home', 'Image', 'View']);
+  await expect(page.getByRole('tab', { name: 'Home' })).toHaveAttribute('aria-selected', 'true');
+  await expect(layersHead).toHaveCount(0);
+  await expect(page.locator('.ribbon').getByRole('button', { name: 'Retouch' })).toHaveCount(0);
+  // Fewer brush options: size stays, the stabiliser and symmetry go.
+  await page.keyboard.press('b');
+  const bar = page.locator('.optionsbar');
+  await expect(bar.getByRole('textbox', { name: 'Size' })).toBeVisible();
+  await expect(bar.getByRole('textbox', { name: 'Smoothing' })).toHaveCount(0);
+  await expect(bar.locator('.opt-pop-btn', { hasText: 'Symmetry' })).toHaveCount(0);
+  await expect.poll(() => saved().ui).toEqual({ scale: 1, mode: 'simple' });
+
+  // Full again, from Settings this time.
+  await page.keyboard.press('Control+Alt+s');
+  const dlg = page.getByRole('dialog', { name: 'Settings' });
+  await dlg.getByRole('radio', { name: 'Full' }).click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('tab')).toHaveText(['Home', 'Shapes', 'Brushes', 'Effects', 'Image', 'View']);
+  await expect(layersHead).toBeVisible();
+  await expect(bar.getByRole('textbox', { name: 'Smoothing' })).toBeVisible();
+});

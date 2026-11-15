@@ -19,7 +19,7 @@ export default registerTool(
       BRUSH_OPTION(DEFAULT),
       { key: 'size', type: 'slider', labelKey: 'opt.size', min: 1, max: 400, step: 1, unit: 'px', default: 8, presets: [3, 8, 16, 32], log: true },
       { key: 'opacity', type: 'slider', labelKey: 'opt.opacity', min: 1, max: 100, step: 1, unit: '%', default: 100 },
-      { key: 'flow', type: 'slider', labelKey: 'opt.flow', min: 1, max: 100, step: 1, unit: '%', default: 100 },
+      { key: 'flow', advanced: true, type: 'slider', labelKey: 'opt.flow', min: 1, max: 100, step: 1, unit: '%', default: 100 },
       {
         key: 'hardness',
         type: 'slider',
@@ -33,7 +33,7 @@ export default registerTool(
         visibleIf: (o) => brushRegistry.get(String(o.brushId ?? DEFAULT))?.settings.tip.kind !== 'image',
       },
       SMOOTHING_OPTION,
-      { key: 'pressure', type: 'toggle', labelKey: 'opt.pressure', default: true },
+      { key: 'pressure', advanced: true, type: 'toggle', labelKey: 'opt.pressure', default: true },
     ],
     cursor: () => 'none',
     brush: (ctx) => {

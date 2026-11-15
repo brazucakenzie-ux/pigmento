@@ -369,6 +369,7 @@ function TransformFields() {
 }
 
 export function OptionsBar() {
+  const simple = useUi((s) => s.settings.ui.mode === 'simple');
   const toolId = useUi((s) => s.tool);
   const values = useUi((s) => s.toolOptions[toolId]) ?? engine.options(toolId);
   const live = useUi((s) => s.live);
@@ -377,7 +378,7 @@ export function OptionsBar() {
   const shapeLayer = useUi((s) => findKind(s.layers.tree, s.layers.activeId)) === 'vector';
   const tool = toolRegistry.get(toolId);
   if (!tool) return <div className="optionsbar" />;
-  const visible = tool.id === 'move' && !shapeLayer ? [] : tool.options.filter((o) => !o.visibleIf || o.visibleIf(values));
+  const visible = tool.id === 'move' && !shapeLayer ? [] : tool.options.filter((o) => (!o.visibleIf || o.visibleIf(values)) && !(simple && o.advanced));
   return (
     <div className="optionsbar" role="toolbar" aria-label={t('a11y.toolOptions')}>
       <span className="tool-name">
@@ -396,7 +397,7 @@ export function OptionsBar() {
           <OptionControl key={spec.key} toolId={toolId} spec={spec} values={values} />
         ))}
         {toolId === 'transform' ? <TransformFields /> : null}
-        {tool.symmetry ? <SymmetryControl /> : null}
+        {tool.symmetry && !simple ? <SymmetryControl /> : null}
         <PathBar />
         {toolId === 'move' && shapeLayer ? <SelectedShapeParams /> : null}
         {toolId === 'move' ? <VectorBar /> : null}

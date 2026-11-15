@@ -23,6 +23,7 @@ import {
 /** Draw shapes into the layer's pixels, or as editable objects on a shape layer. */
 export const DRAW_AS_OPTION: OptionSpec = {
   key: 'drawAs',
+  advanced: true,
   type: 'segmented',
   labelKey: 'opt.drawAs',
   default: 'pixels',

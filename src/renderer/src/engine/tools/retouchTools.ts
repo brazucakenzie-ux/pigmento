@@ -7,7 +7,7 @@ import type { OptionSpec, Tool, ToolContext } from './Tool';
 export const STRENGTH = (def: number, labelKey: I18nKey = 'opt.strength'): OptionSpec => ({ key: 'strength', type: 'slider', labelKey, min: 1, max: 100, step: 1, unit: '%', default: def });
 
 const SIZE: OptionSpec = { key: 'size', type: 'slider', labelKey: 'opt.size', min: 1, max: 400, step: 1, unit: 'px', default: 30, presets: [10, 30, 60, 120], log: true };
-const PRESSURE: OptionSpec = { key: 'pressure', type: 'toggle', labelKey: 'opt.pressure', default: true };
+const PRESSURE: OptionSpec = { key: 'pressure', advanced: true, type: 'toggle', labelKey: 'opt.pressure', default: true };
 
 interface RetouchConfig {
   id: string;

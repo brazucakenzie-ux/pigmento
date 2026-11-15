@@ -2648,3 +2648,26 @@ kbd {
   flex-wrap: wrap;
   gap: 6px;
 }
+
+/* Simple/Full toggle beside the ribbon tabs */
+.mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  margin-right: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+.mode-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.mode-toggle[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}

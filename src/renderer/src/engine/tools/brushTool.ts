@@ -57,7 +57,7 @@ export interface BrushToolConfig {
 }
 
 /** The stabiliser slider: smooths strokes by trailing the pointer (0–100 %). */
-export const SMOOTHING_OPTION: OptionSpec = { key: 'smoothing', type: 'slider', labelKey: 'opt.smoothing', min: 0, max: 100, step: 1, unit: '%', default: 0 };
+export const SMOOTHING_OPTION: OptionSpec = { key: 'smoothing', advanced: true, type: 'slider', labelKey: 'opt.smoothing', min: 0, max: 100, step: 1, unit: '%', default: 0 };
 
 /** Which brush a brush tool paints with. */
 export const BRUSH_OPTION = (def: string): OptionSpec => ({ key: 'brushId', type: 'brush', labelKey: 'opt.brush', default: def });

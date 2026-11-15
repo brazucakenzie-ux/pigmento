@@ -132,12 +132,14 @@ function Navigator() {
 
 export function SidePanel() {
   const panels = useUi((s) => s.settings.panels);
+  const simple = useUi((s) => s.settings.ui.mode === 'simple');
   const [width, setWidth] = useState(panels.width);
   useEffect(() => setWidth(panels.width), [panels.width]);
   if (!panels.open) return null;
   const showHistory = panels.visible.history !== false;
   const showNav = panels.visible.navigator !== false;
-  const showLayers = panels.visible.layers !== false;
+  // Simple mode has no Layers panel (the picture keeps its layers).
+  const showLayers = panels.visible.layers !== false && !simple;
   if (!showHistory && !showNav && !showLayers) return null;
 
   const onResize = (e: ReactPointerEvent<HTMLDivElement>) => {

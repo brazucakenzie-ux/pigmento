@@ -35,6 +35,8 @@ interface OptionBase {
   labelKey: I18nKey;
   /** Hide this option unless the predicate on current values holds. */
   visibleIf?: (values: Record<string, unknown>) => boolean;
+  /** Shown only in Full mode (Simple mode keeps the Paint essentials). */
+  advanced?: boolean;
 }
 
 export type OptionSpec =
