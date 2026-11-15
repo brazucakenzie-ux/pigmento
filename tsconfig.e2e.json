@@ -15,5 +15,5 @@
       "@shared/*": ["./src/shared/*"]
     }
   },
-  "include": ["tests/e2e/**/*", "src/shared/**/*"]
+  "include": ["tests/e2e/**/*", "tests/installed/**/*", "src/shared/**/*"]
 }

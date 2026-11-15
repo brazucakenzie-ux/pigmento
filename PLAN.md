@@ -224,6 +224,6 @@ Make it feel finished and install it. Each item is ticked in the same commit as 
 - [x] 4.8 Big images and performance: open a 100-megapixel image within a time and memory budget (fix what misses), keep the 500-cycle undo/redo memory test, and polish the performance overlay (frame-time graph, image size, copy the readings) (+ e2e)
 - Measured on this PC (4.8): a 10000 × 10000 (100 MP) PNG opens and shows in about 2 s; the renderer then uses 1.4 GB (the GPU process holds another 2.2 GB of screen copies). Nothing missed its budget, so no fix was needed.
 - [x] 4.9 Packaging: electron-builder config for an NSIS installer (per user) and a portable `.exe`, app icon, `.pigm` file association and "Open with" for PNG, JPEG, BMP, GIF and WebP; `npm run dist` builds both
-- [ ] 4.10 Install the NSIS build and smoke-test it (start, draw, save a `.pigm`, reopen it through the file association, open an image with "Open with", uninstall cleanly)
+- [x] 4.10 Install the NSIS build and smoke-test it (start, draw, save a `.pigm`, reopen it through the file association, open an image with "Open with", uninstall cleanly)
 - [ ] 4.11 Docs: README with screenshots and build instructions, user guide in `docs/user-guide.md`, `CHANGELOG.md`
 - [ ] 4.12 `npm run check` clean; final report listing every feature from the brief with its status

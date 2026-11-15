@@ -35,5 +35,8 @@
   !insertmacro PigmentoRemoveOpenWith "webp"
   DeleteRegKey HKCU "Software\Classes\Pigmento.Image"
   DeleteRegKey HKCU "Software\Classes\Applications\Pigmento.exe"
+  ; .pigm is Pigmento's own format, so its registration goes too (the builder only removes the type).
+  DeleteRegKey HKCU "Software\Classes\.pigm"
+  DeleteRegKey HKCU "Software\Classes\Pigmento.Project"
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
 !macroend
