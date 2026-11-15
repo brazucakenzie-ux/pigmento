@@ -267,6 +267,7 @@ export function CanvasArea() {
       <div
         ref={host}
         className={`canvas-host ${dropping ? 'drop-target' : ''}`}
+        data-tour="canvas"
         role="application"
         aria-label={t('a11y.canvas')}
         tabIndex={-1}

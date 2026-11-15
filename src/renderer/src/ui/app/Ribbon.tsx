@@ -108,11 +108,12 @@ function HelpMenu() {
   const close = useCallback(() => setOpen(false), []);
   return (
     <>
-      <button ref={ref} type="button" className="ribbon-tab" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+      <button ref={ref} type="button" className="ribbon-tab" data-tour="help" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         {t('help.menu')}
       </button>
       <Menu anchor={ref} open={open} onClose={close} label={t('help.menu')}>
         <ActionMenuItem id="shortcuts" close={close} />
+        <ActionMenuItem id="welcomeTour" close={close} />
         <ActionMenuItem id="about" close={close} />
       </Menu>
     </>
@@ -346,7 +347,7 @@ function HomeTab() {
           </MenuButton>
         </div>
       </RibbonGroup>
-      <RibbonGroup label={t('group.tools')}>
+      <RibbonGroup label={t('group.tools')} tour="tools">
         <div className="rb-grid">
           <ToolButtons group="tools" variant="compact" />
           {simple ? null : <RetouchMenu />}
@@ -363,7 +364,7 @@ function HomeTab() {
           <ToolButtons group="shapes" variant="compact" />
         </div>
       </RibbonGroup>
-      <RibbonGroup label={t('group.colors')}>
+      <RibbonGroup label={t('group.colors')} tour="colors">
         <ColorsGroup />
       </RibbonGroup>
     </>
@@ -519,7 +520,7 @@ function ViewTab() {
 function ModeToggle() {
   const simple = useUi((s) => s.settings.ui.mode === 'simple');
   return (
-    <button type="button" className="mode-toggle" aria-pressed={simple} data-tip={t('mode.tip')} onClick={() => runAction('simpleMode')}>
+    <button type="button" className="mode-toggle" data-tour="mode" aria-pressed={simple} data-tip={t('mode.tip')} onClick={() => runAction('simpleMode')}>
       <Icon name={simple ? 'simple-mode' : 'full-mode'} size={15} />
       {t(simple ? 'mode.simple' : 'mode.full')}
     </button>

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
-import { launchApp, ready, type AppHandle } from './harness';
+import { launchApp, ready, relaunch, type AppHandle } from './harness';
 
 let h: AppHandle;
 
@@ -12,7 +12,7 @@ test.afterEach(async () => {
   h = undefined as unknown as AppHandle;
 });
 
-const saved = (): { shortcuts?: Record<string, string[]>; ui?: { scale: number } } => {
+const saved = (): { shortcuts?: Record<string, string[]>; ui?: { scale: number; mode?: string; tour?: boolean } } => {
   try {
     return JSON.parse(readFileSync(path.join(h.userData, 'settings.json'), 'utf8')) as ReturnType<typeof saved>;
   } catch {
@@ -113,7 +113,7 @@ test('Simple mode keeps the Paint essentials, and Full brings everything back', 
   await expect(bar.getByRole('textbox', { name: 'Size' })).toBeVisible();
   await expect(bar.getByRole('textbox', { name: 'Smoothing' })).toHaveCount(0);
   await expect(bar.locator('.opt-pop-btn', { hasText: 'Symmetry' })).toHaveCount(0);
-  await expect.poll(() => saved().ui).toEqual({ scale: 1, mode: 'simple' });
+  await expect.poll(() => saved().ui?.mode).toBe('simple');
 
   // Full again, from Settings this time.
   await page.keyboard.press('Control+Alt+s');
@@ -123,4 +123,55 @@ test('Simple mode keeps the Paint essentials, and Full brings everything back', 
   await expect(page.getByRole('tab')).toHaveText(['Home', 'Shapes', 'Brushes', 'Effects', 'Image', 'View']);
   await expect(layersHead).toBeVisible();
   await expect(bar.getByRole('textbox', { name: 'Smoothing' })).toBeVisible();
+});
+
+test('shows a welcome tour on the first run only, and again from Help', async () => {
+  // Tests normally skip the first-run tour; this one asks for it.
+  process.env.PIGMENTO_E2E_TOUR = '1';
+  try {
+    h = await launchApp();
+    const { page } = h;
+    await ready(page);
+    const tour = page.locator('dialog.tour');
+    await expect(tour).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Welcome to Pigmento' })).toContainText('1 of 7');
+    // The mode can be chosen right away.
+    await tour.getByRole('radio', { name: 'Simple' }).click();
+    await expect.poll(() => saved().ui?.mode).toBe('simple');
+    await tour.getByRole('radio', { name: 'Full' }).click();
+
+    // Each stop highlights its part of the window.
+    await tour.getByRole('button', { name: 'Next' }).click();
+    await expect(page.getByRole('dialog', { name: 'Tools' })).toBeVisible();
+    const hole = (await tour.locator('.tour-hole').boundingBox())!;
+    const tools = (await page.locator('[data-tour="tools"]').boundingBox())!;
+    expect(Math.abs(hole.x + 6 - tools.x)).toBeLessThan(2);
+    expect(Math.abs(hole.width - 12 - tools.width)).toBeLessThan(2);
+    await page.keyboard.press('ArrowRight');
+    await expect(page.getByRole('dialog', { name: 'Colours' })).toBeVisible();
+    await page.keyboard.press('ArrowLeft');
+    await expect(page.getByRole('dialog', { name: 'Tools' })).toBeVisible();
+    // Esc skips it, and it's remembered.
+    await page.keyboard.press('Escape');
+    await expect(tour).toHaveCount(0);
+    await expect.poll(() => saved().ui?.tour).toBe(true);
+
+    // Not again on the next start…
+    await h.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().forEach((w) => w.destroy()));
+    h = await relaunch(h);
+    await ready(h.page);
+    await expect(h.page.locator('.ribbon')).toBeVisible();
+    await expect(h.page.locator('dialog.tour')).toHaveCount(0);
+  } finally {
+    delete process.env.PIGMENTO_E2E_TOUR;
+  }
+  // …but Help has it, all the way to the end.
+  const { page } = h;
+  await page.getByRole('button', { name: 'Help' }).click();
+  await page.getByRole('menuitem', { name: 'Welcome tour' }).click();
+  const tour = page.locator('dialog.tour');
+  for (let i = 0; i < 6; i++) await tour.getByRole('button', { name: 'Next' }).click();
+  await expect(page.getByRole('dialog', { name: 'Help' })).toContainText('7 of 7');
+  await tour.getByRole('button', { name: 'Start painting' }).click();
+  await expect(tour).toHaveCount(0);
 });

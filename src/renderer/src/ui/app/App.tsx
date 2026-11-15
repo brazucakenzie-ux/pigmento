@@ -9,6 +9,7 @@ import { ExportDialog } from '../dialogs/ExportDialog';
 import { GradientDialog } from '../dialogs/GradientDialog';
 import { FilterDialog } from '../dialogs/FilterDialog';
 import { SettingsDialog } from '../dialogs/SettingsDialog';
+import { WelcomeTour } from './WelcomeTour';
 import { DeleteShapeDialog, SaveShapeDialog } from '../dialogs/ShapeDialogs';
 import { loadCustomShapes } from '../services/shapes';
 import { loadCustomBrushes } from '../services/brushes';
@@ -166,6 +167,7 @@ async function loadFonts(): Promise<void> {
 }
 
 export function App() {
+  const tour = useUi((s) => s.tour);
   const ready = useUi((s) => s.ready);
   const panelsLeft = useUi((s) => s.settings.panels.side === 'left');
   const statusBar = useUi((s) => s.settings.view.statusBar);
@@ -187,7 +189,7 @@ export function App() {
       useUi.setState({ settings, system, recent });
       bindEngine(settings);
       if (info.isE2E) installTestHook();
-      useUi.setState({ ready: true });
+      useUi.setState({ ready: true, tour: info.firstRunTour && !settings.ui.tour });
       void loadFonts();
       void loadSavedPatterns();
       void loadCustomShapes();
@@ -255,6 +257,7 @@ export function App() {
       </div>
       {statusBar ? <StatusBar /> : <div />}
       <DialogHost />
+      {tour ? <WelcomeTour /> : null}
       <Toasts />
       <TooltipLayer />
     </div>

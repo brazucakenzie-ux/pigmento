@@ -621,3 +621,23 @@ test('capture settings', async () => {
     await h.close();
   }
 });
+
+test('capture welcome tour', async () => {
+  test.skip(!process.env.PIGMENTO_SCREENSHOT, 'Set PIGMENTO_SCREENSHOT=1 to capture screenshots');
+  const out = process.env.PIGMENTO_SCREENSHOT_DIR ?? path.resolve('test-results');
+  process.env.PIGMENTO_E2E_TOUR = '1';
+  const h = await launchApp();
+  delete process.env.PIGMENTO_E2E_TOUR;
+  const { page } = h;
+  try {
+    await ready(page);
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: path.join(out, 'tour-welcome.png') });
+    await page.locator('dialog.tour').getByRole('button', { name: 'Next' }).click();
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: path.join(out, 'tour-tools.png') });
+    console.warn('errors:', JSON.stringify(h.errors));
+  } finally {
+    await h.close();
+  }
+});

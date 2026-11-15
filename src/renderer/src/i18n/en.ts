@@ -3,6 +3,7 @@ import { brushesEn } from './brushes.en';
 import { filtersEn } from './filters.en';
 import { viewEn } from './view.en';
 import { settingsEn } from './settings.en';
+import { tourEn } from './tour.en';
 
 /** English strings. Keys are grouped by area; placeholders use {name}. */
 export const en = {
@@ -855,4 +856,5 @@ export const en = {
   ...filtersEn,
   ...viewEn,
   ...settingsEn,
+  ...tourEn,
 } as const;

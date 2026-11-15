@@ -143,9 +143,9 @@ export function SplitButton({
   );
 }
 
-export function RibbonGroup({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
+export function RibbonGroup({ label, children, className, tour }: { label: string; children: ReactNode; className?: string; tour?: string }) {
   return (
-    <div className={`ribbon-group${className ? ` ${className}` : ''}`} role="group" aria-label={label}>
+    <div className={`ribbon-group${className ? ` ${className}` : ''}`} role="group" aria-label={label} data-tour={tour}>
       <div className="ribbon-group-body">{children}</div>
       <div className="ribbon-group-label" aria-hidden="true">
         {label}

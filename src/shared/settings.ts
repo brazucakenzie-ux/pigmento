@@ -115,8 +115,15 @@ export const SettingsSchema = z.object({
   resample: z.enum(['nearest', 'bilinear', 'bicubic']).default('bicubic'),
   /** Keyboard shortcuts the user changed: action id → its key combinations ([] = none). */
   shortcuts: z.record(z.string().max(80), z.array(z.string().max(40).regex(SHORTCUT_COMBO)).max(4)).default({}),
-  /** The interface: its scale (80–150 %), and Simple (the Paint essentials) or Full. */
-  ui: z.object({ scale: z.number().min(0.8).max(1.5).default(1), mode: z.enum(['simple', 'full']).default('full') }).default({ scale: 1, mode: 'full' }),
+  /** The interface: its scale (80–150 %), Simple (the Paint essentials) or Full, and the tour. */
+  ui: z
+    .object({
+      scale: z.number().min(0.8).max(1.5).default(1),
+      mode: z.enum(['simple', 'full']).default('full'),
+      /** The welcome tour has been seen (or skipped). */
+      tour: z.boolean().default(false),
+    })
+    .default({ scale: 1, mode: 'full', tour: false }),
   window: z
     .object({
       x: z.number().optional(),

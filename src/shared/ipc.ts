@@ -104,6 +104,8 @@ export interface AppInfo {
   chrome: string;
   node: string;
   isE2E: boolean;
+  /** The first-run tour may show (always outside tests; in tests only when asked for). */
+  firstRunTour: boolean;
   isPackaged: boolean;
   userData: string;
 }

@@ -366,6 +366,7 @@ export function registerIpc(): void {
       chrome: process.versions.chrome,
       node: process.versions.node,
       isE2E: process.env.PIGMENTO_E2E === '1',
+      firstRunTour: process.env.PIGMENTO_E2E !== '1' || process.env.PIGMENTO_E2E_TOUR === '1',
       isPackaged: app.isPackaged,
       userData: app.getPath('userData'),
     }),

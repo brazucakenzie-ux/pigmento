@@ -163,7 +163,7 @@ export function SidePanel() {
   };
 
   return (
-    <aside className="sidepanel" style={{ width }} aria-label={t('action.panels')}>
+    <aside className="sidepanel" data-tour="panels" style={{ width }} aria-label={t('action.panels')}>
       <div
         className="resizer"
         role="separator"
