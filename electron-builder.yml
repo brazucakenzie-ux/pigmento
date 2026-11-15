@@ -1,0 +1,46 @@
+# Packaging for Windows 11: an NSIS installer (per user, no admin rights) and a portable .exe.
+# Build with `npm run dist` (it runs `npm run build` first). Output goes to dist/.
+appId: app.pigmento
+productName: Pigmento
+copyright: Copyright © 2026 brazucakenzie
+directories:
+  output: dist
+  buildResources: build
+# electron-vite bundles everything the app needs into out/; no node_modules are shipped.
+files:
+  - out/**/*
+  - package.json
+extraResources:
+  - from: LICENSES.md
+    to: LICENSES.md
+asar: true
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  icon: build/icon.ico
+  # The executable's name in the installer and on disk.
+  executableName: Pigmento
+# The native format is associated with Pigmento. Common image formats only get an "Open with"
+# entry (build/installer.nsh), so Pigmento never takes over your usual image viewer.
+fileAssociations:
+  - ext: pigm
+    name: Pigmento.Project
+    description: Pigmento project
+    icon: build/icon.ico
+    role: Editor
+nsis:
+  oneClick: true
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Pigmento
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  uninstallDisplayName: Pigmento
+  include: build/installer.nsh
+  deleteAppDataOnUninstall: false
+portable:
+  artifactName: Pigmento-${version}-portable.exe

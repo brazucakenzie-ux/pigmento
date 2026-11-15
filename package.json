@@ -1,7 +1,7 @@
 {
   "name": "pigmento",
   "productName": "Pigmento",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Pigmento: Paint simply. Create boldly.",
   "main": "./out/main/index.js",
   "author": "brazucakenzie",
@@ -20,7 +20,8 @@
     "e2e": "npm run build && playwright test",
     "check": "npm run lint && npm run typecheck && npm run test && npm run e2e",
     "icons": "node scripts/build-icons.mjs",
-    "typecheck:e2e": "tsc --noEmit -p tsconfig.e2e.json"
+    "typecheck:e2e": "tsc --noEmit -p tsconfig.e2e.json",
+    "dist": "npm run build && electron-builder --win --publish never"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",
@@ -33,6 +34,7 @@
     "@vitejs/plugin-react": "^6.2.1",
     "axe-core": "^4.14.0",
     "electron": "^45.2.3",
+    "electron-builder": "^26.18.0",
     "electron-vite": "^6.0.0",
     "eslint": "^10.14.0",
     "eslint-plugin-react-hooks": "^7.1.1",
