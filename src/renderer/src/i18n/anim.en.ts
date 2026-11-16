@@ -72,5 +72,6 @@ export const animEn = {
   'notice.mergePiecesBelow': 'The layer below has animated pieces, which would end up in front of this layer. Move or delete those pieces first.',
   'notice.mergePiecesBlend': 'The moved pieces now show without the merged layer’s blend mode.',
   'notice.flattenPieces': 'Animated pieces each need a layer to move on, so the picture can’t be flattened. Delete the pieces, or hide their layers, first.',
+  'notice.savedFrame': 'Saved frame {n} as the still picture {name}. Save as a Pigmento project (.pigm) to keep the animation.',
   'notice.animatePixelsOnly': 'Pieces can only come from a pixel layer. Rasterise the layer first.',
 } as const;

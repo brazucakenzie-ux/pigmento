@@ -108,6 +108,9 @@ async function loadBytes(path: string, bytes: Uint8Array, name: string): Promise
   if (formatFromPath(path) === 'pigm' || isZip(bytes)) {
     try {
       engine.loadDocument(await loadProject(bytes, pngCodec));
+      // An animated project opens with its timeline showing.
+      const anim = useUi.getState().settings.anim;
+      if (engine.anim.animated && !anim.timeline) updateSettings({ anim: { ...anim, timeline: true } });
     } catch (err) {
       if (err instanceof ProjectError && err.key !== 'error.tooLarge') showToast({ kind: 'error', key: err.key, params: { name } });
       else reportError(err);
@@ -186,7 +189,8 @@ async function writeTo(path: string, format: FileFormat, fromSaveAs: boolean): P
         if (q === null) return false;
         quality = q;
       }
-      complete = !layers && !selections;
+      // A still picture holds one frame of an animation; the document stays unsaved.
+      complete = !layers && !selections && !engine.anim.animated;
       bytes = await encodeFlattened(format, quality);
     }
     await window.pigmento.files.write(path, bytes);
@@ -198,7 +202,8 @@ async function writeTo(path: string, format: FileFormat, fromSaveAs: boolean): P
   useUi.setState({ file: { path, name, format } });
   window.pigmento.window.setDocState({ dirty: !complete, hasFile: true });
   void window.pigmento.recent.add(path).catch(() => undefined);
-  showToast({ kind: 'info', key: 'notice.saved', params: { name } });
+  if (format !== 'pigm' && engine.anim.animated) showToast({ kind: 'info', key: 'notice.savedFrame', params: { name, n: engine.anim.frame + 1 } });
+  else showToast({ kind: 'info', key: 'notice.saved', params: { name } });
   return true;
 }
 

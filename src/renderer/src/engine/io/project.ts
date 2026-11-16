@@ -32,13 +32,17 @@ import {
 } from '../vector/style';
 import { Surface } from '../raster/Surface';
 import { MAX_DIMENSION, MAX_PIXELS } from './protocol';
+import { EASINGS, type Easing, type Keyframe } from '../anim/interpolate';
+import { MAX_KEYFRAMES, MAX_PIECES, newPieceId, type Piece } from '../anim/piece';
+import { LOOP_MODES, MAX_FPS, MAX_FRAMES, MIN_FPS, clampFrame, type LoopMode } from '../anim/timeline';
 
 /**
  * The `.pigm` project format: a zip holding `document.json` (described by the schemas below)
  * and one PNG per raster layer, cropped to the layer's content. See docs/project-format.md.
  */
 export const PROJECT_MAGIC = 'pigmento-project';
-export const PROJECT_VERSION = 1;
+/** Version 2 adds animation; a picture without any is still written as version 1, which 1.0 opens. */
+export const PROJECT_VERSION = 2;
 
 const MAX_LAYERS = 2000;
 const MAX_DEPTH = 64;
@@ -266,6 +270,37 @@ const LayerJsonSchema: z.ZodType<LayerJson> = z.lazy(() =>
   ]),
 );
 
+const PIECE_FILE = /^pieces\/\d{1,6}\.png$/;
+const KeyframeJson = z.object({
+  frame: int.min(0).max(MAX_FRAMES - 1),
+  x: num,
+  y: num,
+  sx: z.number().min(-1000).max(1000),
+  sy: z.number().min(-1000).max(1000),
+  angle: z.number().min(-1e6).max(1e6),
+  skew: z.number().min(-1.5).max(1.5),
+  opacity: z.number().min(0).max(1),
+  easing: z.enum(EASINGS as [Easing, ...Easing[]]),
+  in: PointJson.nullable(),
+  out: PointJson.nullable(),
+});
+const PieceJson = z.object({
+  id: z.string().min(1).max(100),
+  name: z.string().max(200),
+  layerId: z.string().min(1).max(100),
+  image: z.object({ file: z.string().regex(PIECE_FILE), w: int.min(1).max(MAX_DIMENSION), h: int.min(1).max(MAX_DIMENSION) }),
+  home: z.object({ x: num, y: num, w: num, h: num }),
+  pivot: PointJson,
+  keyframes: z.array(KeyframeJson).min(1).max(MAX_KEYFRAMES),
+});
+const AnimationJson = z.object({
+  fps: int.min(MIN_FPS).max(MAX_FPS),
+  length: int.min(1).max(MAX_FRAMES),
+  loop: z.enum(LOOP_MODES as [LoopMode, ...LoopMode[]]),
+  frame: int.min(0).max(MAX_FRAMES - 1),
+  pieces: z.array(PieceJson).max(MAX_PIECES),
+});
+
 export const DocumentJsonSchema = z.object({
   format: z.literal(PROJECT_MAGIC),
   version: int.min(1),
@@ -287,6 +322,8 @@ export const DocumentJsonSchema = z.object({
     .array(z.object({ axis: z.enum(['x', 'y']), pos: z.number().min(-MAX_DIMENSION).max(2 * MAX_DIMENSION) }))
     .max(1000)
     .optional(),
+  /** Version 2: the timeline and animated pieces; optional. */
+  animation: AnimationJson.optional(),
 });
 
 export type DocumentJson = z.infer<typeof DocumentJsonSchema>;
@@ -356,9 +393,28 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
     files[file] = [await codec.encode(a.data, a.w, a.h), { level: 0 }];
     assets.push({ id, file, w: a.w, h: a.h });
   }
+  // Animated pieces on pixel layers that are still there.
+  const rasterIds = new Set(doc.rasterLayers().map((l) => l.id));
+  const pieces: NonNullable<DocumentJson['animation']>['pieces'] = [];
+  for (const p of doc.pieces) {
+    if (!rasterIds.has(p.layerId)) continue;
+    const file = `pieces/${String(pieces.length + 1).padStart(4, '0')}.png`;
+    files[file] = [await codec.encode(p.src.data, p.src.w, p.src.h), { level: 0 }];
+    pieces.push({
+      id: p.id,
+      name: p.name,
+      layerId: p.layerId,
+      image: { file, w: p.src.w, h: p.src.h },
+      home: { ...p.home },
+      pivot: { ...p.pivot },
+      keyframes: p.keyframes.map((k) => ({ ...k, in: k.in && { ...k.in }, out: k.out && { ...k.out } })),
+    });
+  }
+  const t = doc.timeline;
+  const animation = pieces.length ? { fps: t.fps, length: t.length, loop: t.loop, frame: t.frame, pieces } : null;
   const json: DocumentJson = {
     format: PROJECT_MAGIC,
-    version: PROJECT_VERSION,
+    version: animation ? PROJECT_VERSION : 1,
     width: doc.width,
     height: doc.height,
     dpi: doc.dpi,
@@ -368,6 +424,7 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
     ...(selections.length ? { selections } : {}),
     ...(assets.length ? { assets } : {}),
     ...(doc.guides.length ? { guides: doc.guides.map((g) => ({ axis: g.axis, pos: g.pos })) } : {}),
+    ...(animation ? { animation } : {}),
   };
   files['document.json'] = [strToU8(JSON.stringify(json, null, 1)), { level: 6 }];
   if (thumbnail) files['thumbnail.png'] = [thumbnail, { level: 0 }];
@@ -387,7 +444,7 @@ function unzipSafely(bytes: Uint8Array): Record<string, Uint8Array> {
       filter: (f) => {
         entries++;
         total += f.originalSize;
-        if (entries > MAX_LAYERS + MAX_SAVED_SELECTIONS + MAX_ASSETS + 16 || f.originalSize > MAX_ENTRY_BYTES || total > MAX_TOTAL_BYTES) {
+        if (entries > MAX_LAYERS + MAX_SAVED_SELECTIONS + MAX_ASSETS + MAX_PIECES + 16 || f.originalSize > MAX_ENTRY_BYTES || total > MAX_TOTAL_BYTES) {
           throw new ProjectError('error.projectInvalid', 'Archive is too large');
         }
         return (
@@ -395,6 +452,7 @@ function unzipSafely(bytes: Uint8Array): Record<string, Uint8Array> {
           /^layers\/\d{1,6}\.png$/.test(f.name) ||
           /^selections\/\d{1,6}\.png$/.test(f.name) ||
           /^assets\/\d{1,6}\.png$/.test(f.name) ||
+          PIECE_FILE.test(f.name) ||
           f.name === 'thumbnail.png'
         );
       },
@@ -490,7 +548,42 @@ export async function loadProject(bytes: Uint8Array, codec: PngCodec): Promise<P
   }
   doc.savedSelections = saved;
   doc.guides = (json.guides ?? []).map((g) => guide(g.axis, g.pos));
+  if (json.animation) await readAnimation(doc, json.animation, files, codec);
   return doc;
+}
+
+/** The timeline and pieces of a version 2 project. Pieces on missing or non-pixel layers are left out. */
+async function readAnimation(doc: PaintDocument, a: NonNullable<DocumentJson['animation']>, files: Record<string, Uint8Array>, codec: PngCodec): Promise<void> {
+  doc.timeline = { fps: a.fps, length: a.length, loop: a.loop, frame: clampFrame(a.frame, a.length) };
+  const rasters = new Set(doc.rasterLayers().map((l) => l.id));
+  const ids = new Set<string>();
+  const pieces: Piece[] = [];
+  for (const p of a.pieces) {
+    if (!rasters.has(p.layerId)) continue;
+    if (p.image.w * p.image.h > MAX_PIXELS) throw new ProjectError('error.projectInvalid', `${p.image.file} is too large`);
+    const png = files[p.image.file];
+    if (!png) throw new ProjectError('error.projectInvalid', `${p.image.file} missing`);
+    const img = await codec.decode(png);
+    if (img.w !== p.image.w || img.h !== p.image.h) throw new ProjectError('error.projectInvalid', `${p.image.file} has the wrong size`);
+    // One keyframe per frame, in order, inside the timeline (the last one given for a frame wins).
+    const byFrame = new Map<number, Keyframe>();
+    for (const k of p.keyframes) {
+      const frame = clampFrame(k.frame, a.length);
+      byFrame.set(frame, { ...k, frame, in: k.in && { ...k.in }, out: k.out && { ...k.out } });
+    }
+    const id = ids.has(p.id) ? newPieceId() : p.id;
+    ids.add(id);
+    pieces.push({
+      id,
+      name: p.name,
+      layerId: p.layerId,
+      src: { w: img.w, h: img.h, data: img.data },
+      home: { ...p.home },
+      pivot: { ...p.pivot },
+      keyframes: [...byFrame.values()].sort((x, y) => x.frame - y.frame),
+    });
+  }
+  doc.pieces = pieces;
 }
 
 /** The embedded preview, if present (for the crash-recovery list). */

@@ -243,7 +243,7 @@ Decisions: pieces come only from pixel layers; shape layers and text aren't fram
 - [x] 5.4 Animate tool (A): select a piece, handles (move, scale, stretch, rotate, skew), pivot handle, auto-key, options-bar fields (X, Y, W %, H %, rotation, skew, opacity, easing)
 - [x] 5.5 Timeline panel (View → Timeline, docked above the status bar, resizable, remembered, hidden in Simple mode): ruler and playhead scrubbing, keyframe rows (drag to retime, easing, copy, paste, delete), transport, fps, length and loop; F6 region, keyboard and ARIA
 - [x] 5.6 Playback (requestAnimationFrame at the document's fps, skipping frames when slow; landed with the timeline in 5.5); size-changing operations move pieces with the picture (resize, crop, canvas size, trim, flips, turns, free rotate, skew); deleting, duplicating and merging layers keep their pieces right; flatten refuses while visible pieces exist
-- [ ] 5.7 `.pigm` version 2 (timeline, pieces with PNG sources and keyframes; version 1 still opens; format in `docs/project-format.md`); still formats save the current frame with a notice (+ round-trip unit test)
+- [x] 5.7 `.pigm` version 2 (timeline, pieces with PNG sources and keyframes; version 1 still opens; format in `docs/project-format.md`); still formats save the current frame with a notice (+ round-trip unit test)
 - [ ] 5.8 E2e: make a piece, keyframe it, scrub, play, undo, save and reopen; `npm run check` green; report
 
 **Stop 5B — Motion paths and export**

@@ -8,6 +8,7 @@ A `.pigm` file is a ZIP archive. It holds everything needed to reopen an image w
 | `layers/0001.png` … | One PNG per raster layer, cropped to the layer's non-transparent pixels |
 | `selections/0001.png` … | One greyscale PNG per saved selection (white = selected, grey = partly selected) |
 | `assets/0001.png` … | Pictures used by image-filled shapes, one per picture |
+| `pieces/0001.png` … | Version 2: the pixels of each animated piece, at their own size |
 | `thumbnail.png` | Optional preview of the flattened image (up to 256 px) |
 
 Any other entries are ignored.
@@ -122,10 +123,49 @@ The PNG's red channel is the coverage (0–255) and is placed at (`x`, `y`). The
 
 `blend` is one of `normal, multiply, screen, overlay, darken, lighten, color-dodge, color-burn, difference, soft-light, hard-light, hue, saturation, color, luminosity`. Groups composite their children in isolation, then blend the result as one layer.
 
+## Animation (version 2)
+
+A picture with animated pieces is written as version 2, with an `animation` object in `document.json`. A picture without any is still written as version 1, so Pigmento 1.0 opens it. Version 1 files open with a default timeline (12 fps, 24 frames, looping) and no pieces.
+
+```json
+"animation": {
+  "fps": 12,
+  "length": 24,
+  "loop": "loop",
+  "frame": 0,
+  "pieces": [
+    {
+      "id": "piece-1-lx9",
+      "name": "Ball",
+      "layerId": "layer-3-lx1",
+      "image": { "file": "pieces/0001.png", "w": 40, "h": 40 },
+      "home": { "x": 100, "y": 120, "w": 40, "h": 40 },
+      "pivot": { "x": 20, "y": 20 },
+      "keyframes": [
+        { "frame": 0, "x": 120, "y": 140, "sx": 1, "sy": 1, "angle": 0, "skew": 0, "opacity": 1, "easing": "easeOut", "in": null, "out": { "x": 60, "y": -80 } },
+        { "frame": 12, "x": 400, "y": 140, "sx": 1.5, "sy": 1.5, "angle": 6.2832, "skew": 0, "opacity": 1, "easing": "linear", "in": { "x": -60, "y": -80 }, "out": null }
+      ]
+    }
+  ]
+}
+```
+
+- **Timeline:** `fps` is 1–60 and `length` 1–2000 frames. `loop` is `loop`, `once` or `pingpong`, and `frame` is the frame shown (frames count from 0).
+- **Pieces:** a piece is pixels lifted from a selection. `layerId` names the pixel layer it belongs to: it's drawn just above that layer's pixels, inside the layer, so the layer's opacity and blend mode apply to it. `image` holds its pixels and `home` is where they were lifted from. `pivot` is the point it turns and scales around, in the piece's own pixels.
+- **Keyframes:** they're listed by frame, one per frame.
+  - `x`, `y`: where the pivot is, in document pixels.
+  - `sx`, `sy`: the scale along the piece's own axes (negative flips it).
+  - `angle`, `skew`: the turn and horizontal skew, in radians. The angle isn't wrapped, so 4π is two whole turns.
+  - `opacity`: from 0 to 1.
+  - `easing`: how the piece gets to the next keyframe: `linear`, `easeIn`, `easeOut`, `easeInOut` or `hold`.
+  - `out` and `in`: optional handles (relative to the keyframe's position) that bend the motion path towards the next keyframe, and arriving from the previous one.
+- **Between keyframes:** a piece is scaled about its pivot, then skewed, turned, and moved to its position. Before its first keyframe it holds the first one's values; after its last, the last one's.
+
 ## Limits and safety
 - Width and height are at most 30,000 px each and 250 megapixels in total. Files may hold at most 2,000 layers, nested at most 64 deep, 200 saved selections and 256 pictures (each at most 4096 × 4096 px; bigger pictures are scaled down when chosen).
 - Each archive entry is capped at 1 GB uncompressed and the whole archive at 2 GB. PNG sizes must match the sizes recorded for them.
 - Duplicate layer ids are replaced with fresh ones. A file with a newer `version` is refused with a clear message instead of being half-read.
+- A file may hold at most 500 pieces with at most 2,000 keyframes each. Pieces on a layer that's missing or isn't a pixel layer are left out, duplicate piece ids get fresh ones, repeated frames keep the last keyframe given, and frames past the end of the timeline move to its last frame.
 
 ## Autosave
 While a window has unsaved changes, Pigmento writes the same format to `%APPDATA%\Pigmento\autosave\<session>.pigm` every minute. It also writes a `.json` file with the name, original path and time, plus a `.png` preview. A clean close deletes these files. Files left behind at the next start are offered under "Recover unsaved work".
