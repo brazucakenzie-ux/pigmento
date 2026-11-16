@@ -10,7 +10,7 @@ import { closeDialog, updateSettings, useUi } from '../state/store';
 
 export type SettingsPage = 'general' | 'shortcuts';
 const PAGES: SettingsPage[] = ['general', 'shortcuts'];
-const GROUPS: ActionGroup[] = ['file', 'edit', 'view', 'tools', 'image', 'colors'];
+const GROUPS: ActionGroup[] = ['file', 'edit', 'view', 'tools', 'image', 'colors', 'animation'];
 
 function GeneralPage() {
   const scale = useUi((s) => s.settings.ui.scale);

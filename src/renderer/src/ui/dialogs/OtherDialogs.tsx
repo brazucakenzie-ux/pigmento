@@ -186,6 +186,7 @@ const GROUP_LABEL: Record<ActionGroup, I18nKey> = {
   tools: 'shortcut.group.tools',
   image: 'shortcut.group.image',
   colors: 'shortcut.group.colors',
+  animation: 'shortcut.group.animation',
 };
 
 export function ShortcutsDialog() {

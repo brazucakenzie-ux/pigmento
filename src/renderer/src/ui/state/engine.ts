@@ -13,6 +13,7 @@ engine.layers.namer = (kind, arg) =>
   kind === 'copy'
     ? t('layer.copy', { name: String(arg) })
     : t(kind === 'group' ? 'layer.group' : kind === 'shapes' ? 'layer.shapes' : 'layer.default', { n: arg });
+engine.anim.namer = (n) => t('piece.defaultName', { n });
 // The start-up document was created before the namer existed.
 for (const l of engine.doc.layers) if (!l.name) l.name = engine.layers.namer('layer', 1);
 
@@ -80,6 +81,7 @@ export function bindEngine(settings: Settings): void {
   engine.on('patterns', (patterns) => useUi.setState({ patterns }));
   engine.on('guides', (guides) => useUi.setState({ guides }));
   engine.on('reference', (reference) => useUi.setState({ reference }));
+  engine.on('animation', (animation) => useUi.setState({ animation }));
   engine.on('symmetry', (symmetry) => {
     useUi.setState({ symmetry });
     // Mode and segments are remembered; the centre belongs to the image.

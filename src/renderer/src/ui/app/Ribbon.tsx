@@ -20,13 +20,14 @@ import { brushTarget } from '../services/brushes';
 import { engine } from '../state/engine';
 
 /** Tabs only Full mode shows. */
-const FULL_ONLY = new Set<RibbonTab>(['shapes', 'brushes', 'effects']);
+const FULL_ONLY = new Set<RibbonTab>(['shapes', 'brushes', 'effects', 'animate']);
 
 const TABS: { id: RibbonTab; labelKey: I18nKey }[] = [
   { id: 'home', labelKey: 'tab.home' },
   { id: 'shapes', labelKey: 'tab.shapes' },
   { id: 'brushes', labelKey: 'tab.brushes' },
   { id: 'effects', labelKey: 'tab.effects' },
+  { id: 'animate', labelKey: 'tab.animate' },
   { id: 'image', labelKey: 'tab.image' },
   { id: 'view', labelKey: 'tab.view' },
 ];
@@ -272,6 +273,17 @@ function EffectsTab() {
         </RibbonGroup>
       ))}
     </>
+  );
+}
+
+function AnimateTab() {
+  return (
+    <RibbonGroup label={t('group.pieces')}>
+      <ActionButton id="animateSelection" />
+      <div className="rb-stack">
+        <ActionButton id="animKeepOriginal" variant="small" />
+      </div>
+    </RibbonGroup>
   );
 }
 
@@ -572,7 +584,7 @@ export function Ribbon() {
         <HelpMenu />
       </div>
       <div className="ribbon-panel" id="ribbon-panel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
-        {tab === 'home' ? <HomeTab /> : tab === 'shapes' ? <ShapesTab /> : tab === 'brushes' ? <BrushesTab /> : tab === 'effects' ? <EffectsTab /> : tab === 'image' ? <ImageTab /> : <ViewTab />}
+        {tab === 'home' ? <HomeTab /> : tab === 'shapes' ? <ShapesTab /> : tab === 'brushes' ? <BrushesTab /> : tab === 'effects' ? <EffectsTab /> : tab === 'animate' ? <AnimateTab /> : tab === 'image' ? <ImageTab /> : <ViewTab />}
       </div>
     </div>
   );

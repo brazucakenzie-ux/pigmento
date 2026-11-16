@@ -6,6 +6,7 @@ import { PaintDocument, RasterLayer, VectorLayer, newId, type Layer } from './do
 import { transformSaved } from './doc/savedSelections';
 import { colorRangeMask } from './doc/selectionMath';
 import { LayerController, type LayersInfo } from './doc/LayerController';
+import { AnimationController, type AnimHost, type AnimationInfo } from './anim/AnimationController';
 import { compositeLayers } from './raster/blend';
 import { Selection, type SelectionMode, type SelectionModify } from './doc/Selection';
 import { History, type HistoryEntry } from './history/History';
@@ -200,6 +201,8 @@ export interface EngineEvents {
   symmetry: Symmetry;
   /** The reference image was loaded, moved, changed or removed. */
   reference: ReferenceInfo | null;
+  /** Pieces, keyframes, the timeline or the frame shown changed. */
+  animation: AnimationInfo;
 }
 
 export type Anchor = 'nw' | 'n' | 'ne' | 'w' | 'c' | 'e' | 'sw' | 's' | 'se';
@@ -274,7 +277,7 @@ export interface ExportOptions {
  * The drawing engine facade. The UI talks only to this class: it owns the document, history,
  * rendering, input and tools, and reports state through typed events.
  */
-export class Engine extends Emitter<EngineEvents> implements ToolContext, CommandHost {
+export class Engine extends Emitter<EngineEvents> implements ToolContext, CommandHost, AnimHost {
   doc: PaintDocument;
   readonly history = new History();
   readonly view = new View();
@@ -284,6 +287,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   readonly tools: ToolRegistry = toolRegistry;
   /** Layer operations (add, delete, reorder, merge, properties…). */
   readonly layers = new LayerController(this);
+  /** Animated pieces, keyframes and the timeline. */
+  readonly anim = new AnimationController(this);
   private input: InputController | null = null;
   private host: HTMLElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
@@ -513,6 +518,13 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   layerChanged(layer: RasterLayer, r: Rect | null): void {
     this.renderer.syncLayer(layer, r);
     this.requestRender();
+    this.notifyPixels();
+  }
+
+  animationChanged(r: Rect | null): void {
+    this.renderer.invalidate(r);
+    this.requestRender();
+    this.emit('animation', this.anim.info());
     this.notifyPixels();
   }
 
@@ -1010,6 +1022,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.emitSelectionInfo();
     this.emitHistory();
     this.emit('layers', this.layers.info());
+    this.anim.reset();
+    this.emit('animation', this.anim.info());
     this.requestRender();
     this.notifyPixels();
   }
@@ -1257,6 +1271,49 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       if (m !== 255) data[p * 4 + 3] = (data[p * 4 + 3] * m) / 255;
     }
     return { w: b.w, h: b.h, data };
+  }
+
+  /**
+   * Lift the selection off the active pixel layer as a piece to animate, with a keyframe at the
+   * current frame. The spot it came from becomes transparent unless `keepOriginal`. One undo step.
+   */
+  animateSelection(keepOriginal: boolean): boolean {
+    this.commitLive(true);
+    const sel = this.doc.selection;
+    const layer = this.doc.activeLayer;
+    if (!sel) return false;
+    if (layer.kind !== 'raster') {
+      this.notify('error', 'notice.animatePixelsOnly');
+      return false;
+    }
+    if (layer.locked) {
+      this.notify('error', 'notice.animateLocked');
+      return false;
+    }
+    const src = this.selectionPixels(sel);
+    let visible = false;
+    for (let i = 3; i < src.data.length && !visible; i += 4) visible = src.data[i] > 0;
+    if (!visible) {
+      this.notify('info', 'notice.nothingToAnimate');
+      return false;
+    }
+    if (!this.anim.canAdd()) return false;
+    const added = this.history.group('history.animateSelection', () => {
+      if (!keepOriginal) {
+        const s = layer.surface;
+        s.beginEdit();
+        s.clearRect(sel.bounds, sel.maskView());
+        this.pushPixels('history.animateSelection', layer, s.endEdit(), sel, sel);
+        this.layerChanged(layer, sel.bounds);
+      }
+      const piece = this.anim.add(src, sel.bounds, layer.id);
+      if (piece) {
+        this.history.push(new SelectionCommand('history.animateSelection', this, sel, null));
+        this.setSelection(null);
+      }
+      return piece !== null;
+    });
+    return added;
   }
 
   liftSelection(copy: boolean): FloatObject | null {

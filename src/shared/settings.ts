@@ -115,6 +115,8 @@ export const SettingsSchema = z.object({
   resample: z.enum(['nearest', 'bilinear', 'bicubic']).default('bicubic'),
   /** Keyboard shortcuts the user changed: action id → its key combinations ([] = none). */
   shortcuts: z.record(z.string().max(80), z.array(z.string().max(40).regex(SHORTCUT_COMBO)).max(4)).default({}),
+  /** Animation: whether Animate selection leaves the original pixels in place. */
+  anim: z.object({ keepOriginal: z.boolean().default(false) }).default({ keepOriginal: false }),
   /** The interface: its scale (80–200 %), Simple (the Paint essentials) or Full, and the tour. */
   ui: z
     .object({

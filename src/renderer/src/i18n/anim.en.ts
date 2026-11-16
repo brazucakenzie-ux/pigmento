@@ -1,0 +1,23 @@
+/** Animation: pieces, keyframes and the timeline. */
+export const animEn = {
+  'tab.animate': 'Animate',
+  'group.pieces': 'Pieces',
+  'shortcut.group.animation': 'Animation',
+  'action.animateSelection': 'Animate selection',
+  'action.animKeepOriginal': 'Leave the original',
+  'history.animateSelection': 'Animate selection',
+  'history.pieceRename': 'Rename piece',
+  'history.pieceDelete': 'Delete piece',
+  'history.keyframe': 'Change keyframe',
+  'history.keyframeAdd': 'Add keyframe',
+  'history.keyframeDelete': 'Delete keyframe',
+  'history.keyframeMove': 'Move keyframe',
+  'history.pivot': 'Move pivot',
+  'history.timeline': 'Change timeline',
+  'piece.defaultName': 'Piece {n}',
+  'notice.nothingToAnimate': 'The selection is empty, so there’s nothing to animate.',
+  'notice.tooManyPieces': 'A picture can have at most {max} pieces.',
+  'notice.tooManyKeyframes': 'A piece can have at most {max} keyframes.',
+  'notice.animateLocked': 'This layer is locked. Unlock it to animate part of it.',
+  'notice.animatePixelsOnly': 'Pieces can only come from a pixel layer. Rasterise the layer first.',
+} as const;

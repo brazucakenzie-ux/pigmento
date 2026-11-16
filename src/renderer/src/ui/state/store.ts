@@ -9,6 +9,7 @@ import type { TransformInfo } from '@engine/live/TransformObject';
 import type { PathInfo } from '@engine/live/ShapeObject';
 import type { Symmetry } from '@engine/brush/symmetry';
 import type { ReferenceInfo } from '@engine/tools/Tool';
+import type { AnimationInfo } from '@engine/anim/AnimationController';
 import type { SelectionModify } from '@engine/doc/Selection';
 import type { LayersInfo } from '@engine/doc/LayerController';
 import type { LiveKind } from '@engine/live/LiveObject';
@@ -16,7 +17,7 @@ import type { ViewState } from '@engine/render/View';
 import type { TextEditState, ToolOptions } from '@engine/tools/Tool';
 import type { I18nKey } from '../../i18n';
 
-export type RibbonTab = 'home' | 'shapes' | 'brushes' | 'effects' | 'image' | 'view';
+export type RibbonTab = 'home' | 'shapes' | 'brushes' | 'effects' | 'animate' | 'image' | 'view';
 
 export type DialogState =
   | { kind: 'new' }
@@ -103,6 +104,8 @@ export interface UiState {
   symmetry: Symmetry;
   /** The reference image over the canvas, if any. */
   reference: ReferenceInfo | null;
+  /** Pieces, keyframes, the timeline and the frame shown. */
+  animation: AnimationInfo;
   /** Bumped when personal brushes change (pickers re-read the library). */
   brushLibrary: number;
   patterns: PatternInfo[];
@@ -146,6 +149,7 @@ export const useUi = create<UiState>(() => ({
   shapeLibrary: 0,
   symmetry: { mode: 'off', segments: 6, center: null },
   reference: null,
+  animation: { fps: 12, length: 24, loop: 'loop', frame: 0, pieces: [], selectedId: null },
   brushLibrary: 0,
   patterns: [],
   guides: 0,

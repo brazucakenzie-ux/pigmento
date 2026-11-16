@@ -1,6 +1,7 @@
 import type { RGBA } from '../core/color';
 import { Surface } from '../raster/Surface';
 import { defaultTimeline, type Timeline } from '../anim/timeline';
+import type { Piece } from '../anim/piece';
 import type { Selection } from './Selection';
 import type { Guide } from './guides';
 import type { VectorNode } from '../vector/model';
@@ -197,6 +198,8 @@ export class PaintDocument {
   guides: Guide[] = [];
   /** Animation timing and the frame shown (saved in projects). */
   timeline: Timeline = defaultTimeline();
+  /** Animated pieces, bottom to top within each layer (saved in projects). */
+  pieces: Piece[] = [];
 
   constructor(init: DocumentInit, layers?: Layer[]) {
     this.width = init.width;

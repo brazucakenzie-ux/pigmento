@@ -14,7 +14,7 @@ import { loadReference } from '../services/reference';
 import { filterRegistry } from '@engine/filters/FilterRegistry';
 import { THEME_FAMILIES } from '../theme/themes';
 
-export type ActionGroup = 'file' | 'edit' | 'view' | 'tools' | 'image' | 'colors';
+export type ActionGroup = 'file' | 'edit' | 'view' | 'tools' | 'image' | 'colors' | 'animation';
 
 export interface Action {
   id: string;
@@ -156,6 +156,23 @@ const base: Action[] = [
   { id: 'rotateCw', labelKey: 'action.rotateCw', icon: 'rotate-cw', group: 'image', shortcut: ['Ctrl+Period'], run: safe(() => engine.rotate(1)) },
   { id: 'rotateCcw', labelKey: 'action.rotateCcw', icon: 'rotate-ccw', group: 'image', shortcut: ['Ctrl+Comma'], run: safe(() => engine.rotate(3)) },
   { id: 'rotate180', labelKey: 'action.rotate180', icon: 'rotate-180', group: 'image', run: safe(() => engine.rotate(2)) },
+  // Animation
+  {
+    id: 'animateSelection',
+    labelKey: 'action.animateSelection',
+    icon: 'animate',
+    group: 'animation',
+    run: safe(() => void engine.animateSelection(useUi.getState().settings.anim.keepOriginal)),
+    enabled: hasSelection,
+  },
+  {
+    id: 'animKeepOriginal',
+    labelKey: 'action.animKeepOriginal',
+    icon: 'keep-original',
+    group: 'animation',
+    run: () => updateSettings({ anim: { ...useUi.getState().settings.anim, keepOriginal: !useUi.getState().settings.anim.keepOriginal } }),
+    checked: (s) => s.settings.anim.keepOriginal,
+  },
   { id: 'freeTransform', labelKey: 'action.freeTransform', icon: 'transform', group: 'image', shortcut: ['Ctrl+T'], run: safe(() => void engine.freeTransform()) },
   { id: 'rotateFree', labelKey: 'action.rotateFree', icon: 'rotate-free', group: 'image', run: () => openDialog({ kind: 'rotate' }) },
   { id: 'flipH', labelKey: 'action.flipH', icon: 'flip-h', group: 'image', run: safe(() => engine.flip('h')) },
