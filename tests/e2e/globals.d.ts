@@ -42,10 +42,12 @@ export interface PigmentoTestHook {
     frame: number;
     selectedId: string | null;
     pieces: { id: string; name: string; layerId: string; keys: { frame: number; easing: string }[] }[];
-    current: { x: number; y: number; w: number; h: number; angle: number; skew: number; opacity: number; easing: string; keyed: boolean } | null;
+    current: { x: number; y: number; w: number; h: number; angle: number; skew: number; opacity: number; easing: string; keyed: boolean; curved: boolean } | null;
     playing: boolean;
   };
   animateSelection(keepOriginal?: boolean): boolean;
+  pieceKeys(id: string): { frame: number; x: number; y: number; in: { x: number; y: number } | null; out: { x: number; y: number } | null; easing: string }[];
+  pieceAt(id: string, frame: number): { x: number; y: number; sx: number; sy: number; angle: number; skew: number; opacity: number } | null;
   setFrame(frame: number): void;
   setPieceKey(id: string, frame: number, change: Partial<Record<'x' | 'y' | 'sx' | 'sy' | 'angle' | 'skew' | 'opacity', number>>): boolean;
   addLayer(): string;

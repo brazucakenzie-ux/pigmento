@@ -243,3 +243,54 @@ test('Simple mode hides the Animate tab and the timeline, and keeps the frame on
   await page.getByRole('button', { name: 'Simple', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Timeline' })).toBeVisible();
 });
+
+test('motion paths bend from the canvas, keyframes move there, and straighten again', async () => {
+  const { page } = h;
+  const layerId = await page.evaluate(() => window.__pigmentoTest!.layers().activeId);
+  await page.evaluate((id) => window.__pigmentoTest!.fillLayer(id, { r: 0, g: 160, b: 0, a: 255 }, { x: 200, y: 200, w: 60, h: 40 }), layerId);
+  await page.evaluate(() => window.__pigmentoTest!.selectRect(200, 200, 60, 40));
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  await page.locator('.ribbon').getByRole('button', { name: 'Animate selection' }).click();
+  const id = (await page.evaluate(() => window.__pigmentoTest!.anim())).pieces[0].id;
+  await page.evaluate((pid) => window.__pigmentoTest!.setPieceKey(pid, 10, { x: 630 }), id);
+
+  // Alt-drag the last keyframe's dot upwards: the path now arrives from above.
+  const end = await page.evaluate(() => window.__pigmentoTest!.docToScreen(630, 220));
+  const up = await page.evaluate(() => window.__pigmentoTest!.docToScreen(630, 120));
+  await page.mouse.move(end.x, end.y);
+  await page.keyboard.down('Alt');
+  await page.mouse.down();
+  await page.mouse.move(up.x, up.y, { steps: 6 });
+  await page.mouse.up();
+  await page.keyboard.up('Alt');
+  let keys = await page.evaluate((pid) => window.__pigmentoTest!.pieceKeys(pid), id);
+  expect(keys[1].out).toBeNull();
+  expect(keys[1].in!.y).toBeLessThan(-80);
+  const mid = (await page.evaluate((pid) => window.__pigmentoTest!.pieceAt(pid, 5), id))!;
+  expect(mid.y).toBeLessThan(205);
+  expect((await page.evaluate(() => window.__pigmentoTest!.history())).length).toBeGreaterThan(0);
+
+  // Drag that keyframe's dot (not the frame shown) to move it (after a pause: a quick second
+  // press on a dot is a double-click, which straightens it).
+  await page.waitForTimeout(700);
+  await page.mouse.move(end.x, end.y);
+  await page.mouse.down();
+  const lower = await page.evaluate(() => window.__pigmentoTest!.docToScreen(630, 400));
+  await page.mouse.move(lower.x, lower.y, { steps: 6 });
+  await page.mouse.up();
+  keys = await page.evaluate((pid) => window.__pigmentoTest!.pieceKeys(pid), id);
+  expect(Math.round(keys[1].y)).toBe(400);
+  expect(keys.map((k) => k.frame)).toEqual([0, 10]);
+
+  // Straighten from the options bar at that keyframe.
+  await page.evaluate(() => window.__pigmentoTest!.setFrame(10));
+  const bar = page.getByRole('toolbar', { name: /options/i });
+  await bar.getByRole('button', { name: 'Straighten the motion path at this keyframe' }).click();
+  keys = await page.evaluate((pid) => window.__pigmentoTest!.pieceKeys(pid), id);
+  expect(keys[1].in).toBeNull();
+  await expect(bar.getByRole('button', { name: 'Straighten the motion path at this keyframe' })).toBeDisabled();
+  // Undo brings the bend back.
+  await page.keyboard.press('Control+z');
+  keys = await page.evaluate((pid) => window.__pigmentoTest!.pieceKeys(pid), id);
+  expect(keys[1].in).not.toBeNull();
+});

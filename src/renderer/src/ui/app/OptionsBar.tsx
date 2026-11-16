@@ -435,6 +435,19 @@ function PieceFields() {
           ))}
         </select>
       </label>
+      <button
+        type="button"
+        className="icon-btn"
+        aria-label={t('piece.straighten')}
+        data-tip={t('piece.straighten')}
+        disabled={!info.curved}
+        onClick={() => {
+          const id = engine.anim.selectedId;
+          if (id) engine.anim.straighten(id, engine.anim.frame);
+        }}
+      >
+        <Icon name="line" size={16} />
+      </button>
       <button type="button" className="icon-btn" aria-label={t('transform.flipH')} data-tip={t('transform.flipH')} onClick={() => engine.anim.setFields({ w: -info.w })}>
         <Icon name="flip-h" size={16} />
       </button>

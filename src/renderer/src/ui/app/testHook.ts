@@ -8,6 +8,7 @@ import { openPath } from '../services/files';
 import { autosaveNow } from '../services/autosave';
 import { defaultParams, shapeRegistry } from '@engine/shapes/ShapeRegistry';
 import { paintShape } from '@engine/vector/render';
+import { pieceStateAt } from '@engine/anim/piece';
 
 /** Every built-in shape drawn into its own cell (golden-image tests). */
 async function shapeSheet(cell: number, cols: number): Promise<{ ids: string[]; w: number; h: number; png: number[] }> {
@@ -169,5 +170,10 @@ export function installTestHook(): void {
     setFrame: (frame: number) => engine.anim.setFrame(frame),
     setPieceKey: (id: string, frame: number, change: Partial<Record<'x' | 'y' | 'sx' | 'sy' | 'angle' | 'skew' | 'opacity', number>>) =>
       engine.anim.setKey(id, frame, change),
+    pieceKeys: (id: string) => (engine.anim.piece(id)?.keyframes ?? []).map((k) => ({ ...k })),
+    pieceAt: (id: string, frame: number) => {
+      const p = engine.anim.piece(id);
+      return p ? pieceStateAt(p, frame) : null;
+    },
   };
 }

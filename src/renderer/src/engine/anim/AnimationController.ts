@@ -64,6 +64,8 @@ export interface PieceFields {
   easing: Easing;
   /** There's a keyframe at this frame. */
   keyed: boolean;
+  /** That keyframe bends the motion path. */
+  curved: boolean;
 }
 
 const DEG = 180 / Math.PI;
@@ -189,11 +191,12 @@ export class AnimationController {
       opacity: s.opacity * 100,
       easing: (at ?? before).easing,
       keyed: at !== undefined,
+      curved: at !== undefined && (at.in !== null || at.out !== null),
     };
   }
 
   /** Set the selected piece's values at the current frame (auto-key), in the options bar's units. */
-  setFields(change: Partial<Omit<PieceFields, 'keyed'>>): boolean {
+  setFields(change: Partial<Omit<PieceFields, 'keyed' | 'curved'>>): boolean {
     const p = this.selected;
     if (!p) return false;
     const k: KeyChange = {};
@@ -383,6 +386,17 @@ export class AnimationController {
     }
     return this.change(adding ? 'history.keyframeAdd' : 'history.keyframe', () => {
       p.keyframes = setKey(p.keyframes, frame, change);
+      return true;
+    });
+  }
+
+/** Make the motion path straight again at the keyframe at `frame`. */
+  straighten(id: string, frame: number): boolean {
+    const p = this.piece(id);
+    const k = p?.keyframes.find((q) => q.frame === frame);
+    if (!p || !k || (k.in === null && k.out === null)) return false;
+    return this.change('history.straighten', () => {
+      p.keyframes = setKey(p.keyframes, frame, { in: null, out: null });
       return true;
     });
   }

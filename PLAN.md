@@ -248,7 +248,7 @@ Decisions: pieces come only from pixel layers; shape layers and text aren't fram
 - Stop 5A notes: the timeline is Full mode only; trimming and fitting the canvas look at the frame shown; F6 now carries on from the region it last focused when the focus falls back to the page (the keyboard e2e lost focus under load); the 100-megapixel e2e opens through File → Open, because a shortcut pressed straight after a reload could be missed.
 
 **Stop 5B — Motion paths and export**
-- [ ] 5.9 Curved motion paths: on-canvas handles at keyframes, straighten; nudge keyframes in time
+- [x] 5.9 Curved motion paths: Alt-drag a keyframe dot to bend the path, drag its handles (Alt: one side), drag other keyframes' dots to move them, double-click or Straighten to straighten; keyframes move in time on the timeline (drag, Alt+arrows)
 - [ ] 5.10 Export animation dialog (format, frame range, scale, loop, background, quality) and frame renderer `flattenAt(frame)`, with progress and Cancel
 - [ ] 5.11 Animated GIF streamed through the codec worker (+ e2e decoding with `ImageDecoder`: frame count, delays, pixels)
 - [ ] 5.12 MP4: H.264 feasibility check first, then WebCodecs `VideoEncoder` + `mp4-muxer` in a worker (+ e2e: duration, size and a sampled frame)

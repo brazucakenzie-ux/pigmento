@@ -23,9 +23,21 @@ import type { ToolContext, ToolPointerEvent } from '../Tool';
 /**
  * Animate: click a piece to select it, then drag it to move it, its box handles to scale or
  * stretch it (Ctrl on the top or bottom edge skews), the round handle to turn it, or the pivot
- * to change what it turns around. Every change keys the piece at the frame shown.
+ * to change what it turns around. Every change keys the piece at the frame shown. On its motion
+ * path, drag another keyframe's dot to move that keyframe, Alt-drag a dot to bend the path there,
+ * drag a bend handle to reshape it (Alt: just that side), and double-click a dot to straighten it.
  */
-type Hit = { kind: 'handle'; handle: PieceHandle } | { kind: 'rotate' } | { kind: 'pivot' } | { kind: 'body' };
+type Hit =
+  | { kind: 'handle'; handle: PieceHandle }
+  | { kind: 'rotate' }
+  | { kind: 'pivot' }
+  | { kind: 'body' }
+  /** A keyframe's dot on the motion path. */
+  | { kind: 'key'; frame: number }
+  /** Pulling bend handles out of a keyframe's dot (Alt-drag). */
+  | { kind: 'pull'; frame: number }
+  /** One of a keyframe's bend handles. */
+  | { kind: 'tangent'; frame: number; side: 'in' | 'out' };
 
 interface Drag {
   id: string;
@@ -91,10 +103,22 @@ const near = (a: Point, b: Point, px = HIT_PX): boolean => Math.abs(a.x - b.x) <
 function hitSelected(ctx: ToolContext, p: Piece, e: ToolPointerEvent): Hit | null {
   const g = geometry(ctx, p);
   const sp = { x: e.sx, y: e.sy };
+  const frame = ctx.anim.frame;
+  const keys = p.keyframes.length > 1 ? p.keyframes : [];
+  const dot = (k: Keyframe) => ctx.view.toScreen(k.x, k.y);
+  // Bend handles first: they sit off the path, where nothing else is.
+  for (const k of keys) {
+    for (const side of ['out', 'in'] as const) {
+      const v = k[side];
+      if (v && near(sp, ctx.view.toScreen(k.x + v.x, k.y + v.y))) return { kind: 'tangent', frame: k.frame, side };
+    }
+  }
+  if (e.alt) for (const k of keys) if (near(sp, dot(k))) return { kind: 'pull', frame: k.frame };
   if (near(sp, g.pivot)) return { kind: 'pivot' };
   for (const h of PIECE_HANDLES) if (near(sp, g.handles[h])) return { kind: 'handle', handle: h };
   if (near(sp, g.rotate)) return { kind: 'rotate' };
-  if (insidePiece(p, ctx.anim.frame, e)) return { kind: 'body' };
+  for (const k of keys) if (k.frame !== frame && near(sp, dot(k))) return { kind: 'key', frame: k.frame };
+  if (insidePiece(p, frame, e)) return { kind: 'body' };
   return null;
 }
 
@@ -103,6 +127,7 @@ function cursorFor(hit: Hit | null, g: ScreenGeom | null): string {
   if (hit.kind === 'body') return 'move';
   if (hit.kind === 'pivot') return 'crosshair';
   if (hit.kind === 'rotate') return 'grab';
+  if (hit.kind === 'key' || hit.kind === 'pull' || hit.kind === 'tangent') return 'pointer';
   return handleCursor(hit.handle, g?.angle ?? 0);
 }
 
@@ -122,7 +147,17 @@ function drawPath(ctx: ToolContext, ov: Overlay, p: Piece): void {
     pts.push(ctx.view.toScreen(s.x, s.y));
   }
   ov.outlineScreen(pts, false, true);
-  for (const k of p.keyframes) ov.handle(ctx.view.toScreen(k.x, k.y), 'circle', k.frame === ctx.anim.frame);
+  for (const k of p.keyframes) {
+    const at = ctx.view.toScreen(k.x, k.y);
+    for (const side of ['in', 'out'] as const) {
+      const v = k[side];
+      if (!v) continue;
+      const h = ctx.view.toScreen(k.x + v.x, k.y + v.y);
+      ov.line(at, h);
+      ov.handle(h, 'square', drag?.hit.kind === 'tangent' && drag.hit.frame === k.frame && drag.hit.side === side);
+    }
+    ov.handle(at, 'circle', k.frame === ctx.anim.frame);
+  }
 }
 
 export default registerTool({
@@ -145,6 +180,11 @@ export default registerTool({
     if (e.button !== 0) return;
     let piece = ctx.anim.selected;
     let hit = piece ? hitSelected(ctx, piece, e) : null;
+    // Double-click a keyframe's dot: a straight path there again.
+    if (piece && e.detail === 2 && (hit?.kind === 'key' || hit?.kind === 'pull' || hit?.kind === 'pivot')) {
+      const frame = hit.kind === 'pivot' ? ctx.anim.frame : hit.frame;
+      if (ctx.anim.straighten(piece.id, frame)) return;
+    }
     if (!hit) {
       piece = pieceAt(visiblePieces(ctx), ctx.anim.frame, e);
       ctx.anim.select(piece?.id ?? null);
@@ -169,6 +209,8 @@ export default registerTool({
       pivot0: { ...piece.pivot },
       adding: !piece.keyframes.some((k) => k.frame === frame),
     };
+    // Pulling a bend handle grabs it where the pointer is.
+    if (hit.kind === 'tangent') drag.grab = { x: 0, y: 0 };
     ctx.anim.beginDrag();
   },
   pointerMove(ctx, e) {
@@ -176,6 +218,30 @@ export default registerTool({
     if (!d) return;
     const frame = ctx.anim.frame;
     const p = { x: e.x + d.grab.x, y: e.y + d.grab.y };
+    const hit = d.hit;
+    if (hit.kind === 'key') {
+      const k = d.keys0.find((q) => q.frame === hit.frame);
+      if (!k) return;
+      const at = moveState(k, e.x - d.start.x, e.y - d.start.y, e.shift);
+      ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, hit.frame, { x: at.x, y: at.y })));
+      return;
+    }
+    if (hit.kind === 'pull' || hit.kind === 'tangent') {
+      const i = d.keys0.findIndex((q) => q.frame === hit.frame);
+      const k = d.keys0[i];
+      if (!k) return;
+      const v = { x: e.x - k.x, y: e.y - k.y };
+      const neg = { x: -v.x, y: -v.y };
+      const first = i === 0;
+      const last = i === d.keys0.length - 1;
+      let change: { in?: Point | null; out?: Point | null };
+      // The end keyframes have one side, which follows the pointer; others get a smooth pair.
+      if (hit.kind === 'pull') change = last ? { in: v, out: null } : first ? { out: v, in: null } : { out: v, in: neg };
+      else if (hit.side === 'out') change = e.alt || !k.in ? { out: v } : { out: v, in: neg };
+      else change = e.alt || !k.out ? { in: v } : { in: v, out: neg };
+      ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, hit.frame, change)));
+      return;
+    }
     if (d.hit.kind === 'pivot') {
       const piece = ctx.anim.piece(d.id);
       if (!piece) return;
@@ -196,10 +262,11 @@ export default registerTool({
     const piece = ctx.anim.piece(d.id);
     if (!piece) return;
     const geom = { src: piece.src, pivot: d.pivot0 };
-    if (d.hit.kind === 'body') s = moveState(d.s0, e.x - d.start.x, e.y - d.start.y, e.shift);
-    else if (d.hit.kind === 'rotate') s = rotateState(d.s0, d.start, { x: e.x, y: e.y }, e.shift);
-    else if (e.ctrl && (d.hit.handle === 'n' || d.hit.handle === 's')) s = skewState(d.s0, geom, d.hit.handle, p);
-    else s = scaleState(d.s0, geom, d.hit.handle, p, { shift: e.shift, alt: e.alt });
+    if (hit.kind === 'body') s = moveState(d.s0, e.x - d.start.x, e.y - d.start.y, e.shift);
+    else if (hit.kind === 'rotate') s = rotateState(d.s0, d.start, { x: e.x, y: e.y }, e.shift);
+    else if (hit.kind !== 'handle') return;
+    else if (e.ctrl && (hit.handle === 'n' || hit.handle === 's')) s = skewState(d.s0, geom, hit.handle, p);
+    else s = scaleState(d.s0, geom, hit.handle, p, { shift: e.shift, alt: e.alt });
     const change = stateChange(s);
     ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, frame, change)));
   },
@@ -207,7 +274,8 @@ export default registerTool({
     const d = drag;
     drag = null;
     if (!d) return;
-    ctx.anim.endDrag(d.hit.kind === 'pivot' ? 'history.pivot' : d.adding ? 'history.keyframeAdd' : 'history.keyframe');
+    const k = d.hit.kind;
+    ctx.anim.endDrag(k === 'pivot' ? 'history.pivot' : k === 'pull' || k === 'tangent' ? 'history.motionPath' : d.adding && k !== 'key' ? 'history.keyframeAdd' : 'history.keyframe');
   },
   hover(ctx, e) {
     const sel = ctx.anim.selected;
