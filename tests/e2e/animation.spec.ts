@@ -410,3 +410,48 @@ test('onion skin shows the drawings before and after on screen only', async () =
   await timeline.getByRole('button', { name: 'Onion skin' }).click();
   expect(await page.evaluate(() => window.__pigmentoTest!.screenPixel(440, 140))).toEqual({ r: 255, g: 255, b: 255, a: 255 });
 });
+
+test('frame-by-frame drawings save, reopen, and export frame by frame without the onion skin', async () => {
+  const { page } = h;
+  const layerId = await page.evaluate(() => window.__pigmentoTest!.layers().activeId);
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  // Drawings at frames 1, 3 and 5: a block moving right.
+  for (const [i, x] of [100, 300, 500].entries()) {
+    await page.evaluate((f) => window.__pigmentoTest!.setFrame(f), i * 2);
+    if (i > 0) await page.locator('.ribbon').getByRole('button', { name: 'New drawing' }).click();
+    await page.evaluate(([id, bx]) => window.__pigmentoTest!.fillLayer(id, { r: 20, g: 120, b: 40, a: 255 }, { x: bx, y: 100, w: 60, h: 60 }), [layerId, x] as const);
+  }
+  // Onion skin on: it shows on screen, but the frames exported never have it.
+  await page.getByRole('region', { name: 'Timeline' }).getByRole('button', { name: 'Onion skin' }).click();
+  await page.evaluate(() => window.__pigmentoTest!.setFrame(2));
+  // The previous drawing's ghost (orange) where the block was at frame 1.
+  const ghost = await page.evaluate(() => window.__pigmentoTest!.screenPixel(130, 130));
+  expect(ghost.r).toBeGreaterThan(ghost.b + 60);
+  expect(ghost.g).toBeLessThan(250);
+  expect(await page.evaluate(() => window.__pigmentoTest!.pixel(130, 130))).toEqual({ r: 255, g: 255, b: 255, a: 255 });
+
+  // Save the project and open it again: three drawings, frame 3 showing.
+  const project = tempFile('flipbook.pigm');
+  await stubSave(project);
+  await page.keyboard.press('Control+Shift+s');
+  await expect.poll(() => existsSync(project)).toBe(true);
+  await page.evaluate(() => window.__pigmentoTest!.setFrame(0));
+  await page.evaluate((p) => window.__pigmentoTest!.openPath(p), project);
+  await expect.poll(() => page.evaluate(() => window.__pigmentoTest!.history().length)).toBe(0);
+  const id = await page.evaluate(() => window.__pigmentoTest!.layers().activeId);
+  const info = await page.evaluate(() => window.__pigmentoTest!.anim());
+  expect(info.cels[id]).toEqual([0, 2, 4]);
+  expect(info.frame).toBe(2);
+  // Each frame's pixels (what export and the colour picker read) come from that frame's drawing alone.
+  for (const [f, x] of [
+    [0, 130],
+    [3, 330],
+    [9, 530],
+  ] as const) {
+    await page.evaluate((n) => window.__pigmentoTest!.setFrame(n), f);
+    expect(await page.evaluate((px) => window.__pigmentoTest!.pixel(px, 130), x)).toEqual({ r: 20, g: 120, b: 40, a: 255 });
+    for (const other of [130, 330, 530].filter((o) => o !== x)) {
+      expect(await page.evaluate((px) => window.__pigmentoTest!.pixel(px, 130), other)).toEqual({ r: 255, g: 255, b: 255, a: 255 });
+    }
+  }
+});

@@ -35,6 +35,7 @@ import { MAX_DIMENSION, MAX_PIXELS } from './protocol';
 import { EASINGS, type Easing, type Keyframe } from '../anim/interpolate';
 import { MAX_KEYFRAMES, MAX_PIECES, newPieceId, type Piece } from '../anim/piece';
 import { LOOP_MODES, MAX_FPS, MAX_FRAMES, MIN_FPS, clampFrame, type LoopMode } from '../anim/timeline';
+import { MAX_CELS, type Cel } from '../anim/cels';
 
 /**
  * The `.pigm` project format: a zip holding `document.json` (described by the schemas below)
@@ -65,18 +66,30 @@ const Common = {
   locked: z.boolean(),
 };
 
-const RasterJson = z.object({
-  kind: z.literal('raster'),
-  ...Common,
-  image: z
+const placed = (file: RegExp) =>
+  z
     .object({
-      file: z.string().regex(/^layers\/\d{1,6}\.png$/),
+      file: z.string().regex(file),
       x: int.min(-MAX_DIMENSION).max(MAX_DIMENSION),
       y: int.min(-MAX_DIMENSION).max(MAX_DIMENSION),
       w: int.min(1).max(MAX_DIMENSION),
       h: int.min(1).max(MAX_DIMENSION),
     })
-    .nullable(),
+    .nullable();
+const CEL_FILE = /^cels\/\d{1,6}\.png$/;
+/** Most drawings all frame-by-frame layers together may hold. */
+const MAX_TOTAL_CELS = 20000;
+
+const RasterJson = z.object({
+  kind: z.literal('raster'),
+  ...Common,
+  image: placed(/^layers\/\d{1,6}\.png$/),
+  /** Version 2: frame-by-frame drawings, each from its start frame (then `image` is null). */
+  cels: z
+    .array(z.object({ start: int.min(0).max(MAX_FRAMES - 1), image: placed(CEL_FILE) }))
+    .min(2)
+    .max(MAX_CELS)
+    .optional(),
 });
 
 /** A saved selection: its coverage as a greyscale PNG (white = selected) placed at x, y. */
@@ -346,6 +359,7 @@ export class ProjectError extends Error {
 export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail?: Uint8Array): Promise<Uint8Array> {
   const files: Zippable = {};
   let n = 0;
+  let celCount = 0;
   const toJson = async (l: Layer): Promise<LayerJson> => {
     const common = { id: l.id, name: l.name, opacity: l.opacity, blend: l.blend, visible: l.visible, locked: l.locked };
     if (l.kind === 'group') {
@@ -355,6 +369,20 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
     }
     // Shape layers are kept as objects, not pixels.
     if (l.kind === 'vector') return { kind: 'vector', ...common, objects: l.objects.map(nodeToJson) };
+    if (l.cels) {
+      const cels: NonNullable<Extract<LayerJson, { kind: 'raster' }>['cels']> = [];
+      for (const c of l.cels) {
+        const cb = c.surface.contentBounds();
+        if (!cb) {
+          cels.push({ start: c.start, image: null });
+          continue;
+        }
+        const file = `cels/${String(++celCount).padStart(4, '0')}.png`;
+        files[file] = [await codec.encode(c.surface.readRect(cb), cb.w, cb.h), { level: 0 }];
+        cels.push({ start: c.start, image: { file, x: cb.x, y: cb.y, w: cb.w, h: cb.h } });
+      }
+      return { kind: 'raster', ...common, image: null, cels };
+    }
     const b = l.surface.contentBounds();
     if (!b) return { kind: 'raster', ...common, image: null };
     const file = `layers/${String(++n).padStart(4, '0')}.png`;
@@ -411,7 +439,7 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
     });
   }
   const t = doc.timeline;
-  const animation = pieces.length ? { fps: t.fps, length: t.length, loop: t.loop, frame: t.frame, pieces } : null;
+  const animation = pieces.length || doc.hasCels ? { fps: t.fps, length: t.length, loop: t.loop, frame: t.frame, pieces } : null;
   const json: DocumentJson = {
     format: PROJECT_MAGIC,
     version: animation ? PROJECT_VERSION : 1,
@@ -444,7 +472,7 @@ function unzipSafely(bytes: Uint8Array): Record<string, Uint8Array> {
       filter: (f) => {
         entries++;
         total += f.originalSize;
-        if (entries > MAX_LAYERS + MAX_SAVED_SELECTIONS + MAX_ASSETS + MAX_PIECES + 16 || f.originalSize > MAX_ENTRY_BYTES || total > MAX_TOTAL_BYTES) {
+        if (entries > MAX_LAYERS + MAX_SAVED_SELECTIONS + MAX_ASSETS + MAX_PIECES + MAX_TOTAL_CELS + 16 || f.originalSize > MAX_ENTRY_BYTES || total > MAX_TOTAL_BYTES) {
           throw new ProjectError('error.projectInvalid', 'Archive is too large');
         }
         return (
@@ -453,6 +481,7 @@ function unzipSafely(bytes: Uint8Array): Record<string, Uint8Array> {
           /^selections\/\d{1,6}\.png$/.test(f.name) ||
           /^assets\/\d{1,6}\.png$/.test(f.name) ||
           PIECE_FILE.test(f.name) ||
+          CEL_FILE.test(f.name) ||
           f.name === 'thumbnail.png'
         );
       },
@@ -495,6 +524,7 @@ export async function loadProject(bytes: Uint8Array, codec: PngCodec): Promise<P
 
   const seen = new Set<string>();
   let count = 0;
+  let celTotal = 0;
   const objectCount = { n: 0 };
   const build = async (l: LayerJson, depth: number): Promise<Layer> => {
     if (depth > MAX_DEPTH || ++count > MAX_LAYERS) throw new ProjectError('error.projectInvalid', 'Too many layers');
@@ -523,6 +553,29 @@ export async function loadProject(bytes: Uint8Array, codec: PngCodec): Promise<P
         surface.compact();
       }
       layer = new RasterLayer(l.name, surface, id);
+      if (l.cels) {
+        if ((celTotal += l.cels.length) > MAX_TOTAL_CELS) throw new ProjectError('error.projectInvalid', 'Too many drawings');
+        // One drawing per start frame, in order, the first from frame 0.
+        const byStart = new Map<number, Cel>();
+        for (const c of l.cels) {
+          const cs = new Surface(json.width, json.height);
+          if (c.image) {
+            const png = files[c.image.file];
+            if (!png) throw new ProjectError('error.projectInvalid', `${c.image.file} missing`);
+            const img = await codec.decode(png);
+            if (img.w !== c.image.w || img.h !== c.image.h) throw new ProjectError('error.projectInvalid', `${c.image.file} has the wrong size`);
+            cs.writeRect({ x: c.image.x, y: c.image.y, w: img.w, h: img.h }, { data: img.data, stride: img.w, ox: c.image.x, oy: c.image.y });
+            cs.compact();
+          }
+          byStart.set(c.start, { start: c.start, surface: cs });
+        }
+        const cels = [...byStart.values()].sort((a, b) => a.start - b.start);
+        cels[0] = { ...cels[0], start: 0 };
+        if (cels.length > 1) {
+          layer.cels = cels;
+          layer.surface = cels[0].surface;
+        } else layer.surface = cels[0].surface;
+      }
     }
     layer.setProps({ opacity: l.opacity, blend: l.blend, visible: l.visible, locked: l.locked });
     return layer;
@@ -549,6 +602,8 @@ export async function loadProject(bytes: Uint8Array, codec: PngCodec): Promise<P
   doc.savedSelections = saved;
   doc.guides = (json.guides ?? []).map((g) => guide(g.axis, g.pos));
   if (json.animation) await readAnimation(doc, json.animation, files, codec);
+  // Frame-by-frame layers show the drawing for the frame the file was saved at.
+  doc.showFrame(doc.timeline.frame);
   return doc;
 }
 

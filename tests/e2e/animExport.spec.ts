@@ -262,3 +262,42 @@ test('odd sizes are padded to even for MP4', async () => {
   expect({ w: v.w, h: v.h }).toEqual({ w: 642, h: 402 });
   expect(v.duration).toBeCloseTo(0.25, 1);
 });
+
+test('a frame-by-frame animation exports each frame’s own drawing', async () => {
+  const { page } = h;
+  const layerId = await page.evaluate(() => window.__pigmentoTest!.layers().activeId);
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  for (const [i, x] of [100, 300, 500].entries()) {
+    await page.evaluate((f) => window.__pigmentoTest!.setFrame(f), i * 2);
+    if (i > 0) await page.locator('.ribbon').getByRole('button', { name: 'New drawing' }).click();
+    await page.evaluate(([id, bx]) => window.__pigmentoTest!.fillLayer(id, { r: 230, g: 30, b: 30, a: 255 }, { x: bx, y: 100, w: 60, h: 60 }), [layerId, x] as const);
+  }
+  // Onion skin is on and the frame shown is the last one: neither matters to the export.
+  await page.getByRole('region', { name: 'Timeline' }).getByRole('button', { name: 'Onion skin' }).click();
+  const file = tempFile('flipbook.gif');
+  await stubSave(file);
+  await page.locator('.ribbon').getByRole('button', { name: 'Export', exact: true }).click();
+  const dlg = page.getByRole('dialog', { name: 'Export animation' });
+  await dlg.getByRole('radio', { name: 'Animated GIF' }).click();
+  await dlg.getByRole('textbox', { name: 'Last frame' }).fill('6');
+  await dlg.getByLabel('Playback').selectOption('loop');
+  await dlg.getByRole('checkbox', { name: /^Transparent/ }).uncheck();
+  await dlg.getByRole('button', { name: 'Export…' }).click();
+  await expect(dlg).toBeHidden({ timeout: 30_000 });
+  const gif = await decodeGif(page, file, [
+    { frame: 0, x: 130, y: 130 },
+    { frame: 0, x: 330, y: 130 },
+    { frame: 3, x: 330, y: 130 },
+    { frame: 3, x: 130, y: 130 },
+    { frame: 5, x: 530, y: 130 },
+  ]);
+  expect(gif.frames).toBe(6);
+  const red = (p: number[]) => p[0] > 200 && p[1] < 80 && p[2] < 80;
+  const white = (p: number[]) => p[0] > 240 && p[1] > 240 && p[2] > 240;
+  expect(red(gif.pixels[0])).toBe(true);
+  expect(white(gif.pixels[1])).toBe(true);
+  expect(red(gif.pixels[2])).toBe(true);
+  // No onion-skin ghost of frame 1's drawing in frame 4.
+  expect(white(gif.pixels[3])).toBe(true);
+  expect(red(gif.pixels[4])).toBe(true);
+});

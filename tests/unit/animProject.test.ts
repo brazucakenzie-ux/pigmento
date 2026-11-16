@@ -104,3 +104,60 @@ describe('projects with animation (version 2)', () => {
     }
   });
 });
+
+describe('projects with frame-by-frame drawings', () => {
+  function celDoc(): PaintDocument {
+    const fill = (r: number) => {
+      const s = new Surface(120, 80);
+      if (r) s.fillRect({ x: 10, y: 10, w: 20, h: 20 }, { r, g: 0, b: 0, a: 255 });
+      return s;
+    };
+    const layer = new RasterLayer('Ink', fill(10));
+    layer.cels = [
+      { start: 0, surface: layer.surface },
+      { start: 4, surface: fill(0) },
+      { start: 9, surface: fill(90) },
+    ];
+    const doc = new PaintDocument({ width: 120, height: 80 }, [layer]);
+    doc.timeline = { fps: 8, length: 16, loop: 'loop', frame: 10 };
+    doc.showFrame(10);
+    return doc;
+  }
+
+  it('keeps every drawing and where it starts, and shows the saved frame’s drawing', async () => {
+    const bytes = await saveProject(celDoc(), rawCodec);
+    const files = unzipSync(bytes);
+    const json = JSON.parse(strFromU8(files['document.json'])) as { version: number; layers: { cels: { start: number; image: unknown }[] }[] };
+    expect(json.version).toBe(PROJECT_VERSION);
+    // The blank drawing stores no picture.
+    expect(json.layers[0].cels.map((c) => [c.start, c.image === null])).toEqual([
+      [0, false],
+      [4, true],
+      [9, false],
+    ]);
+    expect(Object.keys(files).filter((n) => n.startsWith('cels/'))).toHaveLength(2);
+    const back = await loadProject(bytes, rawCodec);
+    const l = back.layers[0] as RasterLayer;
+    expect(l.cels!.map((c) => c.start)).toEqual([0, 4, 9]);
+    expect(l.cels!.map((c) => c.surface.readRect({ x: 15, y: 15, w: 1, h: 1 })[0])).toEqual([10, 0, 90]);
+    expect(l.cels![1].surface.contentBounds()).toBeNull();
+    // Saved at frame 11: that's the third drawing.
+    expect(l.surface).toBe(l.cels![2].surface);
+  });
+
+  it('tidies up drawings that start on the same frame or not at 0, and refuses a lone one', async () => {
+    const base = await saveProject(celDoc(), rawCodec);
+    const tidy = await rewrite(base, (j) => {
+      const cels = (j.layers as { cels: { start: number }[] }[])[0].cels;
+      cels[0].start = 2;
+      cels[2].start = 4;
+    });
+    const l = (await loadProject(tidy, rawCodec)).layers[0] as RasterLayer;
+    expect(l.cels!.map((c) => c.start)).toEqual([0, 4]);
+    const lone = await rewrite(base, (j) => {
+      const layer = (j.layers as { cels: unknown[] }[])[0];
+      layer.cels = layer.cels.slice(0, 1);
+    });
+    await expect(loadProject(lone, rawCodec)).rejects.toMatchObject({ key: 'error.projectInvalid' });
+  });
+});
