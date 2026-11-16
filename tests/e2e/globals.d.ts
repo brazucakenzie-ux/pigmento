@@ -35,6 +35,17 @@ export interface PigmentoTestHook {
   breakInterface(): void;
   fillLayer(id: string, c: { r: number; g: number; b: number; a: number }, r?: { x: number; y: number; w: number; h: number }): void;
   selectRect(x: number, y: number, w: number, h: number): void;
+  anim(): {
+    fps: number;
+    length: number;
+    loop: 'loop' | 'once' | 'pingpong';
+    frame: number;
+    selectedId: string | null;
+    pieces: { id: string; name: string; layerId: string; keys: { frame: number; easing: string }[] }[];
+  };
+  animateSelection(keepOriginal?: boolean): boolean;
+  setFrame(frame: number): void;
+  setPieceKey(id: string, frame: number, change: Partial<Record<'x' | 'y' | 'sx' | 'sy' | 'angle' | 'skew' | 'opacity', number>>): boolean;
   addLayer(): string;
   groupLayers(ids: string[]): string | null;
   setLayerProps(id: string, p: Record<string, unknown>): void;
