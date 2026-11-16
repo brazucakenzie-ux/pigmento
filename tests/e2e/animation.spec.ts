@@ -502,3 +502,53 @@ test('with many layers, a piece’s keyframes sit under its layer and dragging t
   expect(info.pieces[0].keys.map((k) => k.frame)).toEqual([0, 30]);
   expect(info.length).toBe(31);
 });
+
+test('the timeline works from the keyboard alone', async () => {
+  const { page } = h;
+  const layerId = await page.evaluate(() => window.__pigmentoTest!.layers().activeId);
+  await page.evaluate((id) => window.__pigmentoTest!.fillLayer(id, { r: 30, g: 30, b: 30, a: 255 }, { x: 100, y: 100, w: 40, h: 40 }), layerId);
+  await page.evaluate(() => window.__pigmentoTest!.selectRect(100, 100, 40, 40));
+  expect(await page.evaluate(() => window.__pigmentoTest!.animateSelection(false))).toBe(true);
+  const id = (await page.evaluate(() => window.__pigmentoTest!.anim())).pieces[0].id;
+  await page.evaluate((pid) => window.__pigmentoTest!.setPieceKey(pid, 8, { x: 400 }), id);
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  await page.locator('.ribbon').getByRole('button', { name: 'Timeline' }).click();
+  const timeline = page.getByRole('region', { name: 'Timeline' });
+  const frame = () => page.evaluate(() => window.__pigmentoTest!.anim().frame);
+  const inTimeline = () => page.evaluate(() => !!document.activeElement?.closest('.timeline'));
+  const focusName = () => page.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.textContent ?? '');
+
+  // F6 reaches the timeline; Tab moves through it to the frame ruler.
+  for (let i = 0; i < 8 && !(await inTimeline()); i++) await page.keyboard.press('F6');
+  expect(await inTimeline()).toBe(true);
+  for (let i = 0; i < 40 && (await focusName()) !== 'Frames'; i++) await page.keyboard.press('Tab');
+  await expect(timeline.getByRole('slider', { name: 'Frames' })).toBeFocused();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  expect(await frame()).toBe(2);
+  await page.keyboard.press('End');
+  expect(await frame()).toBe(23);
+  await page.keyboard.press('Home');
+  expect(await frame()).toBe(0);
+
+  // On to the keyframes: Enter goes to one, Alt+arrows retime it, its menu opens from the keyboard.
+  await page.keyboard.press('Tab');
+  await expect(timeline.getByRole('button', { name: /^Frame 1: keyframe/ })).toBeFocused();
+  await page.keyboard.press('Tab');
+  const second = timeline.getByRole('button', { name: /^Frame 9: keyframe/ });
+  await expect(second).toBeFocused();
+  await page.keyboard.press('Enter');
+  expect(await frame()).toBe(8);
+  await page.keyboard.press('Alt+ArrowRight');
+  await page.keyboard.press('Alt+ArrowRight');
+  expect((await page.evaluate(() => window.__pigmentoTest!.anim())).pieces[0].keys.map((k) => k.frame)).toEqual([0, 10]);
+  // The moved keyframe keeps the focus, so it can go on being moved.
+  await expect(timeline.getByRole('button', { name: /^Frame 11: keyframe/ })).toBeFocused();
+  await page.keyboard.press('Shift+F10');
+  await expect(page.getByRole('menu', { name: 'Keyframe' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('menu', { name: 'Keyframe' })).toBeHidden();
+  await timeline.getByRole('button', { name: /^Frame 11: keyframe/ }).focus();
+  await page.keyboard.press('Delete');
+  expect((await page.evaluate(() => window.__pigmentoTest!.anim())).pieces[0].keys.map((k) => k.frame)).toEqual([0]);
+});

@@ -56,12 +56,24 @@ async function theme(page: Page, family: string | null, mode: 'Light' | 'Dark'):
 }
 
 test('meets WCAG 2.1 AA in every tab and the main dialogs, in light, dark and high-contrast themes', async () => {
-  test.setTimeout(240_000);
+  test.setTimeout(300_000);
   h = await launchApp();
   const { page } = h;
   await ready(page);
   const findings: Finding[] = [];
   const ribbon = page.locator('.ribbon');
+  // An animation to look at: a piece with keyframes (selected, with the Animate tool) and a
+  // layer drawn frame by frame, so the timeline shows every kind of row.
+  const layerId = await page.evaluate(() => window.__pigmentoTest!.layers().activeId);
+  await page.evaluate((id) => window.__pigmentoTest!.fillLayer(id, { r: 30, g: 30, b: 30, a: 255 }, { x: 100, y: 100, w: 60, h: 60 }), layerId);
+  await page.evaluate(() => window.__pigmentoTest!.selectRect(100, 100, 60, 60));
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  await ribbon.getByRole('button', { name: 'Animate selection' }).click();
+  const pieceId = (await page.evaluate(() => window.__pigmentoTest!.anim())).pieces[0].id;
+  await page.evaluate((pid) => window.__pigmentoTest!.setPieceKey(pid, 8, { x: 400 }), pieceId);
+  await page.evaluate(() => window.__pigmentoTest!.setFrame(4));
+  await ribbon.getByRole('button', { name: 'New drawing' }).click();
+  await page.getByRole('region', { name: 'Timeline' }).getByRole('button', { name: 'Onion skin' }).click();
   for (const [family, mode] of [
     [null, 'Light'],
     [null, 'Dark'],
@@ -73,6 +85,7 @@ test('meets WCAG 2.1 AA in every tab and the main dialogs, in light, dark and hi
       await page.getByRole('tab', { name: tab }).click();
       findings.push(...(await audit(page, `${label} · ${tab} tab`)));
     }
+    findings.push(...(await audit(page, `${label} · Timeline`, '.timeline')), ...(await audit(page, `${label} · Animate tool options`, '.optionsbar')));
     await page.getByRole('tab', { name: 'Home' }).click();
     findings.push(
       ...(await auditDialog(page, `${label} · Settings`, () => page.keyboard.press('Control+Alt+s'))),
@@ -95,6 +108,16 @@ test('meets WCAG 2.1 AA in every tab and the main dialogs, in light, dark and hi
       ...(await auditDialog(page, `${label} · Brush Designer`, async () => {
         await page.getByRole('tab', { name: 'Brushes' }).click();
         await ribbon.getByRole('button', { name: 'New brush…' }).click();
+      })),
+      ...(await auditDialog(page, `${label} · Export animation (GIF)`, async () => {
+        await page.getByRole('tab', { name: 'Animate' }).click();
+        await ribbon.getByRole('button', { name: 'Export', exact: true }).click();
+        await page.getByRole('dialog', { name: 'Export animation' }).getByRole('radio', { name: 'Animated GIF' }).click();
+      })),
+      ...(await auditDialog(page, `${label} · Export animation (MP4)`, async () => {
+        await page.getByRole('tab', { name: 'Animate' }).click();
+        await ribbon.getByRole('button', { name: 'Export', exact: true }).click();
+        await page.getByRole('dialog', { name: 'Export animation' }).getByRole('radio', { name: 'MP4 video' }).click();
       })),
       ...(await auditDialog(page, `${label} · Gaussian blur`, async () => {
         await page.getByRole('tab', { name: 'Effects' }).click();

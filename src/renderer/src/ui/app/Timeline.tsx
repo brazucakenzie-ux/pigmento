@@ -51,6 +51,15 @@ function PieceRow({ piece, index, selected, frame }: { piece: PieceInfo; index: 
   const [drag, setDrag] = useState<{ from: number; to: number } | null>(null);
   const [menu, setMenu] = useState<number | null>(null);
   const anchor = useRef<HTMLElement | null>(null);
+  const row = useRef<HTMLDivElement | null>(null);
+  // After Alt+arrows move a keyframe, the focus follows it to its new frame.
+  const refocus = useRef<number | null>(null);
+  useEffect(() => {
+    const f = refocus.current;
+    if (f === null) return;
+    refocus.current = null;
+    row.current?.querySelector<HTMLElement>(`.tl-key[data-frame="${f}"]`)?.focus();
+  }, [piece.keys]);
   const name = pieceLabel(piece, index);
 
   const frameAt = (clientX: number, el: HTMLElement): number => {
@@ -94,6 +103,7 @@ function PieceRow({ piece, index, selected, frame }: { piece: PieceInfo; index: 
   const keys = piece.keys.map((k) => ({ ...k, at: k.frame, frame: drag && k.frame === drag.from ? drag.to : k.frame })).sort((a, b) => a.frame - b.frame);
   return (
     <div
+      ref={row}
       className={`tl-row tl-piece-row ${selected ? 'selected' : ''}`}
       role="group"
       aria-label={name}
@@ -115,6 +125,7 @@ function PieceRow({ piece, index, selected, frame }: { piece: PieceInfo; index: 
           key={`key-${k.at}`}
           type="button"
           className={`tl-key ${selected && k.frame === frame ? 'current' : ''}`}
+          data-frame={k.frame}
           style={{ left: k.frame * CELL }}
           aria-label={t('timeline.keyLabel', { n: k.frame + 1, piece: name, easing: t(`easing.${k.easing}` as I18nKey) })}
           aria-pressed={selected && k.frame === frame}
@@ -139,7 +150,9 @@ function PieceRow({ piece, index, selected, frame }: { piece: PieceInfo; index: 
               // Alt+arrows retime the keyframe one frame at a time.
               e.preventDefault();
               const to = k.frame + (e.key === 'ArrowLeft' ? -1 : 1);
+              refocus.current = to;
               if (engine.anim.moveKey(piece.id, k.frame, to)) engine.anim.setFrame(to);
+              else refocus.current = null;
             }
           }}
         >
@@ -347,6 +360,14 @@ function LayerRow({ layer, starts, length, frame, active }: { layer: LayerNode; 
   const [drag, setDrag] = useState<{ index: number; to: number } | null>(null);
   const [menu, setMenu] = useState(false);
   const anchor = useRef<HTMLElement | null>(null);
+  const row = useRef<HTMLDivElement | null>(null);
+  const refocus = useRef<number | null>(null);
+  useEffect(() => {
+    const f = refocus.current;
+    if (f === null) return;
+    refocus.current = null;
+    row.current?.querySelector<HTMLElement>(`.tl-cel-start[data-frame="${f}"]`)?.focus();
+  }, [starts]);
   const pick = (f: number) => {
     if (useUi.getState().layers.activeId !== layer.id) engine.layers.setActive(layer.id);
     engine.anim.setFrame(f);
@@ -383,6 +404,7 @@ function LayerRow({ layer, starts, length, frame, active }: { layer: LayerNode; 
   };
   return (
     <div
+      ref={row}
       className={`tl-row tl-layer-row ${active ? 'selected' : ''}`}
       role="group"
       aria-label={layer.name}
@@ -401,6 +423,7 @@ function LayerRow({ layer, starts, length, frame, active }: { layer: LayerNode; 
             <button
               type="button"
               className="tl-cel-start"
+              data-frame={s}
               aria-label={label}
               data-tip={label}
               onPointerDown={(e) => startDrag(e, i)}
@@ -424,7 +447,9 @@ function LayerRow({ layer, starts, length, frame, active }: { layer: LayerNode; 
                   // Alt+arrows hold the drawing before this one a frame shorter or longer.
                   e.preventDefault();
                   const to = s + (e.key === 'ArrowLeft' ? -1 : 1);
+                  refocus.current = to;
                   if (engine.anim.moveDrawing(layer.id, i, to)) engine.anim.setFrame(to);
+                  else refocus.current = null;
                 }
               }}
             />

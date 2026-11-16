@@ -2960,6 +2960,8 @@ dialog.tour::backdrop {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  /* Never more than about a third of the window, so the picture keeps room (big interface sizes). */
+  max-height: 35vh;
   background: var(--bg-panel);
   border-top: 1px solid var(--border);
 }

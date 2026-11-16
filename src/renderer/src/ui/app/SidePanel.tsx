@@ -124,7 +124,7 @@ function Navigator() {
             if (e.buttons & 1) move(e);
           }}
         />
-        {box && !full ? <div className="viewbox" aria-label={t('a11y.navigatorView')} style={box} /> : null}
+        {box && !full ? <div className="viewbox" role="img" aria-label={t('a11y.navigatorView')} style={box} /> : null}
       </div>
     </div>
   );

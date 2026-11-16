@@ -684,6 +684,42 @@ test('capture timeline rows', async () => {
   }
 });
 
+test('capture export dialog and timeline at 200 %', async () => {
+  test.skip(!process.env.PIGMENTO_SCREENSHOT, 'Set PIGMENTO_SCREENSHOT=1 to capture screenshots');
+  const out = process.env.PIGMENTO_SCREENSHOT_DIR ?? path.resolve('test-results');
+  const h = await launchApp();
+  const { page } = h;
+  try {
+    await ready(page);
+    const layerId = await page.evaluate(() => window.__pigmentoTest!.layers().activeId);
+    await page.evaluate((id) => window.__pigmentoTest!.fillLayer(id, { r: 230, g: 120, b: 40, a: 255 }, { x: 160, y: 300, w: 120, h: 80 }), layerId);
+    await page.evaluate(() => window.__pigmentoTest!.selectRect(160, 300, 120, 80));
+    await page.getByRole('tab', { name: 'Animate' }).click();
+    await page.locator('.ribbon').getByRole('button', { name: 'Animate selection' }).click();
+    const id = (await page.evaluate(() => window.__pigmentoTest!.anim())).pieces[0].id;
+    await page.evaluate((pid) => window.__pigmentoTest!.setPieceKey(pid, 10, { x: 700 }), id);
+    await page.locator('.ribbon').getByRole('button', { name: 'Export', exact: true }).click();
+    const dlg = page.getByRole('dialog', { name: 'Export animation' });
+    await dlg.getByRole('radio', { name: 'MP4 video' }).click();
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: path.join(out, 'anim-export-dialog.png') });
+    await page.keyboard.press('Escape');
+    // The biggest interface size, through Settings.
+    await page.keyboard.press('Control+Alt+s');
+    const settings = page.getByRole('dialog', { name: 'Settings' });
+    const size = settings.getByRole('textbox', { name: 'Interface size' });
+    await size.fill('200');
+    await size.press('Tab');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+    const png = await h.app.evaluate(async ({ BrowserWindow }) => (await BrowserWindow.getAllWindows()[0].webContents.capturePage()).toPNG().toString('base64'));
+    writeFileSync(path.join(out, 'timeline-200.png'), Buffer.from(png, 'base64'));
+    console.warn('errors:', JSON.stringify(h.errors));
+  } finally {
+    await h.close();
+  }
+});
+
 test('capture settings', async () => {
   test.skip(!process.env.PIGMENTO_SCREENSHOT, 'Set PIGMENTO_SCREENSHOT=1 to capture screenshots');
   const out = process.env.PIGMENTO_SCREENSHOT_DIR ?? path.resolve('test-results');
