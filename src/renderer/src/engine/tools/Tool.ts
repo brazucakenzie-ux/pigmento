@@ -1,3 +1,4 @@
+import type { AnimationController } from '../anim/AnimationController';
 import type { BrushSettings } from '../brush/types';
 
 /** A picture to draw from, shown over the canvas; never saved or exported. */
@@ -120,6 +121,8 @@ export interface ToolPointerEvent {
 /** Engine services available to tools. The Engine implements this interface. */
 export interface ToolContext {
   readonly doc: PaintDocument;
+  /** Pieces, keyframes and the timeline (the Animate tool). */
+  readonly anim: AnimationController;
   readonly view: View;
   readonly history: History;
   readonly primary: RGBA;

@@ -13,6 +13,7 @@ import {
   piecesBytes,
   removeKey,
   setKey,
+  pieceStateAt,
   type KeyChange,
   type Piece,
 } from './piece';
@@ -42,7 +43,28 @@ export interface AnimationInfo {
   frame: number;
   pieces: PieceInfo[];
   selectedId: string | null;
+  /** The selected piece at the frame shown, for the options bar's number fields. */
+  current: PieceFields | null;
 }
+
+/** A piece's values as the options bar shows them (degrees and percent). */
+export interface PieceFields {
+  /** Where the pivot is, in document pixels. */
+  x: number;
+  y: number;
+  /** Scale in percent (negative = flipped). */
+  w: number;
+  h: number;
+  angle: number;
+  skew: number;
+  opacity: number;
+  /** Easing from this frame's keyframe (or the one before it) to the next. */
+  easing: Easing;
+  /** There's a keyframe at this frame. */
+  keyed: boolean;
+}
+
+const DEG = 180 / Math.PI;
 
 /** Everything about the animation an undo step can change (not the frame shown). */
 export interface AnimSnapshot {
@@ -143,8 +165,46 @@ export class AnimationController {
       loop: t.loop,
       frame: t.frame,
       selectedId: this.selected ? this.selectedId : null,
+      current: this.fields(),
       pieces: this.doc.pieces.map((p) => ({ id: p.id, name: p.name, layerId: p.layerId, keys: p.keyframes.map((k) => ({ frame: k.frame, easing: k.easing })) })),
     };
+  }
+
+  /** The selected piece's values at the current frame. */
+  fields(): PieceFields | null {
+    const p = this.selected;
+    if (!p) return null;
+    const f = this.frame;
+    const s = pieceStateAt(p, f);
+    const at = p.keyframes.find((k) => k.frame === f);
+    const before = [...p.keyframes].reverse().find((k) => k.frame <= f) ?? p.keyframes[0];
+    return {
+      x: s.x,
+      y: s.y,
+      w: s.sx * 100,
+      h: s.sy * 100,
+      angle: s.angle * DEG,
+      skew: s.skew * DEG,
+      opacity: s.opacity * 100,
+      easing: (at ?? before).easing,
+      keyed: at !== undefined,
+    };
+  }
+
+  /** Set the selected piece's values at the current frame (auto-key), in the options bar's units. */
+  setFields(change: Partial<Omit<PieceFields, 'keyed'>>): boolean {
+    const p = this.selected;
+    if (!p) return false;
+    const k: KeyChange = {};
+    if (change.x !== undefined) k.x = change.x;
+    if (change.y !== undefined) k.y = change.y;
+    if (change.w !== undefined) k.sx = nonZero(change.w / 100);
+    if (change.h !== undefined) k.sy = nonZero(change.h / 100);
+    if (change.angle !== undefined) k.angle = change.angle / DEG;
+    if (change.skew !== undefined) k.skew = Math.max(-85, Math.min(85, change.skew)) / DEG;
+    if (change.opacity !== undefined) k.opacity = Math.max(0, Math.min(100, change.opacity)) / 100;
+    if (change.easing !== undefined) k.easing = change.easing;
+    return this.setKey(p.id, this.frame, k);
   }
 
   /** A new document was loaded (or the old one replaced). */
@@ -173,7 +233,10 @@ export class AnimationController {
     if (this.drag) return false;
     const before = captureAnim(this.doc);
     if (!fn()) return false;
-    this.host.history.push(new AnimationCommand(label, this.host, before, captureAnim(this.doc)));
+    const after = captureAnim(this.doc);
+    // Setting what's already there isn't a step (a field committed twice, say).
+    if (sameAnim(before, after)) return false;
+    this.host.history.push(new AnimationCommand(label, this.host, before, after));
     this.host.animationChanged(null);
     return true;
   }
@@ -305,7 +368,7 @@ export class AnimationController {
     this.drag = null;
     if (!before) return false;
     const after = captureAnim(this.doc);
-    if (JSON.stringify(before.pieces.map(strip)) === JSON.stringify(after.pieces.map(strip))) return false;
+    if (sameAnim(before, after)) return false;
     this.host.history.push(new AnimationCommand(label, this.host, before, after));
     this.host.animationChanged(null);
     return true;
@@ -319,8 +382,20 @@ export class AnimationController {
   }
 }
 
+/** Two snapshots hold the same animation (pixels are compared by identity). */
+function sameAnim(a: AnimSnapshot, b: AnimSnapshot): boolean {
+  if (a.fps !== b.fps || a.length !== b.length || a.loop !== b.loop || a.pieces.length !== b.pieces.length) return false;
+  if (a.pieces.some((p, i) => p.src !== b.pieces[i].src)) return false;
+  return JSON.stringify(a.pieces.map(strip)) === JSON.stringify(b.pieces.map(strip));
+}
+
 /** A piece without its pixels, for comparing states. */
 function strip(p: Piece): Omit<Piece, 'src'> {
   const { src: _src, ...rest } = p;
   return rest;
+}
+
+/** Scale can't be exactly zero (the piece would vanish and couldn't be grabbed again). */
+function nonZero(v: number): number {
+  return Math.abs(v) < 0.01 ? (v < 0 ? -0.01 : 0.01) : v;
 }

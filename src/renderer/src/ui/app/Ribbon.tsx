@@ -279,6 +279,7 @@ function EffectsTab() {
 function AnimateTab() {
   return (
     <RibbonGroup label={t('group.pieces')}>
+      <ActionButton id="tool.animate" label={t('ribbon.animateTool')} />
       <ActionButton id="animateSelection" />
       <div className="rb-stack">
         <ActionButton id="animKeepOriginal" variant="small" />

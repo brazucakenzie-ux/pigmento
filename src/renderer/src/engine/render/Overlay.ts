@@ -204,6 +204,29 @@ export class Overlay {
     c.restore();
   }
 
+  /** A pivot: a ring with a cross through it. */
+  pivot(sp: Point, active = false): void {
+    const c = this.ctx;
+    const r = active ? 7 : 6;
+    c.save();
+    c.lineWidth = 3;
+    c.strokeStyle = this.theme.handleFill;
+    for (const pass of [0, 1]) {
+      c.beginPath();
+      c.arc(sp.x, sp.y, r, 0, Math.PI * 2);
+      c.moveTo(sp.x - r - 3, sp.y);
+      c.lineTo(sp.x + r + 3, sp.y);
+      c.moveTo(sp.x, sp.y - r - 3);
+      c.lineTo(sp.x, sp.y + r + 3);
+      c.stroke();
+      if (pass === 0) {
+        c.lineWidth = 1.25;
+        c.strokeStyle = this.theme.accent;
+      }
+    }
+    c.restore();
+  }
+
   line(a: Point, b: Point, dashed = false): void {
     const c = this.ctx;
     c.save();

@@ -602,6 +602,29 @@ test('capture turned view', async () => {
   }
 });
 
+test('capture animate tool', async () => {
+  test.skip(!process.env.PIGMENTO_SCREENSHOT, 'Set PIGMENTO_SCREENSHOT=1 to capture screenshots');
+  const out = process.env.PIGMENTO_SCREENSHOT_DIR ?? path.resolve('test-results');
+  const h = await launchApp();
+  const { page } = h;
+  try {
+    await ready(page);
+    const layerId = await page.evaluate(() => window.__pigmentoTest!.layers().activeId);
+    await page.evaluate((id) => window.__pigmentoTest!.fillLayer(id, { r: 230, g: 120, b: 40, a: 255 }, { x: 160, y: 300, w: 120, h: 80 }), layerId);
+    await page.evaluate(() => window.__pigmentoTest!.selectRect(160, 300, 120, 80));
+    await page.getByRole('tab', { name: 'Animate' }).click();
+    await page.locator('.ribbon').getByRole('button', { name: 'Animate selection' }).click();
+    const id = (await page.evaluate(() => window.__pigmentoTest!.anim())).pieces[0].id;
+    await page.evaluate((pid) => window.__pigmentoTest!.setPieceKey(pid, 12, { x: 760, y: 260, angle: Math.PI / 3, sx: 1.4, sy: 0.8 }), id);
+    await page.evaluate(() => window.__pigmentoTest!.setFrame(6));
+    await page.waitForTimeout(250);
+    await page.screenshot({ path: path.join(out, 'animate-tool.png') });
+    console.warn('errors:', JSON.stringify(h.errors));
+  } finally {
+    await h.close();
+  }
+});
+
 test('capture settings', async () => {
   test.skip(!process.env.PIGMENTO_SCREENSHOT, 'Set PIGMENTO_SCREENSHOT=1 to capture screenshots');
   const out = process.env.PIGMENTO_SCREENSHOT_DIR ?? path.resolve('test-results');

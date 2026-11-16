@@ -15,6 +15,7 @@ import { actions, runAction } from '../actions/actions';
 import { GradientButton, PatternPicker } from './PaintOptions';
 import { SelectedShapeParams, ShapeOption, ShapeToolParams } from './ShapeGallery';
 import { BrushPicker } from './BrushPicker';
+import { EASINGS, type Easing } from '@engine/anim/interpolate';
 
 const FALLBACK_FONTS = ['Segoe UI', 'Arial', 'Calibri', 'Cambria', 'Comic Sans MS', 'Consolas', 'Georgia', 'Impact', 'Segoe Print', 'Times New Roman', 'Trebuchet MS', 'Verdana'];
 
@@ -368,6 +369,82 @@ function TransformFields() {
   );
 }
 
+/** The selected piece at the frame shown: position, size, turn, skew, opacity and easing (auto-key). */
+function PieceFields() {
+  const info = useUi((s) => s.animation.current);
+  const keys = useUi((s) => s.animation.pieces.find((p) => p.id === s.animation.selectedId)?.keys.length ?? 0);
+  if (!info) return <span className="opt-hint">{t('piece.noneSelected')}</span>;
+  const field = (key: 'x' | 'y' | 'w' | 'h' | 'angle' | 'skew' | 'opacity', labelKey: I18nKey, unit: string, min: number, max: number, decimals: number) => {
+    const label = t(labelKey);
+    return (
+      <span className="opt tf-field">
+        <span>{label}</span>
+        <NumberField
+          className="num tf-num"
+          value={Math.round(info[key] * 10 ** decimals) / 10 ** decimals}
+          decimals={decimals}
+          min={min}
+          max={max}
+          label={label}
+          onChange={(v) => engine.anim.setFields({ [key]: v })}
+          onEnter={() => (document.activeElement as HTMLElement | null)?.blur()}
+        />
+        <span className="unit">{unit}</span>
+      </span>
+    );
+  };
+  return (
+    <>
+      <button
+        type="button"
+        className="icon-btn"
+        aria-pressed={info.keyed}
+        aria-label={t(info.keyed ? 'piece.keyed' : 'piece.addKey')}
+        data-tip={t(info.keyed ? 'piece.keyed' : 'piece.addKey')}
+        onClick={() => !info.keyed && engine.anim.setFields({})}
+      >
+        <Icon name={info.keyed ? 'keyframe' : 'keyframe-add'} size={16} />
+      </button>
+      <button
+        type="button"
+        className="icon-btn"
+        aria-label={t('piece.deleteKey')}
+        data-tip={t('piece.deleteKey')}
+        disabled={!info.keyed || keys < 2}
+        onClick={() => {
+          const id = engine.anim.selectedId;
+          if (id) engine.anim.removeKey(id, engine.anim.frame);
+        }}
+      >
+        <Icon name="keyframe-delete" size={16} />
+      </button>
+      {field('x', 'transform.x', 'px', -100000, 100000, 0)}
+      {field('y', 'transform.y', 'px', -100000, 100000, 0)}
+      {field('w', 'transform.w', '%', -100000, 100000, 1)}
+      {field('h', 'transform.h', '%', -100000, 100000, 1)}
+      {field('angle', 'transform.angle', '°', -36000, 36000, 1)}
+      {field('skew', 'transform.skew', '°', -85, 85, 1)}
+      {field('opacity', 'opt.opacity', '%', 0, 100, 0)}
+      <label className="opt">
+        <span>{t('piece.easing')}</span>
+        <select className="select" aria-label={t('piece.easing')} value={info.easing} onChange={(e) => engine.anim.setFields({ easing: e.target.value as Easing })}>
+          {EASINGS.map((e) => (
+            <option key={e} value={e}>
+              {t(`easing.${e}` as I18nKey)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button type="button" className="icon-btn" aria-label={t('transform.flipH')} data-tip={t('transform.flipH')} onClick={() => engine.anim.setFields({ w: -info.w })}>
+        <Icon name="flip-h" size={16} />
+      </button>
+      <button type="button" className="icon-btn" aria-label={t('transform.flipV')} data-tip={t('transform.flipV')} onClick={() => engine.anim.setFields({ h: -info.h })}>
+        <Icon name="flip-v" size={16} />
+      </button>
+    </>
+  );
+}
+
 export function OptionsBar() {
   const simple = useUi((s) => s.settings.ui.mode === 'simple');
   const toolId = useUi((s) => s.tool);
@@ -397,6 +474,7 @@ export function OptionsBar() {
           <OptionControl key={spec.key} toolId={toolId} spec={spec} values={values} />
         ))}
         {toolId === 'transform' ? <TransformFields /> : null}
+        {toolId === 'animate' ? <PieceFields /> : null}
         {tool.symmetry && !simple ? <SymmetryControl /> : null}
         <PathBar />
         {toolId === 'move' && shapeLayer ? <SelectedShapeParams /> : null}

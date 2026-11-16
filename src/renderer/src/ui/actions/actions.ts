@@ -162,7 +162,10 @@ const base: Action[] = [
     labelKey: 'action.animateSelection',
     icon: 'animate',
     group: 'animation',
-    run: safe(() => void engine.animateSelection(useUi.getState().settings.anim.keepOriginal)),
+    // Straight on to the Animate tool, with the new piece selected.
+    run: safe(() => {
+      if (engine.animateSelection(useUi.getState().settings.anim.keepOriginal)) engine.setTool('animate');
+    }),
     enabled: hasSelection,
   },
   {

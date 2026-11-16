@@ -240,7 +240,7 @@ Decisions: pieces come only from pixel layers; shape layers and text aren't fram
 - [x] 5.1 Timeline model and `engine/anim/interpolate.ts`: easing (linear, ease in/out/in-out, hold), unwrapped rotation, pivot, Bézier motion path, `pieceMatrixAt(piece, frame)` (+ unit tests on known values)
 - [x] 5.2 Pieces: Animate selection (rectangle and free-form) in the new Animate tab, "Leave the original", rename and delete (their list shows in the timeline, 5.5); undoable `AnimationCommand`, drags as one step (+ unit tests)
 - [x] 5.3 Pieces drawn at the current frame on screen (isolated layer canvas) and in the JS flatten (sampling, thumbnails, navigator, still export match) (+ pixel tests)
-- [ ] 5.4 Animate tool (A): select a piece, handles (move, scale, stretch, rotate, skew), pivot handle, auto-key, options-bar fields (X, Y, W %, H %, rotation, skew, opacity, easing)
+- [x] 5.4 Animate tool (A): select a piece, handles (move, scale, stretch, rotate, skew), pivot handle, auto-key, options-bar fields (X, Y, W %, H %, rotation, skew, opacity, easing)
 - [ ] 5.5 Timeline panel (View → Timeline, docked above the status bar, resizable, remembered, hidden in Simple mode): ruler and playhead scrubbing, keyframe rows (drag to retime, easing, copy, paste, delete), transport, fps, length and loop; F6 region, keyboard and ARIA
 - [ ] 5.6 Playback (requestAnimationFrame at the document's fps, skipping frames when slow); size-changing and layer operations keep pieces right
 - [ ] 5.7 `.pigm` version 2 (timeline, pieces with PNG sources and keyframes; version 1 still opens; format in `docs/project-format.md`); still formats save the current frame with a notice (+ round-trip unit test)
