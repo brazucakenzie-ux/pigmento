@@ -15,6 +15,8 @@ import { useShortcut } from '../actions/keymap';
 
 /** Width of one frame on the timeline, in CSS px. */
 const CELL = 14;
+/** Width of the names column (matches .tl-names). */
+const NAMES_W = 150;
 
 /** A keyframe copied from the timeline (its values, not its frame). */
 let copied: KeyChange | null = null;
@@ -66,14 +68,17 @@ function PieceRow({ piece, index, selected, frame }: { piece: PieceInfo; index: 
     let to = k;
     // The window hears the rest of the drag (the diamond re-renders as it moves).
     const move = (ev: PointerEvent) => {
-      to = Math.min(engine.anim.timeline.length - 1, frameAt(ev.clientX, el));
+      to = Math.min(MAX_FRAMES - 1, frameAt(ev.clientX, el));
       setDrag({ from: k, to });
     };
     const up = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       setDrag(null);
-      if (to !== k && engine.anim.moveKey(piece.id, k, to)) engine.anim.setFrame(to);
+      if (to === k) return;
+      // Dragged past the end: the timeline grows to fit, so a move can take longer.
+      if (to >= engine.anim.timeline.length) engine.anim.setTimeline({ length: to + 1 });
+      if (engine.anim.moveKey(piece.id, k, to)) engine.anim.setFrame(to);
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
@@ -89,7 +94,7 @@ function PieceRow({ piece, index, selected, frame }: { piece: PieceInfo; index: 
   const keys = piece.keys.map((k) => ({ ...k, at: k.frame, frame: drag && k.frame === drag.from ? drag.to : k.frame })).sort((a, b) => a.frame - b.frame);
   return (
     <div
-      className={`tl-row ${selected ? 'selected' : ''}`}
+      className={`tl-row tl-piece-row ${selected ? 'selected' : ''}`}
       role="group"
       aria-label={name}
       onPointerDown={(e) => {
@@ -141,6 +146,11 @@ function PieceRow({ piece, index, selected, frame }: { piece: PieceInfo; index: 
           <Icon name="keyframe" size={12} />
         </button>
       ))}
+      {drag ? (
+        <span className="tl-drag-label" aria-hidden="true" style={{ left: drag.to * CELL + CELL / 2 }}>
+          {t('timeline.dragFrame', { n: drag.to + 1 })}
+        </span>
+      ) : null}
       {menu !== null ? (
         <Menu anchor={anchor} open onClose={() => setMenu(null)} label={t('timeline.keyMenu')}>
           <SubMenu label={t('timeline.easing')}>
@@ -433,16 +443,27 @@ export function Timeline() {
   const activeId = useUi((s) => s.layers.activeId);
   const layers = pixelLayers(tree);
   const [height, setHeight] = useState(settings.timelineHeight);
-  const tracks = useRef<HTMLDivElement | null>(null);
+  const body = useRef<HTMLDivElement | null>(null);
   useEffect(() => setHeight(settings.timelineHeight), [settings.timelineHeight]);
 
-  // Keep the playhead in view (while playing, or after jumping to a frame).
+  // Keep the playhead in view (while playing, or after jumping to a frame), beside the names.
   useEffect(() => {
-    const el = tracks.current;
+    const el = body.current;
     if (!el) return;
     const x = anim.frame * CELL;
-    if (x < el.scrollLeft || x + CELL > el.scrollLeft + el.clientWidth) el.scrollLeft = Math.max(0, x - el.clientWidth / 3);
+    const view = el.clientWidth - NAMES_W;
+    if (x < el.scrollLeft || x + CELL > el.scrollLeft + view) el.scrollLeft = Math.max(0, x - view / 3);
   }, [anim.frame]);
+
+  // Each layer, then the pieces on it (top first), as the Layers panel stacks them.
+  const pieceIndex = new Map(anim.pieces.map((p, i) => [p.id, i]));
+  const rows: ({ kind: 'layer'; layer: LayerNode } | { kind: 'piece'; piece: PieceInfo; index: number })[] = [];
+  for (const l of layers) {
+    rows.push({ kind: 'layer', layer: l });
+    for (const p of [...anim.pieces].reverse()) if (p.layerId === l.id) rows.push({ kind: 'piece', piece: p, index: pieceIndex.get(p.id)! });
+  }
+  const listed = new Set(layers.map((l) => l.id));
+  for (const p of anim.pieces) if (!listed.has(p.layerId)) rows.push({ kind: 'piece', piece: p, index: pieceIndex.get(p.id)! });
 
   const onResize = (e: ReactPointerEvent<HTMLDivElement>) => {
     const startY = e.clientY;
@@ -560,41 +581,41 @@ export function Timeline() {
           <Icon name="close" size={16} />
         </button>
       </div>
-      <div className="tl-body">
+      <div className="tl-body" ref={body}>
         <div className="tl-names">
           <div className="tl-names-head" aria-hidden="true" />
-          <div role="list" aria-label={t('timeline.layers')}>
-            {layers.map((l) => (
-              <div key={l.id} role="listitem" className="tl-name-row">
-                <button
-                  type="button"
-                  className={`tl-name ${l.id === activeId ? 'selected' : ''}`}
-                  aria-pressed={l.id === activeId}
-                  onClick={() => engine.layers.setActive(l.id)}
-                >
-                  <Icon name="layers" size={13} />
-                  <span className="tl-name-text">{l.name}</span>
-                </button>
-              </div>
-            ))}
-          </div>
-          <div role="list" aria-label={t('timeline.pieces')}>
-          {anim.pieces.map((p, i) => (
-            <div key={p.id} role="listitem" className="tl-name-row">
-              <PieceName piece={p} index={i} selected={p.id === anim.selectedId} layer={layerName(tree, p.layerId)} />
-            </div>
-          ))}
+          <div role="list" aria-label={t('timeline.rows')}>
+            {rows.map((r) =>
+              r.kind === 'layer' ? (
+                <div key={r.layer.id} role="listitem" className="tl-name-row">
+                  <button
+                    type="button"
+                    className={`tl-name ${r.layer.id === activeId ? 'selected' : ''}`}
+                    aria-pressed={r.layer.id === activeId}
+                    onClick={() => engine.layers.setActive(r.layer.id)}
+                  >
+                    <Icon name="layers" size={13} />
+                    <span className="tl-name-text">{r.layer.name}</span>
+                  </button>
+                </div>
+              ) : (
+                <div key={r.piece.id} role="listitem" className="tl-name-row tl-piece-name">
+                  <PieceName piece={r.piece} index={r.index} selected={r.piece.id === anim.selectedId} layer={layerName(tree, r.piece.layerId)} />
+                </div>
+              ),
+            )}
           </div>
         </div>
-        <div className="tl-tracks" ref={tracks}>
+        <div className="tl-tracks" style={{ width: anim.length * CELL }}>
           <Ruler length={anim.length} frame={anim.frame} />
           <div className="tl-rows" style={{ width: anim.length * CELL }}>
-            {layers.map((l) => (
-              <LayerRow key={l.id} layer={l} starts={anim.cels[l.id]} length={anim.length} frame={anim.frame} active={l.id === activeId} />
-            ))}
-            {anim.pieces.map((p, i) => (
-              <PieceRow key={p.id} piece={p} index={i} selected={p.id === anim.selectedId} frame={anim.frame} />
-            ))}
+            {rows.map((r) =>
+              r.kind === 'layer' ? (
+                <LayerRow key={r.layer.id} layer={r.layer} starts={anim.cels[r.layer.id]} length={anim.length} frame={anim.frame} active={r.layer.id === activeId} />
+              ) : (
+                <PieceRow key={r.piece.id} piece={r.piece} index={r.index} selected={r.piece.id === anim.selectedId} frame={anim.frame} />
+              ),
+            )}
             {anim.pieces.length === 0 && Object.keys(anim.cels).length === 0 ? <p className="tl-empty">{t('timeline.empty')}</p> : null}
           </div>
           <div className="tl-playhead" aria-hidden="true" style={{ left: anim.frame * CELL + CELL / 2 }} />

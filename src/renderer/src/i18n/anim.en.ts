@@ -28,6 +28,8 @@ export const animEn = {
   'notice.drawingHere': 'A drawing already starts at this frame. Go to another frame first.',
   'notice.tooManyCels': 'A layer can have at most {max} drawings.',
   'timeline.layers': 'Layers',
+  'timeline.rows': 'Layers and their pieces',
+  'timeline.dragFrame': 'Frame {n}',
   'action.onionSkin': 'Onion skin',
   'timeline.onionTip': 'Onion skin: faintly show the drawings before (orange) and after (blue) this one on the active layer. Only on screen.',
   'timeline.onionCount': 'Drawings to show each way',

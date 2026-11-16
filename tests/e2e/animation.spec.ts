@@ -455,3 +455,50 @@ test('frame-by-frame drawings save, reopen, and export frame by frame without th
     }
   }
 });
+
+test('with many layers, a piece’s keyframes sit under its layer and dragging the last one retimes the move', async () => {
+  const { page } = h;
+  const base = await page.evaluate(() => window.__pigmentoTest!.layers().activeId);
+  // The piece is on the bottom layer, with four more layers above it.
+  await page.evaluate((id) => window.__pigmentoTest!.fillLayer(id, { r: 200, g: 0, b: 0, a: 255 }, { x: 100, y: 100, w: 40, h: 40 }), base);
+  await page.evaluate(() => window.__pigmentoTest!.selectRect(100, 100, 40, 40));
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  await page.locator('.ribbon').getByRole('button', { name: 'Animate selection' }).click();
+  const id = (await page.evaluate(() => window.__pigmentoTest!.anim())).pieces[0].id;
+  await page.evaluate((pid) => window.__pigmentoTest!.setPieceKey(pid, 8, { x: 600 }), id);
+  for (let i = 0; i < 4; i++) await page.evaluate(() => window.__pigmentoTest!.addLayer());
+  const timeline = page.getByRole('region', { name: 'Timeline' });
+  const ruler = timeline.getByRole('slider', { name: 'Frames' });
+  const rulerTop = (await ruler.boundingBox())!.y;
+
+  // The piece's row comes straight after its layer's row.
+  const names = await timeline.getByRole('list', { name: 'Layers and their pieces' }).getByRole('listitem').allInnerTexts();
+  expect(names.indexOf('Piece 1')).toBe(names.length - 1);
+  expect(names[names.length - 2]).toBe(await page.evaluate((lid) => window.__pigmentoTest!.layers().tree.find((n) => n.id === lid)!.name, base));
+
+  // Drag the end keyframe from frame 9 to frame 17: the move now takes twice as long.
+  const end = timeline.getByRole('button', { name: /^Frame 9: keyframe of Piece 1/ });
+  await end.scrollIntoViewIfNeeded();
+  // Scrolling the rows leaves the ruler where it was.
+  expect((await ruler.boundingBox())!.y).toBeCloseTo(rulerTop, 0);
+  let box = (await end.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 8 * 14, box.y + box.height / 2, { steps: 6 });
+  // While dragging, a label says where it will land.
+  await expect(timeline.getByText('Frame 17', { exact: true })).toBeVisible();
+  await page.mouse.up();
+  expect((await page.evaluate(() => window.__pigmentoTest!.anim())).pieces[0].keys.map((k) => k.frame)).toEqual([0, 16]);
+  expect((await page.evaluate((pid) => window.__pigmentoTest!.pieceAt(pid, 8), id))!.x).toBeCloseTo((120 + 600) / 2, 0);
+
+  // Dragging past the last frame makes the timeline longer to fit.
+  const moved = timeline.getByRole('button', { name: /^Frame 17: keyframe of Piece 1/ });
+  box = (await moved.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 14 * 14, box.y + box.height / 2, { steps: 8 });
+  await page.mouse.up();
+  const info = await page.evaluate(() => window.__pigmentoTest!.anim());
+  expect(info.pieces[0].keys.map((k) => k.frame)).toEqual([0, 30]);
+  expect(info.length).toBe(31);
+});

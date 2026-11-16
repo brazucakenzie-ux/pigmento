@@ -3002,19 +3002,27 @@ dialog.tour::backdrop {
   display: flex;
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  /* One scroller: the names stay at the left and the ruler at the top. */
+  overflow: auto;
 }
 .tl-names {
   flex: 0 0 150px;
+  align-self: flex-start;
+  min-height: 100%;
   border-right: 1px solid var(--border);
   background: var(--bg-panel);
   position: sticky;
   left: 0;
-  z-index: 1;
+  /* Above the playhead and the drag label when the rows scroll sideways. */
+  z-index: 4;
 }
 .tl-names-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   height: 22px;
   border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
 }
 .tl-name-row {
   height: 26px;
@@ -3061,13 +3069,12 @@ dialog.tour::backdrop {
 }
 .tl-tracks {
   position: relative;
-  flex: 1;
-  min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
+  flex: 0 0 auto;
 }
 .tl-ruler {
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 1;
   height: 22px;
   border-bottom: 1px solid var(--border);
   background-color: var(--ruler-bg);
@@ -3141,6 +3148,7 @@ dialog.tour::backdrop {
 }
 .tl-playhead {
   position: absolute;
+  z-index: 2;
   top: 0;
   bottom: 0;
   width: 2px;
@@ -3218,4 +3226,25 @@ dialog.tour::backdrop {
   .tl-cel.current {
     border-color: Highlight;
   }
+}
+/* Pieces sit under the layer they belong to */
+.tl-piece-name .tl-name {
+  padding-left: 22px;
+}
+.tl-drag-label {
+  position: absolute;
+  top: -2px;
+  z-index: 3;
+  transform: translate(-50%, -100%);
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: var(--fs-2xs);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.tl-row.tl-piece-row:first-child .tl-drag-label {
+  top: 2px;
+  transform: translate(8px, 0);
 }

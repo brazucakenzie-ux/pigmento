@@ -652,6 +652,38 @@ test('capture frame by frame', async () => {
   }
 });
 
+test('capture timeline rows', async () => {
+  test.skip(!process.env.PIGMENTO_SCREENSHOT, 'Set PIGMENTO_SCREENSHOT=1 to capture screenshots');
+  const out = process.env.PIGMENTO_SCREENSHOT_DIR ?? path.resolve('test-results');
+  const h = await launchApp();
+  const { page } = h;
+  try {
+    await ready(page);
+    const base = await page.evaluate(() => window.__pigmentoTest!.layers().activeId);
+    await page.evaluate((id) => window.__pigmentoTest!.fillLayer(id, { r: 230, g: 120, b: 40, a: 255 }, { x: 160, y: 300, w: 120, h: 80 }), base);
+    await page.evaluate(() => window.__pigmentoTest!.selectRect(160, 300, 120, 80));
+    await page.getByRole('tab', { name: 'Animate' }).click();
+    await page.locator('.ribbon').getByRole('button', { name: 'Animate selection' }).click();
+    const id = (await page.evaluate(() => window.__pigmentoTest!.anim())).pieces[0].id;
+    await page.evaluate((pid) => window.__pigmentoTest!.setPieceKey(pid, 6, { x: 500, y: 200 }), id);
+    await page.evaluate((pid) => window.__pigmentoTest!.setPieceKey(pid, 14, { x: 760, y: 360, angle: 1 }), id);
+    for (let i = 0; i < 3; i++) await page.evaluate(() => window.__pigmentoTest!.addLayer());
+    const timeline = page.getByRole('region', { name: 'Timeline' });
+    const key = timeline.getByRole('button', { name: /^Frame 15: keyframe/ });
+    await key.scrollIntoViewIfNeeded();
+    const box = (await key.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 5 * 14, box.y + box.height / 2, { steps: 4 });
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: path.join(out, 'timeline-rows.png') });
+    await page.mouse.up();
+    console.warn('errors:', JSON.stringify(h.errors));
+  } finally {
+    await h.close();
+  }
+});
+
 test('capture settings', async () => {
   test.skip(!process.env.PIGMENTO_SCREENSHOT, 'Set PIGMENTO_SCREENSHOT=1 to capture screenshots');
   const out = process.env.PIGMENTO_SCREENSHOT_DIR ?? path.resolve('test-results');

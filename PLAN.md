@@ -263,6 +263,8 @@ Decisions: pieces come only from pixel layers; shape layers and text aren't fram
 - [x] 5.18 Cels in `.pigm` and in exports; e2e (paint frame 3, frames 2 and 4 unchanged; onion skin not exported); `npm run check` green; report
 - Stop 5C notes: merging or flattening frame-by-frame layers is refused (they'd need merging frame by frame); onion skin also shows in the Navigator (it reads the on-screen picture); a drag-based shape e2e failed once under load and passed on the re-run.
 
+- [x] Requested after Stop 5C: each piece's keyframe row sits right under its layer in the timeline (they were all below every layer, out of sight on a short timeline); the ruler and names stay put while the rows scroll; dragging a keyframe shows the frame it will land on, and dragging past the end makes the timeline longer
+
 **Stop 5D — Polish and release**
 - [ ] 5.19 Accessibility: axe audit of the Animate tab, timeline and export dialog in light, dark and high contrast; keyboard-only timeline e2e; reduced motion
 - [ ] 5.20 Performance budgets: 24 fps playback at 1920×1080 with 5 layers and 20 pieces; scrubbing a frame < 16 ms; GIF of 48 frames at 1280×720 < 15 s; MP4 of 240 frames at 1080p < 30 s
