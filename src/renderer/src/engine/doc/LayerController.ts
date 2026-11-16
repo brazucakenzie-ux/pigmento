@@ -16,6 +16,7 @@ import type { CommandHost } from '../history/commands';
 import { LayerPropsCommand, LayerTreeCommand } from '../history/layerCommands';
 import type { I18nKey } from '../../i18n';
 import { cloneNode } from '../vector/model';
+import { clonePiece, newPieceId } from '../anim/piece';
 
 export interface LayerNode {
   id: string;
@@ -178,6 +179,11 @@ export class LayerController {
       const slot = this.doc.slotOf(id)!;
       slot.list.splice(slot.index + 1, 0, copy);
       this.doc.activeId = copy.id;
+      // The copy gets copies of the layer's animated pieces.
+      const ids = new Map<string, string>();
+      pairLayers(src, copy, ids);
+      const pieces = this.doc.pieces.filter((p) => ids.has(p.layerId)).map((p) => ({ ...clonePiece(p), id: newPieceId(), layerId: ids.get(p.layerId)! }));
+      this.doc.pieces.push(...pieces);
     });
     return copy.id;
   }
@@ -196,8 +202,11 @@ export class LayerController {
       this.host.notify('info', 'notice.lastLayer');
       return false;
     }
+    const removed = new Set([...walkLayers([slot.list[slot.index]])].map((l) => l.id));
     return this.edit('history.layerDelete', () => {
       slot.list.splice(slot.index, 1);
+      // Its pieces go with it (undo brings them back).
+      this.doc.pieces = this.doc.pieces.filter((p) => !removed.has(p.layerId));
       const next = slot.list[Math.max(0, slot.index - 1)] ?? slot.parent ?? this.doc.layers[this.doc.layers.length - 1];
       this.doc.activeId = next.id;
     });
@@ -293,24 +302,59 @@ export class LayerController {
     const slot = this.doc.slotOf(id)!;
     const upper = slot.list[slot.index];
     const lower = slot.list[slot.index - 1] as RasterLayer;
+    // Pieces of the layer below would end up in front of the pixels above them.
+    if (this.doc.pieces.some((p) => p.layerId === lower.id)) {
+      this.host.notify('info', 'notice.mergePiecesBelow');
+      return false;
+    }
+    // The upper layer's pieces move onto the merged layer, faded as the layers they were on.
+    const carried = new Map<string, { opacity: number; blended: boolean }>();
+    const visit = (l: Layer, opacity: number, blended: boolean): void => {
+      if (!l.visible) return;
+      const o = opacity * l.opacity;
+      const b = blended || l.blend !== 'normal';
+      if (l.kind === 'group') l.children.forEach((c) => visit(c, o, b));
+      else carried.set(l.id, { opacity: o, blended: b });
+    };
+    visit(upper, 1, false);
     const surface = lower.surface.clone();
     surface.forEachTile(this.doc.bounds, (view, sub) => compositeLayers([upper], sub, view), true);
     surface.compact();
     const merged = new RasterLayer(lower.name, surface);
     merged.setProps({ opacity: lower.opacity, blend: lower.blend, visible: lower.visible, locked: false });
-    return this.edit('history.mergeDown', () => {
+    const upperIds = new Set([...walkLayers([upper])].map((l) => l.id));
+    let lostBlend = false;
+    const done = this.edit('history.mergeDown', () => {
       slot.list.splice(slot.index - 1, 2, merged);
       this.doc.activeId = merged.id;
+      this.doc.pieces = this.doc.pieces.flatMap((p) => {
+        if (!upperIds.has(p.layerId)) return [p];
+        const c = carried.get(p.layerId);
+        // Pieces of hidden layers go, as their layers' pixels do.
+        if (!c) return [];
+        if (c.blended) lostBlend = true;
+        return [{ ...p, layerId: merged.id, keyframes: p.keyframes.map((k) => ({ ...k, opacity: k.opacity * c.opacity })) }];
+      });
     });
+    if (done && lostBlend) this.host.notify('info', 'notice.mergePiecesBlend');
+    return done;
   }
 
   /** Flatten every visible layer into one (hidden layers are discarded; the paper stays). */
   flatten(): boolean {
+    // Animated pieces need a layer each to move on, so they can't be flattened into one.
+    const visible = new Set([...walkLayers(this.doc.layers)].filter((l) => this.doc.isEffectivelyVisible(l.id)).map((l) => l.id));
+    if (this.doc.pieces.some((p) => visible.has(p.layerId))) {
+      this.host.notify('info', 'notice.flattenPieces');
+      return false;
+    }
     const { width: w, height: h } = this.doc;
     const data = new Uint8ClampedArray(w * h * 4);
     compositeLayers(this.doc.layers, this.doc.bounds, { data, stride: w, ox: 0, oy: 0 });
     const flat = new RasterLayer(this.namer('layer', 1), Surface.fromRGBA(w, h, data));
     return this.edit('history.flatten', () => {
+      // Only pieces on hidden layers are left, and those layers go.
+      this.doc.pieces = [];
       this.doc.layers = [flat];
       this.doc.activeId = flat.id;
     });
@@ -347,4 +391,10 @@ export class LayerController {
       this.doc.activeId = g.children[g.children.length - 1]?.id ?? slot.list[Math.max(0, slot.index - 1)]?.id ?? this.doc.layers[0].id;
     });
   }
+}
+
+/** Map each layer id in `a` to the id of the matching layer in its copy `b` (same shape). */
+function pairLayers(a: Layer, b: Layer, out: Map<string, string>): void {
+  out.set(a.id, b.id);
+  if (a.kind === 'group' && b.kind === 'group') a.children.forEach((c, i) => b.children[i] && pairLayers(c, b.children[i], out));
 }

@@ -10,6 +10,7 @@ import {
   MAX_KEYFRAMES,
   MAX_PIECES,
   moveKey,
+  newPieceId,
   piecesBytes,
   removeKey,
   setKey,
@@ -118,8 +119,6 @@ export class AnimationCommand implements Command {
     this.host.animationChanged(null);
   }
 }
-
-let nextPieceId = 1;
 
 /**
  * Pieces, keyframes and the timeline. Every change is one undo step; a drag (begin → preview …
@@ -342,7 +341,7 @@ export class AnimationController {
   add(src: ImageBuf, home: Rect, layerId: string): Piece | null {
     if (!this.canAdd()) return null;
     const n = this.doc.pieces.length + 1;
-    const piece = makePiece(`piece-${nextPieceId++}-${Date.now().toString(36)}`, this.namer(n), layerId, src, home, this.frame);
+    const piece = makePiece(newPieceId(), this.namer(n), layerId, src, home, this.frame);
     this.change('history.animateSelection', () => {
       this.doc.pieces.push(piece);
       return true;

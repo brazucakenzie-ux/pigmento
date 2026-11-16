@@ -69,5 +69,8 @@ export const animEn = {
   'notice.tooManyPieces': 'A picture can have at most {max} pieces.',
   'notice.tooManyKeyframes': 'A piece can have at most {max} keyframes.',
   'notice.animateLocked': 'This layer is locked. Unlock it to animate part of it.',
+  'notice.mergePiecesBelow': 'The layer below has animated pieces, which would end up in front of this layer. Move or delete those pieces first.',
+  'notice.mergePiecesBlend': 'The moved pieces now show without the merged layer’s blend mode.',
+  'notice.flattenPieces': 'Animated pieces each need a layer to move on, so the picture can’t be flattened. Delete the pieces, or hide their layers, first.',
   'notice.animatePixelsOnly': 'Pieces can only come from a pixel layer. Rasterise the layer first.',
 } as const;

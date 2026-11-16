@@ -7,6 +7,7 @@ import type { Selection } from '../doc/Selection';
 import type { Surface, TileDelta } from '../raster/Surface';
 import type { I18nKey } from '../../i18n';
 import type { Command } from './History';
+import { clonePiece, type Piece } from '../anim/piece';
 
 /** What commands need from the engine to keep the display in sync. */
 export interface CommandHost {
@@ -69,6 +70,8 @@ export interface DocState {
   guides: Guide[];
   /** Objects and size of every shape layer. */
   vectors: Map<VectorLayer, { objects: readonly VectorNode[]; width: number; height: number }>;
+  /** Animated pieces (they move with resizes, crops and turns). */
+  pieces: Piece[];
 }
 
 export function captureDocState(doc: PaintDocument): DocState {
@@ -82,6 +85,7 @@ export function captureDocState(doc: PaintDocument): DocState {
     saved: doc.savedSelections,
     guides: doc.guides,
     vectors: new Map(doc.vectorLayers().map((l) => [l, { objects: l.objects, width: l.width, height: l.height }])),
+    pieces: doc.pieces.map(clonePiece),
   };
 }
 
@@ -98,6 +102,7 @@ export function applyDocState(doc: PaintDocument, s: DocState): void {
     layer.resize(v.width, v.height);
     layer.setObjects(v.objects);
   }
+  doc.pieces = s.pieces.map(clonePiece);
 }
 
 /**

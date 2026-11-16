@@ -4,6 +4,7 @@ import { flipH, flipV, rotate90, type ImageBuf } from '../raster/transform';
 import { transformSaved } from '../doc/savedSelections';
 import { turnGuides } from '../doc/guides';
 import { transformNode } from '../vector/model';
+import { transformPieces } from '../anim/pieceTransform';
 import type { Mat } from '../core/matrix';
 import type { I18nKey } from '../../i18n';
 import type { CommandHost } from './commands';
@@ -46,6 +47,7 @@ export function applyLossless(doc: PaintDocument, op: LosslessOp, inverse: boole
     l.resize(nw, nh);
     l.setObjects(l.objects.map((n) => transformNode(n, m)));
   }
+  doc.pieces = transformPieces(doc.pieces, m);
   doc.width = nw;
   doc.height = nh;
   doc.selection = null;

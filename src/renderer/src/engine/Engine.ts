@@ -9,6 +9,7 @@ import { LayerController, type LayersInfo } from './doc/LayerController';
 import { AnimationController, type AnimHost, type AnimationInfo } from './anim/AnimationController';
 import { compositeLayers } from './raster/blend';
 import { pieceExtras } from './anim/pieceRaster';
+import { transformPieces } from './anim/pieceTransform';
 import { Selection, type SelectionMode, type SelectionModify } from './doc/Selection';
 import { History, type HistoryEntry } from './history/History';
 import {
@@ -538,6 +539,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.emit('layers', this.layers.info());
     this.savedSelectionsChanged();
     this.emit('guides', this.doc.guides.length);
+    this.emit('animation', this.anim.info());
     this.requestRender();
     this.notifyPixels();
   }
@@ -560,6 +562,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.renderer.syncTree();
     this.pruneVectorSelection();
     this.emit('layers', this.layers.info());
+    // Deleting, duplicating or merging layers changes their pieces.
+    this.emit('animation', this.anim.info());
     this.requestRender();
     this.notifyPixels();
   }
@@ -1809,11 +1813,13 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   }
 
   /** Apply a whole-image change (crop, resize, rotate…) to every shape layer. */
+  /** Shape layers and animated pieces follow a whole-picture change (resize, crop, turn…) by m. */
   private reframeVectors(m: Mat, w: number, h: number): void {
     for (const l of this.doc.vectorLayers()) {
       l.resize(w, h);
       l.setObjects(l.objects.map((n) => transformNode(n, m)));
     }
+    this.doc.pieces = transformPieces(this.doc.pieces, m);
   }
 
   /** Area a shape layer's objects cover, outlines included. */

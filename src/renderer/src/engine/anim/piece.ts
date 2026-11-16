@@ -25,6 +25,13 @@ export interface Piece {
 /** What a keyframe change can set. */
 export type KeyChange = Partial<PieceState & Pick<Keyframe, 'easing' | 'in' | 'out'>>;
 
+let nextPieceId = 1;
+
+/** A new, unique piece id. */
+export function newPieceId(): string {
+  return `piece-${nextPieceId++}-${Date.now().toString(36)}`;
+}
+
 export const MAX_PIECES = 500;
 export const MAX_KEYFRAMES = 2000;
 

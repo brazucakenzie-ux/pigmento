@@ -1,7 +1,7 @@
 import type { RGBA } from '../core/color';
 import { Surface } from '../raster/Surface';
 import { defaultTimeline, type Timeline } from '../anim/timeline';
-import type { Piece } from '../anim/piece';
+import { clonePiece, type Piece } from '../anim/piece';
 import type { Selection } from './Selection';
 import type { Guide } from './guides';
 import type { VectorNode } from '../vector/model';
@@ -282,16 +282,19 @@ export interface LayerTree {
   layers: Layer[];
   groups: Map<GroupLayer, Layer[]>;
   activeId: string;
+  /** Animated pieces (deleting, duplicating or merging layers changes them). */
+  pieces: Piece[];
 }
 
 export function captureTree(doc: PaintDocument): LayerTree {
   const groups = new Map<GroupLayer, Layer[]>();
   for (const l of walkLayers(doc.layers)) if (l.kind === 'group') groups.set(l, [...l.children]);
-  return { layers: [...doc.layers], groups, activeId: doc.activeId };
+  return { layers: [...doc.layers], groups, activeId: doc.activeId, pieces: doc.pieces.map(clonePiece) };
 }
 
 export function restoreTree(doc: PaintDocument, t: LayerTree): void {
   doc.layers = [...t.layers];
   for (const [g, children] of t.groups) g.children = [...children];
   doc.activeId = t.activeId;
+  doc.pieces = t.pieces.map(clonePiece);
 }
