@@ -137,11 +137,14 @@ test('opens a 100-megapixel image within its time and memory budget', async () =
   await h.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.reload());
   await page.waitForLoadState('domcontentloaded');
   await ready(page);
-  const t0 = Date.now();
   await app.evaluate(({ dialog }, fp) => {
     dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [fp] })) as typeof dialog.showOpenDialog;
   }, file);
-  await page.keyboard.press('Control+o');
+  // File → Open (a shortcut pressed straight after the reload can arrive before the window
+  // listens for keys, which made this test flaky; the menu is ready as soon as it shows).
+  await page.getByRole('button', { name: 'File', exact: true }).click();
+  const t0 = Date.now();
+  await page.getByRole('menuitem', { name: /^Open/ }).first().click();
   await expect.poll(() => page.evaluate(() => window.__pigmentoTest!.doc())).toEqual({ width: 10000, height: 10000 });
   // Shown on screen, not just loaded.
   await page.evaluate(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));

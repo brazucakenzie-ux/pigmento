@@ -244,7 +244,8 @@ Decisions: pieces come only from pixel layers; shape layers and text aren't fram
 - [x] 5.5 Timeline panel (View → Timeline, docked above the status bar, resizable, remembered, hidden in Simple mode): ruler and playhead scrubbing, keyframe rows (drag to retime, easing, copy, paste, delete), transport, fps, length and loop; F6 region, keyboard and ARIA
 - [x] 5.6 Playback (requestAnimationFrame at the document's fps, skipping frames when slow; landed with the timeline in 5.5); size-changing operations move pieces with the picture (resize, crop, canvas size, trim, flips, turns, free rotate, skew); deleting, duplicating and merging layers keep their pieces right; flatten refuses while visible pieces exist
 - [x] 5.7 `.pigm` version 2 (timeline, pieces with PNG sources and keyframes; version 1 still opens; format in `docs/project-format.md`); still formats save the current frame with a notice (+ round-trip unit test)
-- [ ] 5.8 E2e: make a piece, keyframe it, scrub, play, undo, save and reopen; `npm run check` green; report
+- [x] 5.8 E2e: make a piece, keyframe it, scrub, play, undo, save and reopen; `npm run check` green; report
+- Stop 5A notes: the timeline is Full mode only; trimming and fitting the canvas look at the frame shown; F6 now carries on from the region it last focused when the focus falls back to the page (the keyboard e2e lost focus under load); the 100-megapixel e2e opens through File → Open, because a shortcut pressed straight after a reload could be missed.
 
 **Stop 5B — Motion paths and export**
 - [ ] 5.9 Curved motion paths: on-canvas handles at keyframes, straighten; nudge keyframes in time

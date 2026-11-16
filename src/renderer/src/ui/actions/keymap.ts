@@ -128,18 +128,25 @@ const REGIONS: readonly { region: string; focus: string | null }[] = [
   { region: '.statusbar', focus: FOCUSABLE },
 ];
 
+/** The region F6 last moved the focus to. */
+let lastRegion: string | null = null;
+
 /** F6 / Shift+F6: move the focus to the next (or previous) region that has something to focus. */
 export function cycleRegion(dir: 1 | -1): boolean {
   const regions = REGIONS.map((r) => ({ ...r, el: document.querySelector<HTMLElement>(r.region) })).filter((r) => r.el);
   if (!regions.length) return false;
   const active = document.activeElement;
   let i = regions.findIndex((r) => r.el!.contains(active));
+  // If the focus fell back to the page (the focused control went away), carry on from the region
+  // F6 last went to rather than starting over.
+  if (i < 0 && (active === document.body || active === null)) i = regions.findIndex((r) => r.region === lastRegion);
   if (i < 0) i = dir > 0 ? -1 : regions.length;
   for (let k = 1; k <= regions.length; k++) {
     const r = regions[(((i + dir * k) % regions.length) + regions.length) % regions.length];
     const target = r.focus ? r.el!.querySelector<HTMLElement>(r.focus) : r.el;
     if (target && target.getClientRects().length > 0) {
       target.focus();
+      lastRegion = r.region;
       return true;
     }
   }

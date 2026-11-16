@@ -1,8 +1,17 @@
 // Animation: pieces cut from a selection, keyframes, frames and undo.
 import { expect, test } from '@playwright/test';
-import { drag, launchApp, ready, type AppHandle } from './harness';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { drag, launchApp, ready, tempFile, type AppHandle } from './harness';
 
 let h: AppHandle;
+
+/** Make the next native Save dialog return `file`. */
+async function stubSave(file: string): Promise<void> {
+  await h.app.evaluate(({ dialog }, fp) => {
+    dialog.showSaveDialog = (async () => ({ canceled: false, filePath: fp })) as typeof dialog.showSaveDialog;
+  }, file);
+}
 
 test.beforeEach(async () => {
   h = await launchApp();
@@ -160,4 +169,77 @@ test('the timeline scrubs, plays, retimes keyframes and renames pieces', async (
   for (let i = 0; i < 3; i++) await page.keyboard.press('Control+z');
   const info = await page.evaluate(() => window.__pigmentoTest!.anim());
   expect(info.pieces[0]).toMatchObject({ name: 'Piece 1', keys: [{ frame: 0, easing: 'linear' }, { frame: 8, easing: 'linear' }] });
+});
+
+test('a free-form piece survives a flip, a still save and a project save and reopen', async () => {
+  const { page } = h;
+  const layerId = await page.evaluate(() => window.__pigmentoTest!.layers().activeId);
+  await page.evaluate((id) => window.__pigmentoTest!.fillLayer(id, { r: 20, g: 90, b: 220, a: 255 }, { x: 300, y: 200, w: 120, h: 120 }), layerId);
+  // A free-form selection, lifted as a copy ("Leave the original").
+  await page.locator('.rb-split', { has: page.getByRole('button', { name: 'Select', exact: true }) }).locator('[aria-haspopup="menu"]').click();
+  await page.getByRole('menuitemcheckbox', { name: 'Free-form select' }).click();
+  await drag(page, [
+    [320, 220],
+    [400, 220],
+    [400, 300],
+    [320, 300],
+    [320, 222],
+  ]);
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  await page.locator('.ribbon').getByRole('button', { name: 'Leave the original' }).click();
+  await page.locator('.ribbon').getByRole('button', { name: 'Animate selection' }).click();
+  const id = (await page.evaluate(() => window.__pigmentoTest!.anim())).pieces[0].id;
+  await page.evaluate((pid) => window.__pigmentoTest!.setPieceKey(pid, 6, { x: 700, y: 500 }), id);
+  // The original stays where it was.
+  expect(await page.evaluate(() => window.__pigmentoTest!.pixel(360, 260))).toEqual({ r: 20, g: 90, b: 220, a: 255 });
+  await page.evaluate(() => window.__pigmentoTest!.setFrame(6));
+  expect(await page.evaluate(() => window.__pigmentoTest!.pixel(700, 500))).toEqual({ r: 20, g: 90, b: 220, a: 255 });
+
+  // Flip the whole picture: the piece flips with it, and undo puts it back.
+  await page.getByRole('tab', { name: 'Image' }).click();
+  await page.locator('.ribbon').getByRole('button', { name: 'Flip horizontal' }).click();
+  const w = (await page.evaluate(() => window.__pigmentoTest!.doc())).width;
+  expect(await page.evaluate((x) => window.__pigmentoTest!.pixel(x, 500), w - 700)).toEqual({ r: 20, g: 90, b: 220, a: 255 });
+  await page.keyboard.press('Control+z');
+  expect(await page.evaluate(() => window.__pigmentoTest!.pixel(700, 500))).toEqual({ r: 20, g: 90, b: 220, a: 255 });
+
+  // A PNG holds the frame on screen, and says so.
+  const png = tempFile('frame.png');
+  await stubSave(png);
+  await page.keyboard.press('Control+Shift+s');
+  await expect(page.locator('.toast', { hasText: 'Saved frame 7 as the still picture frame.png' })).toBeVisible();
+
+  // The project keeps the animation; reopening it shows the timeline at the same frame.
+  const project = path.join(path.dirname(png), 'moving.pigm');
+  await stubSave(project);
+  await page.keyboard.press('Control+Shift+s');
+  await expect.poll(() => existsSync(project)).toBe(true);
+  // Go elsewhere and hide the timeline, so the reopened file has to bring them back.
+  await page.evaluate(() => window.__pigmentoTest!.setFrame(0));
+  await page.getByRole('button', { name: 'Hide the timeline' }).click();
+  await page.evaluate((p) => window.__pigmentoTest!.openPath(p), project);
+  await expect.poll(() => page.evaluate(() => window.__pigmentoTest!.history().length)).toBe(0);
+  const info = await page.evaluate(() => window.__pigmentoTest!.anim());
+  expect(info.pieces).toHaveLength(1);
+  expect(info.frame).toBe(6);
+  expect(info.pieces[0].keys.map((k) => k.frame)).toEqual([0, 6]);
+  await expect(page.getByRole('region', { name: 'Timeline' })).toBeVisible();
+  expect(await page.evaluate(() => window.__pigmentoTest!.pixel(700, 500))).toEqual({ r: 20, g: 90, b: 220, a: 255 });
+});
+
+test('Simple mode hides the Animate tab and the timeline, and keeps the frame on screen', async () => {
+  const { page } = h;
+  await page.evaluate(() => window.__pigmentoTest!.selectRect(10, 10, 30, 30));
+  const layerId = await page.evaluate(() => window.__pigmentoTest!.layers().activeId);
+  await page.evaluate((id) => window.__pigmentoTest!.fillLayer(id, { r: 0, g: 0, b: 0, a: 255 }, { x: 10, y: 10, w: 30, h: 30 }), layerId);
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  await page.locator('.ribbon').getByRole('button', { name: 'Animate selection' }).click();
+  await expect(page.getByRole('region', { name: 'Timeline' })).toBeVisible();
+  await page.getByRole('button', { name: 'Full', exact: true }).click();
+  await expect(page.getByRole('tab', { name: 'Animate' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Timeline' })).toHaveCount(0);
+  // The picture still shows the frame (the piece at home).
+  expect(await page.evaluate(() => window.__pigmentoTest!.pixel(20, 20))).toEqual({ r: 0, g: 0, b: 0, a: 255 });
+  await page.getByRole('button', { name: 'Simple', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Timeline' })).toBeVisible();
 });
