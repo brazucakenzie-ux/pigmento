@@ -1,5 +1,6 @@
 import type { RGBA } from '../core/color';
 import { Surface } from '../raster/Surface';
+import { defaultTimeline, type Timeline } from '../anim/timeline';
 import type { Selection } from './Selection';
 import type { Guide } from './guides';
 import type { VectorNode } from '../vector/model';
@@ -194,6 +195,8 @@ export class PaintDocument {
   savedSelections: SavedSelection[] = [];
   /** Ruler guides (saved in projects). */
   guides: Guide[] = [];
+  /** Animation timing and the frame shown (saved in projects). */
+  timeline: Timeline = defaultTimeline();
 
   constructor(init: DocumentInit, layers?: Layer[]) {
     this.width = init.width;

@@ -237,7 +237,7 @@ Words used in the UI: the **timeline** (fps 1–60, default 12; length 1–2000 
 Decisions: pieces come only from pixel layers; shape layers and text aren't frame-by-frame; pieces are cut-outs (animated, not repainted); animation is Full mode only; MP4 has no sound.
 
 **Stop 5A — Keyframe animation**
-- [ ] 5.1 Timeline model and `engine/anim/interpolate.ts`: easing (linear, ease in/out/in-out, hold), unwrapped rotation, pivot, Bézier motion path, `pieceMatrixAt(piece, frame)` (+ unit tests on known values)
+- [x] 5.1 Timeline model and `engine/anim/interpolate.ts`: easing (linear, ease in/out/in-out, hold), unwrapped rotation, pivot, Bézier motion path, `pieceMatrixAt(piece, frame)` (+ unit tests on known values)
 - [ ] 5.2 Pieces: Animate selection (rectangle and free-form), "Leave the original in place", piece list, rename and delete; `PieceCommand` undo/redo (+ unit tests)
 - [ ] 5.3 Pieces drawn at the current frame on screen (isolated layer canvas) and in the JS flatten (sampling, thumbnails, navigator, still export match) (+ pixel tests)
 - [ ] 5.4 Animate tool (A): select a piece, handles (move, scale, stretch, rotate, skew), pivot handle, auto-key, options-bar fields (X, Y, W %, H %, rotation, skew, opacity, easing)
