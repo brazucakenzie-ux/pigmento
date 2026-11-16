@@ -10,6 +10,11 @@ import type { ImageBuf } from '../raster/transform';
 import { stateMatrix } from '../anim/interpolate';
 import { pieceBounds, pieceStateAt, type Piece } from '../anim/piece';
 import { piecesByLayer } from '../anim/pieceRaster';
+import { celIndexAt } from '../anim/cels';
+
+/** Onion-skin tints: drawings before the one shown, and after it. */
+const ONION_BEFORE = '#ff6a14';
+const ONION_AFTER = '#1f6bff';
 
 type Ctx2D = OffscreenCanvasRenderingContext2D;
 
@@ -67,6 +72,9 @@ export class Renderer {
   private celMirrors = new Map<Surface, Mirror & { used: number }>();
   private useClock = 0;
   static CEL_MIRROR_BYTES = 768 * 1024 * 1024;
+  /** Onion skin on the active frame-by-frame layer (null = off). */
+  onion: { count: number; opacity: number } | null = null;
+  private onionScratch: GroupCanvas | null = null;
   /** Pieces per layer for the composite pass under way. */
   private passPieces: Map<string, Piece[]> | null = null;
   private composite: OffscreenCanvas;
@@ -316,31 +324,81 @@ export class Renderer {
       for (const f of this.activeFilters) f(view, area);
       m.ctx.putImageData(new ImageData(buf as Uint8ClampedArray<ArrayBuffer>, area.w, area.h), area.x, area.y);
     } else {
-      const s = layer.surface;
-      const tx0 = Math.floor(area.x / TILE_SIZE);
-      const ty0 = Math.floor(area.y / TILE_SIZE);
-      const tx1 = Math.floor((area.x + area.w - 1) / TILE_SIZE);
-      const ty1 = Math.floor((area.y + area.h - 1) / TILE_SIZE);
-      for (let ty = ty0; ty <= ty1; ty++) {
-        for (let tx = tx0; tx <= tx1; tx++) {
-          const i = ty * s.cols + tx;
-          const sub = rectIntersect(area, s.tileRect(i))!;
-          const tile = s.tiles[i];
-          if (!tile) {
-            m.ctx.clearRect(sub.x, sub.y, sub.w, sub.h);
-            continue;
-          }
-          // Wrap the tile memory directly (no copy) and upload just the dirty sub-rect.
-          let img = m.tileImages.get(i);
-          if (!img || img.data !== tile) {
-            img = new ImageData(tile as Uint8ClampedArray<ArrayBuffer>, TILE_SIZE, TILE_SIZE);
-            m.tileImages.set(i, img);
-          }
-          m.ctx.putImageData(img, tx * TILE_SIZE, ty * TILE_SIZE, sub.x - tx * TILE_SIZE, sub.y - ty * TILE_SIZE, sub.w, sub.h);
-        }
-      }
+      this.upload(m, layer.surface, area);
     }
     this.invalidate(area);
+  }
+
+  /** Upload a surface's tiles inside area to a mirror. */
+  private upload(m: Mirror, s: Surface, area: Rect): void {
+    const tx0 = Math.floor(area.x / TILE_SIZE);
+    const ty0 = Math.floor(area.y / TILE_SIZE);
+    const tx1 = Math.floor((area.x + area.w - 1) / TILE_SIZE);
+    const ty1 = Math.floor((area.y + area.h - 1) / TILE_SIZE);
+    for (let ty = ty0; ty <= ty1; ty++) {
+      for (let tx = tx0; tx <= tx1; tx++) {
+        const i = ty * s.cols + tx;
+        const sub = rectIntersect(area, s.tileRect(i))!;
+        const tile = s.tiles[i];
+        if (!tile) {
+          m.ctx.clearRect(sub.x, sub.y, sub.w, sub.h);
+          continue;
+        }
+        // Wrap the tile memory directly (no copy) and upload just the dirty sub-rect.
+        let img = m.tileImages.get(i);
+        if (!img || img.data !== tile) {
+          img = new ImageData(tile as Uint8ClampedArray<ArrayBuffer>, TILE_SIZE, TILE_SIZE);
+          m.tileImages.set(i, img);
+        }
+        m.ctx.putImageData(img, tx * TILE_SIZE, ty * TILE_SIZE, sub.x - tx * TILE_SIZE, sub.y - ty * TILE_SIZE, sub.w, sub.h);
+      }
+    }
+  }
+
+  /** A drawing's GPU copy, uploaded first if it hasn't been (onion skin shows drawings not on show). */
+  private drawingCanvas(s: Surface): OffscreenCanvas {
+    const m = this.celMirror(s);
+    if (m.surface !== s) {
+      m.tileImages.clear();
+      m.surface = s;
+      this.upload(m, s, { x: 0, y: 0, w: this.doc.width, h: this.doc.height });
+    }
+    return m.canvas;
+  }
+
+  /**
+   * Onion skin: the active frame-by-frame layer's drawings before (orange) and after (blue) the
+   * one shown, fainter the further away, drawn just under it. Screen only: exports never see it.
+   */
+  private drawOnion(ctx: Ctx2D, layer: RasterLayer, r: Rect): void {
+    const o = this.onion;
+    if (!o || !layer.cels || layer.cels.length < 2) return;
+    const cels = layer.cels;
+    const at = celIndexAt(cels, this.doc.timeline.frame);
+    if (!this.onionScratch || this.onionScratch.canvas.width !== this.doc.width || this.onionScratch.canvas.height !== this.doc.height) {
+      const canvas = new OffscreenCanvas(this.doc.width, this.doc.height);
+      this.onionScratch = { canvas, ctx: ctx2d(canvas) };
+    }
+    const sc = this.onionScratch.ctx;
+    for (let k = o.count; k >= 1; k--) {
+      for (const [j, tint] of [
+        [at - k, ONION_BEFORE],
+        [at + k, ONION_AFTER],
+      ] as const) {
+        if (j < 0 || j >= cels.length) continue;
+        const src = this.drawingCanvas(cels[j].surface);
+        sc.save();
+        sc.globalCompositeOperation = 'copy';
+        sc.drawImage(src, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
+        sc.globalCompositeOperation = 'source-in';
+        sc.fillStyle = tint;
+        sc.fillRect(r.x, r.y, r.w, r.h);
+        sc.restore();
+        ctx.globalAlpha = o.opacity * ((o.count - k + 1) / o.count);
+        ctx.drawImage(this.onionScratch.canvas, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
+        ctx.globalAlpha = 1;
+      }
+    }
   }
 
   invalidate(r: Rect | null): void {
@@ -378,6 +436,7 @@ export class Renderer {
     const active = this.doc.activeLayer;
     for (const layer of layers) {
       if (layer.visible) {
+        if (layer === active && layer.kind === 'raster') this.drawOnion(ctx, layer, r);
         let source: OffscreenCanvas;
         // Pieces drawn straight over the layer (same result when it's normal at full opacity).
         let over: Piece[] | null = null;

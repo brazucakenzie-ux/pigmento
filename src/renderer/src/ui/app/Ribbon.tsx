@@ -295,6 +295,7 @@ function AnimateTab() {
           <ActionButton id="clearDrawing" variant="small" />
           <ActionButton id="deleteDrawing" variant="small" />
         </div>
+        <ActionButton id="onionSkin" />
       </RibbonGroup>
       <RibbonGroup label={t('group.playback')}>
         <ActionButton id="animPlay" icon={playing ? 'pause' : 'play'} />

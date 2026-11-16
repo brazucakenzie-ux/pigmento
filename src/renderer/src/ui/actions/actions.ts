@@ -1,11 +1,11 @@
 import { exportSvgFile, importSvgFile } from '../services/svg';
 import { exportShapePack, hasCustomShapes, importShapePack } from '../services/shapes';
 import { brushTarget, duplicateBrush, exportBrushPack, hasCustomBrushes, importBrushPack, isCustomBrush } from '../services/brushes';
-import type { ThemeMode } from '@shared/settings';
+import type { Settings, ThemeMode } from '@shared/settings';
 import { toolRegistry } from '@engine/tools/ToolRegistry';
 import { reportEngineError } from '@engine/input/InputController';
 import type { I18nKey } from '../../i18n';
-import { engine, viewOptionsOf } from '../state/engine';
+import { engine, onionOf, viewOptionsOf } from '../state/engine';
 import { openDialog, updateSettings, useUi, type UiState } from '../state/store';
 import * as files from '../services/files';
 import { makePatternFromSelection } from '../services/patterns';
@@ -60,7 +60,18 @@ function findLayerKind(tree: UiState['layers']['tree'], id: string): string | nu
  */
 export async function addDrawing(layerId: string, copy: boolean): Promise<boolean> {
   if (!(await hasMemoryFor(engine.doc.width, engine.doc.height))) return false;
-  return engine.anim.newDrawing(layerId, copy);
+  if (!engine.anim.newDrawing(layerId, copy)) return false;
+  // Drawing frame by frame needs the timeline in view.
+  const anim = useUi.getState().settings.anim;
+  if (!anim.timeline) updateSettings({ anim: { ...anim, timeline: true } });
+  return true;
+}
+
+/** Change the onion skin settings and show the result. */
+export function setOnion(change: Partial<Pick<Settings['anim'], 'onion' | 'onionCount' | 'onionOpacity'>>): void {
+  const anim = { ...useUi.getState().settings.anim, ...change };
+  updateSettings({ anim });
+  engine.setOnionSkin(onionOf(anim));
 }
 
 function toggleTimeline(): void {
@@ -215,13 +226,14 @@ const base: Action[] = [
       engine.commitLive();
       openDialog({ kind: 'exportAnimation' });
     },
-    enabled: (s) => s.animation.pieces.length > 0,
+    enabled: (s) => s.animation.pieces.length > 0 || Object.keys(s.animation.cels).length > 0,
   },
   // Frame-by-frame drawings on the active pixel layer, at the frame shown.
   { id: 'newDrawing', labelKey: 'action.newDrawing', icon: 'new', group: 'animation', run: () => void addDrawing(engine.doc.activeId, false), enabled: rasterActive },
   { id: 'copyDrawing', labelKey: 'action.copyDrawing', icon: 'copy', group: 'animation', run: () => void addDrawing(engine.doc.activeId, true), enabled: rasterActive },
   { id: 'clearDrawing', labelKey: 'action.clearDrawing', icon: 'eraser', group: 'animation', run: () => void engine.anim.clearDrawing(engine.doc.activeId), enabled: rasterActive },
   { id: 'deleteDrawing', labelKey: 'action.deleteDrawing', icon: 'delete', group: 'animation', run: () => void engine.anim.deleteDrawing(engine.doc.activeId), enabled: (s) => s.animation.cels[s.layers.activeId] !== undefined },
+  { id: 'onionSkin', labelKey: 'action.onionSkin', icon: 'layers', group: 'animation', run: () => setOnion({ onion: !useUi.getState().settings.anim.onion }), checked: (s) => s.settings.anim.onion },
   { id: 'animPlay', labelKey: 'action.animPlay', icon: 'play', group: 'animation', shortcut: ['Ctrl+Space'], run: () => engine.anim.togglePlay(), checked: (s) => s.animation.playing },
   { id: 'animFirstFrame', labelKey: 'action.animFirstFrame', icon: 'frame-first', group: 'animation', run: () => engine.anim.setFrame(0) },
   { id: 'animPrevFrame', labelKey: 'action.animPrevFrame', icon: 'frame-prev', group: 'animation', shortcut: ['Comma'], run: () => engine.anim.setFrame(engine.anim.frame - 1) },

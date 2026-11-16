@@ -10,7 +10,7 @@ import { NumberField } from '../components/Controls';
 import { Menu, MenuItem, MenuSeparator, SubMenu } from '../components/Menu';
 import { engine } from '../state/engine';
 import { updateSettings, useUi } from '../state/store';
-import { action, addDrawing, runAction } from '../actions/actions';
+import { action, addDrawing, runAction, setOnion } from '../actions/actions';
 import { useShortcut } from '../actions/keymap';
 
 /** Width of one frame on the timeline, in CSS px. */
@@ -514,6 +514,41 @@ export function Timeline() {
             ))}
           </select>
         </label>
+        <button
+          type="button"
+          className="icon-btn tl-onion"
+          aria-pressed={settings.onion}
+          aria-label={t('action.onionSkin')}
+          data-tip={t('timeline.onionTip')}
+          onClick={() => setOnion({ onion: !settings.onion })}
+        >
+          <Icon name="layers" size={16} />
+        </button>
+        {settings.onion ? (
+          <>
+            <label className="opt">
+              <span className="sr-only">{t('timeline.onionCount')}</span>
+              <select className="select" aria-label={t('timeline.onionCount')} value={settings.onionCount} onChange={(e) => setOnion({ onionCount: Number(e.target.value) })}>
+                {[1, 2, 3].map((n) => (
+                  <option key={n} value={n}>
+                    {t('timeline.onionN', { n })}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <span className="opt tl-field">
+              <NumberField
+                className="num tl-num"
+                value={Math.round(settings.onionOpacity * 100)}
+                min={10}
+                max={80}
+                label={t('timeline.onionOpacity')}
+                onChange={(v) => setOnion({ onionOpacity: v / 100 })}
+              />
+              <span className="unit">%</span>
+            </span>
+          </>
+        ) : null}
         <span className="spacer" />
         <button
           type="button"

@@ -17,6 +17,11 @@ engine.anim.namer = (n) => t('piece.defaultName', { n });
 // The start-up document was created before the namer existed.
 for (const l of engine.doc.layers) if (!l.name) l.name = engine.layers.namer('layer', 1);
 
+/** The engine's onion skin from the saved animation settings. */
+export function onionOf(a: Settings['anim']): { count: number; opacity: number } | null {
+  return a.onion ? { count: a.onionCount, opacity: a.onionOpacity } : null;
+}
+
 /** The engine's view options from the saved View settings. */
 export function viewOptionsOf(v: Settings['view']): Parameters<typeof engine.setViewOptions>[0] {
   return {
@@ -47,6 +52,7 @@ export function bindEngine(settings: Settings): void {
   if (s) engine.setSecondary(s);
   if (engine.tools.has(settings.activeTool)) engine.setTool(settings.activeTool);
   engine.setViewOptions(viewOptionsOf(settings.view));
+  engine.setOnionSkin(onionOf(settings.anim));
   engine.setSymmetry({ mode: settings.drawing.symmetry, segments: settings.drawing.segments });
 
   useUi.setState({

@@ -625,6 +625,33 @@ test('capture animate tool', async () => {
   }
 });
 
+test('capture frame by frame', async () => {
+  test.skip(!process.env.PIGMENTO_SCREENSHOT, 'Set PIGMENTO_SCREENSHOT=1 to capture screenshots');
+  const out = process.env.PIGMENTO_SCREENSHOT_DIR ?? path.resolve('test-results');
+  const h = await launchApp();
+  const { page } = h;
+  try {
+    await ready(page);
+    const layerId = await page.evaluate(() => window.__pigmentoTest!.layers().activeId);
+    await page.getByRole('tab', { name: 'Animate' }).click();
+    // A ball falling over four drawings.
+    for (let i = 0; i < 4; i++) {
+      await page.evaluate((f) => window.__pigmentoTest!.setFrame(f), i * 3);
+      if (i > 0) await page.locator('.ribbon').getByRole('button', { name: 'New drawing' }).click();
+      await page.evaluate(([id, y]) => window.__pigmentoTest!.fillLayer(id, { r: 40, g: 40, b: 60, a: 255 }, { x: 560, y, w: 90, h: 90 }), [layerId, 120 + i * 120] as const);
+    }
+    await page.evaluate(() => window.__pigmentoTest!.setFrame(6));
+    const timeline = page.getByRole('region', { name: 'Timeline' });
+    await timeline.getByRole('button', { name: 'Onion skin' }).click();
+    await timeline.getByRole('combobox', { name: 'Drawings to show each way' }).selectOption('2');
+    await page.waitForTimeout(250);
+    await page.screenshot({ path: path.join(out, 'frame-by-frame.png') });
+    console.warn('errors:', JSON.stringify(h.errors));
+  } finally {
+    await h.close();
+  }
+});
+
 test('capture settings', async () => {
   test.skip(!process.env.PIGMENTO_SCREENSHOT, 'Set PIGMENTO_SCREENSHOT=1 to capture screenshots');
   const out = process.env.PIGMENTO_SCREENSHOT_DIR ?? path.resolve('test-results');

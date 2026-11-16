@@ -125,8 +125,12 @@ export const SettingsSchema = z.object({
       exportFormat: z.enum(['gif', 'mp4']).default('gif'),
       exportScale: z.number().min(0.25).max(4).default(1),
       exportQuality: z.enum(['low', 'medium', 'high']).default('high'),
+      /** Onion skin: on, how many drawings each way, how strong. */
+      onion: z.boolean().default(false),
+      onionCount: z.number().int().min(1).max(3).default(1),
+      onionOpacity: z.number().min(0.1).max(0.8).default(0.35),
     })
-    .default({ keepOriginal: false, timeline: false, timelineHeight: 190, exportFormat: 'gif', exportScale: 1, exportQuality: 'high' }),
+    .default({ keepOriginal: false, timeline: false, timelineHeight: 190, exportFormat: 'gif', exportScale: 1, exportQuality: 'high', onion: false, onionCount: 1, onionOpacity: 0.35 }),
   /** The interface: its scale (80–200 %), Simple (the Paint essentials) or Full, and the tour. */
   ui: z
     .object({

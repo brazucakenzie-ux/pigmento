@@ -376,3 +376,37 @@ test('each drawing keeps its own copy on screen, so moving between frames shows 
   expect(await page.evaluate(() => window.__pigmentoTest!.screenPixel(100, 100))).toEqual(colours[1]);
   expect(await page.evaluate(() => window.__pigmentoTest!.celMirrors())).toBe(2);
 });
+
+test('onion skin shows the drawings before and after on screen only', async () => {
+  const { page } = h;
+  const layerId = await page.evaluate(() => window.__pigmentoTest!.layers().activeId);
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  // Frame 1: a black block on the left; frame 5: one on the right.
+  await page.evaluate((id) => window.__pigmentoTest!.fillLayer(id, { r: 0, g: 0, b: 0, a: 255 }, { x: 100, y: 100, w: 80, h: 80 }), layerId);
+  await page.evaluate(() => window.__pigmentoTest!.setFrame(4));
+  await page.locator('.ribbon').getByRole('button', { name: 'New drawing' }).click();
+  await page.evaluate((id) => window.__pigmentoTest!.fillLayer(id, { r: 0, g: 0, b: 0, a: 255 }, { x: 400, y: 100, w: 80, h: 80 }), layerId);
+  const timeline = page.getByRole('region', { name: 'Timeline' });
+  await timeline.getByRole('button', { name: 'Onion skin' }).click();
+  await expect(timeline.getByRole('button', { name: 'Onion skin' })).toHaveAttribute('aria-pressed', 'true');
+
+  // At frame 5, the frame-1 drawing shows as a faint orange ghost on the white paper.
+  let ghost = await page.evaluate(() => window.__pigmentoTest!.screenPixel(140, 140));
+  expect(ghost.r).toBeGreaterThan(ghost.b + 60);
+  expect(ghost.g).toBeLessThan(250);
+  // The picture itself (what's saved and exported) has no ghost.
+  expect(await page.evaluate(() => window.__pigmentoTest!.pixel(140, 140))).toEqual({ r: 255, g: 255, b: 255, a: 255 });
+  // At frame 1, the frame-5 drawing shows as a blue ghost.
+  await page.evaluate(() => window.__pigmentoTest!.setFrame(0));
+  ghost = await page.evaluate(() => window.__pigmentoTest!.screenPixel(440, 140));
+  expect(ghost.b).toBeGreaterThan(ghost.r + 60);
+  // Stronger onion skin is darker.
+  const strength = timeline.getByRole('textbox', { name: 'Onion skin strength' });
+  await strength.fill('80');
+  await strength.press('Enter');
+  const strong = await page.evaluate(() => window.__pigmentoTest!.screenPixel(440, 140));
+  expect(strong.r).toBeLessThan(ghost.r);
+  // Off again: no ghost.
+  await timeline.getByRole('button', { name: 'Onion skin' }).click();
+  expect(await page.evaluate(() => window.__pigmentoTest!.screenPixel(440, 140))).toEqual({ r: 255, g: 255, b: 255, a: 255 });
+});

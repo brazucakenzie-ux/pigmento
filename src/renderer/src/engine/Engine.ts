@@ -533,6 +533,13 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.anim.setFrame(frame);
   }
 
+  /** Onion skin on the active frame-by-frame layer (null turns it off). Screen only. */
+  setOnionSkin(o: { count: number; opacity: number } | null): void {
+    this.renderer.onion = o;
+    this.renderer.invalidate(null);
+    this.requestRender();
+  }
+
   animationChanged(r: Rect | null): void {
     // Frame-by-frame layers may now show another drawing: upload the ones that changed.
     if (this.doc.hasCels) this.renderer.syncTree();

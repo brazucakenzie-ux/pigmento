@@ -3033,6 +3033,14 @@ dialog.tour::backdrop {
   font-size: var(--fs-sm);
   text-align: left;
 }
+.tl-name {
+  display: flex;
+  align-items: center;
+}
+.tl-name .tl-name-text {
+  flex: 1;
+  min-width: 0;
+}
 .tl-name:hover {
   background: var(--bg-hover);
 }

@@ -161,7 +161,7 @@ export class AnimationController {
 
   /** True once the picture has anything that moves. */
   get animated(): boolean {
-    return this.doc.pieces.length > 0;
+    return this.doc.pieces.length > 0 || this.doc.hasCels;
   }
 
   info(): AnimationInfo {
