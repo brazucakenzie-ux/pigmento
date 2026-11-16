@@ -6,6 +6,10 @@ import type { Surface } from '../raster/Surface';
 import { TILE_SIZE } from '../raster/Surface';
 import type { PixelView } from '../raster/pixels';
 import type { View } from './View';
+import type { ImageBuf } from '../raster/transform';
+import { stateMatrix } from '../anim/interpolate';
+import { pieceBounds, pieceStateAt, type Piece } from '../anim/piece';
+import { piecesByLayer } from '../anim/pieceRaster';
 
 type Ctx2D = OffscreenCanvasRenderingContext2D;
 
@@ -52,6 +56,12 @@ function ctx2d(c: OffscreenCanvas, opts?: CanvasRenderingContext2DSettings): Ctx
 export class Renderer {
   private mirrors = new Map<string, Mirror>();
   private groups = new Map<string, GroupCanvas>();
+  /** Layers with pieces and a blend mode or opacity are composed here first (isolated). */
+  private isolated = new Map<string, GroupCanvas>();
+  /** GPU copies of piece pixels (a piece's pixels never change, so they're uploaded once). */
+  private pieceCanvases = new WeakMap<ImageBuf, OffscreenCanvas>();
+  /** Pieces per layer for the composite pass under way. */
+  private passPieces: Map<string, Piece[]> | null = null;
   private composite: OffscreenCanvas;
   private compositeCtx: Ctx2D;
   private dirty: Rect | null = null;
@@ -94,6 +104,7 @@ export class Renderer {
     this.doc = doc;
     this.mirrors.clear();
     this.groups.clear();
+    this.isolated.clear();
     if (this.composite.width !== doc.width || this.composite.height !== doc.height) {
       this.composite = new OffscreenCanvas(doc.width, doc.height);
       this.compositeCtx = ctx2d(this.composite);
@@ -121,6 +132,7 @@ export class Renderer {
     }
     for (const id of [...this.mirrors.keys()]) if (!live.has(id)) this.mirrors.delete(id);
     for (const id of [...this.groups.keys()]) if (!live.has(id)) this.groups.delete(id);
+    for (const id of [...this.isolated.keys()]) if (!live.has(id)) this.isolated.delete(id);
     this.invalidate(null);
   }
 
@@ -160,6 +172,44 @@ export class Renderer {
     return g;
   }
 
+  private isolatedCanvas(id: string): GroupCanvas {
+    let g = this.isolated.get(id);
+    if (!g || g.canvas.width !== this.doc.width || g.canvas.height !== this.doc.height) {
+      const canvas = new OffscreenCanvas(this.doc.width, this.doc.height);
+      g = { canvas, ctx: ctx2d(canvas) };
+      this.isolated.set(id, g);
+    }
+    return g;
+  }
+
+  private pieceCanvas(img: ImageBuf): OffscreenCanvas {
+    let c = this.pieceCanvases.get(img);
+    if (!c) {
+      c = new OffscreenCanvas(Math.max(1, img.w), Math.max(1, img.h));
+      ctx2d(c).putImageData(new ImageData(new Uint8ClampedArray(img.data), img.w, img.h), 0, 0);
+      this.pieceCanvases.set(img, c);
+    }
+    return c;
+  }
+
+  /** Draw pieces as they are at the current frame (r = only those touching it; alpha scales them). */
+  private drawPieces(ctx: Ctx2D | CanvasRenderingContext2D, pieces: readonly Piece[], r: Rect | null, alpha = 1): void {
+    const frame = this.doc.timeline.frame;
+    for (const p of pieces) {
+      const st = pieceStateAt(p, frame);
+      if (st.opacity <= 0 || p.src.w === 0 || p.src.h === 0) continue;
+      if (r && !rectIntersect(pieceBounds(p, frame), r)) continue;
+      const m = stateMatrix(st, p.pivot);
+      ctx.save();
+      ctx.globalAlpha = st.opacity * alpha;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
+      ctx.drawImage(this.pieceCanvas(p.src), 0, 0);
+      ctx.restore();
+    }
+  }
+
   /** Mirror canvas of a raster layer, if it exists. */
   layerCanvas(id: string): OffscreenCanvas | null {
     return this.mirrors.get(id)?.canvas ?? null;
@@ -182,6 +232,13 @@ export class Renderer {
         target.globalAlpha = top ? 1 : l.opacity;
         target.globalCompositeOperation = top || l.blend === 'normal' ? 'source-over' : l.blend;
         target.drawImage(m.canvas, 0, 0, this.doc.width, this.doc.height, 0, 0, w, h);
+        const pieces = this.doc.pieces.filter((p) => p.layerId === l.id);
+        if (pieces.length) {
+          target.save();
+          target.scale(w / this.doc.width, h / this.doc.height);
+          this.drawPieces(target, pieces, null, target.globalAlpha);
+          target.restore();
+        }
       } else {
         for (const c of l.children) draw(c, false);
       }
@@ -259,7 +316,9 @@ export class Renderer {
       ctx.fillStyle = toCss(this.doc.paper);
       ctx.fillRect(r.x, r.y, r.w, r.h);
     }
+    this.passPieces = this.doc.pieces.length ? piecesByLayer(this.doc.pieces) : null;
     this.drawLayers(ctx, this.doc.layers, r);
+    this.passPieces = null;
     ctx.restore();
   }
 
@@ -269,8 +328,24 @@ export class Renderer {
     for (const layer of layers) {
       if (layer.visible) {
         let source: OffscreenCanvas;
+        // Pieces drawn straight over the layer (same result when it's normal at full opacity).
+        let over: Piece[] | null = null;
         if (layer.kind === 'raster') {
           source = this.mirrorFor(layer).canvas;
+          const pieces = this.passPieces?.get(layer.id);
+          if (pieces?.length && layer.blend === 'normal' && layer.opacity === 1) over = pieces;
+          else if (pieces?.length) {
+            const iso = this.isolatedCanvas(layer.id);
+            iso.ctx.save();
+            iso.ctx.beginPath();
+            iso.ctx.rect(r.x, r.y, r.w, r.h);
+            iso.ctx.clip();
+            iso.ctx.clearRect(r.x, r.y, r.w, r.h);
+            iso.ctx.drawImage(source, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
+            this.drawPieces(iso.ctx, pieces, r);
+            iso.ctx.restore();
+            source = iso.canvas;
+          }
         } else if (layer.kind === 'vector') {
           this.drawVector(layer);
           source = this.mirrorFor(layer).canvas;
@@ -290,6 +365,7 @@ export class Renderer {
         ctx.drawImage(source, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
         ctx.globalAlpha = 1;
         ctx.globalCompositeOperation = 'source-over';
+        if (over) this.drawPieces(ctx, over, r);
       }
       // Live objects (shape being drawn, floating pixels) sit right above the active layer.
       if (layer === active && this.liveDrawer) this.liveDrawer(ctx, r);

@@ -118,23 +118,41 @@ export function blendImage(dst: PixelView, r: Rect, src: PixelView, mode: BlendM
 /**
  * Composite a layer list (bottom to top) into `out` inside r. Groups are isolated: their
  * children are composited into a transparent buffer that is then blended as one layer.
- * `skip` lets callers leave a layer out (e.g. hidden-layer export).
+ * `skip` lets callers leave a layer out (e.g. hidden-layer export). With `extras`, a layer
+ * that has more to draw (its animated pieces) is copied into its own buffer, drawn on, then
+ * blended, exactly as the screen does it.
  */
 export function compositeLayers(
   layers: Layer[],
   r: Rect,
   out: PixelView,
   skip?: (l: Layer) => boolean,
+  extras?: LayerExtras,
 ): void {
   for (const layer of layers) {
     if (!layer.visible || layer.opacity <= 0 || skip?.(layer)) continue;
     if (layer.kind === 'raster' || layer.kind === 'vector') {
-      layer.surface.forEachTile(r, (tile, sub) => blendImage(out, sub, tile, layer.blend, layer.opacity), false, true);
+      if (extras?.covers(layer, r)) {
+        const view: PixelView = { data: new Uint8ClampedArray(r.w * r.h * 4), stride: r.w, ox: r.x, oy: r.y };
+        layer.surface.forEachTile(r, (tile, sub) => applyImage(view, sub, tile, 'over', 1), false, true);
+        extras.draw(layer, r, view);
+        blendImage(out, r, view, layer.blend, layer.opacity);
+      } else {
+        layer.surface.forEachTile(r, (tile, sub) => blendImage(out, sub, tile, layer.blend, layer.opacity), false, true);
+      }
     } else {
       const buf = new Uint8ClampedArray(r.w * r.h * 4);
       const view: PixelView = { data: buf, stride: r.w, ox: r.x, oy: r.y };
-      compositeLayers(layer.children, r, view, skip);
+      compositeLayers(layer.children, r, view, skip, extras);
       blendImage(out, r, view, layer.blend, layer.opacity);
     }
   }
+}
+
+/** More for a layer than its own pixels (its animated pieces). */
+export interface LayerExtras {
+  /** True if `layer` has something more to draw inside r. */
+  covers(layer: Layer, r: Rect): boolean;
+  /** Draw it into view (an isolated copy of the layer's pixels) inside r. */
+  draw(layer: Layer, r: Rect, view: PixelView): void;
 }

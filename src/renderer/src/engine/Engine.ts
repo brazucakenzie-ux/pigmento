@@ -8,6 +8,7 @@ import { colorRangeMask } from './doc/selectionMath';
 import { LayerController, type LayersInfo } from './doc/LayerController';
 import { AnimationController, type AnimHost, type AnimationInfo } from './anim/AnimationController';
 import { compositeLayers } from './raster/blend';
+import { pieceExtras } from './anim/pieceRaster';
 import { Selection, type SelectionMode, type SelectionModify } from './doc/Selection';
 import { History, type HistoryEntry } from './history/History';
 import {
@@ -1049,9 +1050,10 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
 
   /**
    * Flattened pixels of r (default: the whole image): paper, then visible layers with their
-   * blend modes. `opaque` composites onto the paper or white (for JPEG/BMP).
+   * blend modes and animated pieces as they are at `frame`. `opaque` composites onto the
+   * paper or white (for JPEG/BMP).
    */
-  flatten(opaque = false, r: Rect = this.doc.bounds, withPaper = true): ImageBuf {
+  flatten(opaque = false, r: Rect = this.doc.bounds, withPaper = true, frame = this.doc.timeline.frame): ImageBuf {
     const out = new Uint8ClampedArray(r.w * r.h * 4);
     const view = { data: out, stride: r.w, ox: r.x, oy: r.y };
     const p = this.doc.paper;
@@ -1063,7 +1065,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
         out[i + 3] = p.a;
       }
     }
-    compositeLayers(this.doc.layers, r, view);
+    compositeLayers(this.doc.layers, r, view, undefined, pieceExtras(this.doc, frame));
     if (opaque) flattenOnto(out, p && p.a === 255 ? p : WHITE);
     return { w: r.w, h: r.h, data: out };
   }
@@ -1075,7 +1077,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     const wasVisible = layer.visible;
     layer.visible = true;
     try {
-      compositeLayers([layer], r, { data: out, stride: r.w, ox: 0, oy: 0 });
+      compositeLayers([layer], r, { data: out, stride: r.w, ox: 0, oy: 0 }, undefined, pieceExtras(this.doc, this.doc.timeline.frame));
     } finally {
       layer.visible = wasVisible;
     }

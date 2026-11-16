@@ -163,5 +163,11 @@ export function installTestHook(): void {
     },
     selectRect: (x: number, y: number, w: number, h: number) =>
       engine.setSelection(Selection.fromRect({ x, y, w, h }, engine.doc.width, engine.doc.height)),
+    /** Pieces, keyframes and the timeline. */
+    anim: () => engine.anim.info(),
+    animateSelection: (keepOriginal = false) => engine.animateSelection(keepOriginal),
+    setFrame: (frame: number) => engine.anim.setFrame(frame),
+    setPieceKey: (id: string, frame: number, change: Partial<Record<'x' | 'y' | 'sx' | 'sy' | 'angle' | 'skew' | 'opacity', number>>) =>
+      engine.anim.setKey(id, frame, change),
   };
 }
