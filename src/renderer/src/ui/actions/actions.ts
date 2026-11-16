@@ -11,6 +11,7 @@ import * as files from '../services/files';
 import { makePatternFromSelection } from '../services/patterns';
 import { openFilter } from '../services/filters';
 import { loadReference } from '../services/reference';
+import { hasMemoryFor } from '../services/memory';
 import { filterRegistry } from '@engine/filters/FilterRegistry';
 import { THEME_FAMILIES } from '../theme/themes';
 
@@ -51,6 +52,15 @@ function findLayerKind(tree: UiState['layers']['tree'], id: string): string | nu
     if (k) return k;
   }
   return null;
+}
+
+/**
+ * A new drawing (blank or a copy) at the current frame, once there's memory for one: a drawing
+ * can grow to the size of a whole layer, so a huge picture says so instead of running out.
+ */
+export async function addDrawing(layerId: string, copy: boolean): Promise<boolean> {
+  if (!(await hasMemoryFor(engine.doc.width, engine.doc.height))) return false;
+  return engine.anim.newDrawing(layerId, copy);
 }
 
 function toggleTimeline(): void {
@@ -208,8 +218,8 @@ const base: Action[] = [
     enabled: (s) => s.animation.pieces.length > 0,
   },
   // Frame-by-frame drawings on the active pixel layer, at the frame shown.
-  { id: 'newDrawing', labelKey: 'action.newDrawing', icon: 'new', group: 'animation', run: () => void engine.anim.newDrawing(engine.doc.activeId, false), enabled: rasterActive },
-  { id: 'copyDrawing', labelKey: 'action.copyDrawing', icon: 'copy', group: 'animation', run: () => void engine.anim.newDrawing(engine.doc.activeId, true), enabled: rasterActive },
+  { id: 'newDrawing', labelKey: 'action.newDrawing', icon: 'new', group: 'animation', run: () => void addDrawing(engine.doc.activeId, false), enabled: rasterActive },
+  { id: 'copyDrawing', labelKey: 'action.copyDrawing', icon: 'copy', group: 'animation', run: () => void addDrawing(engine.doc.activeId, true), enabled: rasterActive },
   { id: 'clearDrawing', labelKey: 'action.clearDrawing', icon: 'eraser', group: 'animation', run: () => void engine.anim.clearDrawing(engine.doc.activeId), enabled: rasterActive },
   { id: 'deleteDrawing', labelKey: 'action.deleteDrawing', icon: 'delete', group: 'animation', run: () => void engine.anim.deleteDrawing(engine.doc.activeId), enabled: (s) => s.animation.cels[s.layers.activeId] !== undefined },
   { id: 'animPlay', labelKey: 'action.animPlay', icon: 'play', group: 'animation', shortcut: ['Ctrl+Space'], run: () => engine.anim.togglePlay(), checked: (s) => s.animation.playing },

@@ -210,6 +210,7 @@ export function installTestHook(): void {
     setFrame: (frame: number) => engine.anim.setFrame(frame),
     setPieceKey: (id: string, frame: number, change: Partial<Record<'x' | 'y' | 'sx' | 'sy' | 'angle' | 'skew' | 'opacity', number>>) =>
       engine.anim.setKey(id, frame, change),
+    celMirrors: () => engine.renderer.celMirrorCount,
     pieceKeys: (id: string) => (engine.anim.piece(id)?.keyframes ?? []).map((k) => ({ ...k })),
     pieceAt: (id: string, frame: number) => {
       const p = engine.anim.piece(id);

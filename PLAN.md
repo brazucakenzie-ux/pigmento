@@ -258,7 +258,7 @@ Decisions: pieces come only from pixel layers; shape layers and text aren't fram
 **Stop 5C — Frame-by-frame**
 - [x] 5.14 Cels on pixel layers: `surface` follows the frame, pixel undo records its cel and jumps to its frame, size-changing operations cover every cel (+ unit tests)
 - [x] 5.15 Timeline layer rows: new blank frame, duplicate frame (copy-on-write), delete, clear, hold longer or shorter by dragging, all undoable
-- [ ] 5.16 GPU mirror per cel with a memory cap; memory check before adding cels
+- [x] 5.16 GPU copy per drawing (uploaded once, kept while it's in the picture, the least recently shown let go past 768 MB); memory check before adding a drawing to a big picture
 - [ ] 5.17 Onion skin: 1–3 frames before and after on the active layer, tinted, with opacity; screen only
 - [ ] 5.18 Cels in `.pigm` and in exports; e2e (paint frame 3, frames 2 and 4 unchanged; onion skin not exported); `npm run check` green; report
 

@@ -348,3 +348,31 @@ test('frame-by-frame: new and copied drawings, holding longer, and undo that sho
   expect((await page.evaluate(() => window.__pigmentoTest!.anim())).cels[layerId]).toEqual([0, 1, 3]);
   expect(await page.evaluate(() => window.__pigmentoTest!.pixel(120, 120))).toEqual({ r: 0, g: 0, b: 255, a: 255 });
 });
+
+test('each drawing keeps its own copy on screen, so moving between frames shows the right one', async () => {
+  const { page } = h;
+  const layerId = await page.evaluate(() => window.__pigmentoTest!.layers().activeId);
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  const colours = [
+    { r: 200, g: 0, b: 0, a: 255 },
+    { r: 0, g: 160, b: 0, a: 255 },
+    { r: 0, g: 0, b: 220, a: 255 },
+  ];
+  // Drawings at frames 1, 5 and 9, each filled with its own colour.
+  for (const [i, c] of colours.entries()) {
+    await page.evaluate((f) => window.__pigmentoTest!.setFrame(f), i * 4);
+    if (i > 0) await page.locator('.ribbon').getByRole('button', { name: 'New drawing' }).click();
+    await page.evaluate(([id, col]) => window.__pigmentoTest!.fillLayer(id, col, { x: 50, y: 50, w: 100, h: 100 }), [layerId, c] as const);
+  }
+  // Back and forth across them: the screen always shows that frame's drawing.
+  for (const f of [0, 9, 4, 2, 11, 6, 0]) {
+    await page.evaluate((n) => window.__pigmentoTest!.setFrame(n), f);
+    expect(await page.evaluate(() => window.__pigmentoTest!.screenPixel(100, 100))).toEqual(colours[Math.min(2, Math.floor(f / 4))]);
+  }
+  expect(await page.evaluate(() => window.__pigmentoTest!.celMirrors())).toBe(3);
+  // Deleting a drawing lets its copy go.
+  await page.evaluate(() => window.__pigmentoTest!.setFrame(8));
+  await page.locator('.ribbon').getByRole('button', { name: 'Delete drawing' }).click();
+  expect(await page.evaluate(() => window.__pigmentoTest!.screenPixel(100, 100))).toEqual(colours[1]);
+  expect(await page.evaluate(() => window.__pigmentoTest!.celMirrors())).toBe(2);
+});

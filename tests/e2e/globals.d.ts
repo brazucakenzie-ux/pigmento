@@ -48,6 +48,7 @@ export interface PigmentoTestHook {
     cels: Record<string, number[]>;
   };
   animateSelection(keepOriginal?: boolean): boolean;
+  celMirrors(): number;
   pieceKeys(id: string): { frame: number; x: number; y: number; in: { x: number; y: number } | null; out: { x: number; y: number } | null; easing: string }[];
   pieceAt(id: string, frame: number): { x: number; y: number; sx: number; sy: number; angle: number; skew: number; opacity: number } | null;
   setFrame(frame: number): void;

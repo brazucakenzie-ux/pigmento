@@ -60,6 +60,13 @@ export class Renderer {
   private isolated = new Map<string, GroupCanvas>();
   /** GPU copies of piece pixels (a piece's pixels never change, so they're uploaded once). */
   private pieceCanvases = new WeakMap<ImageBuf, OffscreenCanvas>();
+  /**
+   * GPU copies of frame-by-frame drawings, kept so moving between frames needs no upload. The
+   * least recently shown go first once they'd take more than CEL_MIRROR_BYTES.
+   */
+  private celMirrors = new Map<Surface, Mirror & { used: number }>();
+  private useClock = 0;
+  static CEL_MIRROR_BYTES = 768 * 1024 * 1024;
   /** Pieces per layer for the composite pass under way. */
   private passPieces: Map<string, Piece[]> | null = null;
   private composite: OffscreenCanvas;
@@ -105,6 +112,7 @@ export class Renderer {
     this.mirrors.clear();
     this.groups.clear();
     this.isolated.clear();
+    this.celMirrors.clear();
     if (this.composite.width !== doc.width || this.composite.height !== doc.height) {
       this.composite = new OffscreenCanvas(doc.width, doc.height);
       this.compositeCtx = ctx2d(this.composite);
@@ -118,6 +126,7 @@ export class Renderer {
    */
   syncTree(): void {
     const live = new Set<string>();
+    const liveCels = new Set<Surface>();
     for (const layer of walkLayers(this.doc.layers)) {
       live.add(layer.id);
       if (layer.kind === 'vector') {
@@ -125,7 +134,12 @@ export class Renderer {
         continue;
       }
       if (layer.kind !== 'raster') continue;
-      const m = this.mirrors.get(layer.id);
+      if (layer.cels) {
+        // Frame-by-frame: the drawing shown has its own GPU copy (uploaded once, then kept).
+        this.mirrors.delete(layer.id);
+        for (const c of layer.cels) liveCels.add(c.surface);
+      }
+      const m = layer.cels ? this.celMirrors.get(layer.surface) : this.mirrors.get(layer.id);
       if (!m || m.surface !== layer.surface || m.canvas.width !== this.doc.width || m.canvas.height !== this.doc.height) {
         this.syncLayer(layer, null);
       }
@@ -133,6 +147,8 @@ export class Renderer {
     for (const id of [...this.mirrors.keys()]) if (!live.has(id)) this.mirrors.delete(id);
     for (const id of [...this.groups.keys()]) if (!live.has(id)) this.groups.delete(id);
     for (const id of [...this.isolated.keys()]) if (!live.has(id)) this.isolated.delete(id);
+    // Drawings no longer in the picture (deleted, cleared, or replaced by a resize) let their copies go.
+    for (const s of [...this.celMirrors.keys()]) if (!liveCels.has(s)) this.celMirrors.delete(s);
     this.invalidate(null);
   }
 
@@ -153,6 +169,7 @@ export class Renderer {
   }
 
   private mirrorFor(layer: RasterLayer | VectorLayer): Mirror {
+    if (layer.kind === 'raster' && layer.cels) return this.celMirror(layer.surface);
     let m = this.mirrors.get(layer.id);
     if (!m || m.canvas.width !== this.doc.width || m.canvas.height !== this.doc.height) {
       const canvas = new OffscreenCanvas(this.doc.width, this.doc.height);
@@ -210,8 +227,42 @@ export class Renderer {
     }
   }
 
+  /** The GPU copy of one frame-by-frame drawing (made empty if it's new or was let go). */
+  private celMirror(surface: Surface): Mirror {
+    let m = this.celMirrors.get(surface);
+    if (!m || m.canvas.width !== this.doc.width || m.canvas.height !== this.doc.height) {
+      const canvas = new OffscreenCanvas(this.doc.width, this.doc.height);
+      m = { canvas, ctx: ctx2d(canvas), tileImages: new Map(), surface: null, version: -1, used: 0 };
+      this.celMirrors.set(surface, m);
+      this.trimCelMirrors();
+    }
+    m.used = ++this.useClock;
+    return m;
+  }
+
+  /** Let the least recently shown drawings' GPU copies go while they take too much memory. */
+  private trimCelMirrors(): void {
+    const each = this.doc.width * this.doc.height * 4;
+    const shown = new Set(this.doc.rasterLayers().map((l) => l.surface));
+    let over = this.celMirrors.size * each - Renderer.CEL_MIRROR_BYTES;
+    if (over <= 0) return;
+    const old = [...this.celMirrors.entries()].filter(([s]) => !shown.has(s)).sort((a, b) => a[1].used - b[1].used);
+    for (const [s] of old) {
+      if (over <= 0) break;
+      this.celMirrors.delete(s);
+      over -= each;
+    }
+  }
+
+  /** How many frame-by-frame drawings have a GPU copy (for tests and the performance overlay). */
+  get celMirrorCount(): number {
+    return this.celMirrors.size;
+  }
+
   /** Mirror canvas of a raster layer, if it exists. */
   layerCanvas(id: string): OffscreenCanvas | null {
+    const l = this.doc.layerById(id);
+    if (l?.kind === 'raster' && l.cels) return this.celMirrors.get(l.surface)?.canvas ?? null;
     return this.mirrors.get(id)?.canvas ?? null;
   }
 
@@ -227,7 +278,7 @@ export class Renderer {
     const draw = (l: Layer, top: boolean): void => {
       if (!top && !l.visible) return;
       if (l.kind === 'raster' || l.kind === 'vector') {
-        const m = this.mirrors.get(l.id);
+        const m = l.kind === 'raster' && l.cels ? this.celMirrors.get(l.surface) : this.mirrors.get(l.id);
         if (!m) return;
         target.globalAlpha = top ? 1 : l.opacity;
         target.globalCompositeOperation = top || l.blend === 'normal' ? 'source-over' : l.blend;

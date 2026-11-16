@@ -10,7 +10,7 @@ import { NumberField } from '../components/Controls';
 import { Menu, MenuItem, MenuSeparator, SubMenu } from '../components/Menu';
 import { engine } from '../state/engine';
 import { updateSettings, useUi } from '../state/store';
-import { action, runAction } from '../actions/actions';
+import { action, addDrawing, runAction } from '../actions/actions';
 import { useShortcut } from '../actions/keymap';
 
 /** Width of one frame on the timeline, in CSS px. */
@@ -323,8 +323,8 @@ function DrawingMenu({ layerId, anchor, onClose }: { layerId: string; anchor: Re
   const cels = useUi((s) => s.animation.cels[layerId]);
   return (
     <Menu anchor={anchor} open onClose={onClose} label={t('timeline.celMenu')}>
-      <MenuItem label={t('action.newDrawing')} icon="new" close={onClose} onSelect={() => engine.anim.newDrawing(layerId, false)} />
-      <MenuItem label={t('action.copyDrawing')} icon="copy" close={onClose} onSelect={() => engine.anim.newDrawing(layerId, true)} />
+      <MenuItem label={t('action.newDrawing')} icon="new" close={onClose} onSelect={() => void addDrawing(layerId, false)} />
+      <MenuItem label={t('action.copyDrawing')} icon="copy" close={onClose} onSelect={() => void addDrawing(layerId, true)} />
       <MenuSeparator />
       <MenuItem label={t('action.clearDrawing')} icon="eraser" close={onClose} onSelect={() => engine.anim.clearDrawing(layerId)} />
       <MenuItem label={t('action.deleteDrawing')} icon="delete" disabled={!cels} close={onClose} onSelect={() => engine.anim.deleteDrawing(layerId)} />
