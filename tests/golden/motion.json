@@ -1,0 +1,14 @@
+{
+ "cellW": 480,
+ "cellH": 64,
+ "ids": [
+  "linear",
+  "easeIn",
+  "easeOut",
+  "easeInOut",
+  "hold",
+  "curve",
+  "combo",
+  "pivot"
+ ]
+}

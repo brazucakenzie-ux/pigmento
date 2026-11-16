@@ -200,3 +200,35 @@ test('saves and reopens a project with library shapes, paths, styles, a personal
   expect(await page.evaluate(() => window.__pigmentoTest!.guides())).toEqual(guides);
   expect(await samples(page)).toEqual(look);
 });
+
+const MOTION_W = 480;
+const MOTION_H = 64;
+
+/**
+ * The motion sheet: a piece at frames 0–8 under every easing, a bent path, a turn, stretch,
+ * skew and fade together, and a turn about a pivot at its end. After an intended change to how
+ * pieces move, run with PIGMENTO_UPDATE_GOLDEN=1 and review tests/golden/motion.png.
+ */
+test('animation motion matches its golden image', async () => {
+  h = await launchApp();
+  const { page } = h;
+  await ready(page);
+  const sheet = await page.evaluate(() => window.__pigmentoTest!.motionSheet());
+  const png = path.join(GOLDEN, 'motion.png');
+  const meta = path.join(GOLDEN, 'motion.json');
+  if (process.env.PIGMENTO_UPDATE_GOLDEN) {
+    mkdirSync(GOLDEN, { recursive: true });
+    writeFileSync(png, Buffer.from(sheet.png));
+    writeFileSync(meta, `${JSON.stringify({ cellW: MOTION_W, cellH: MOTION_H, ids: sheet.ids }, null, 1)}\n`);
+    test.info().annotations.push({ type: 'golden', description: `wrote ${sheet.ids.length} motions to ${png}` });
+    return;
+  }
+  expect(existsSync(png), 'Golden image missing: run with PIGMENTO_UPDATE_GOLDEN=1').toBe(true);
+  const saved = JSON.parse(readFileSync(meta, 'utf8')) as { ids: string[] };
+  expect(sheet.ids).toEqual(saved.ids);
+  const counts = await page.evaluate(([a, b, w, hh]) => window.__pigmentoTest!.compareSheets([...a], [...b], w, 1, hh), [sheet.png, [...readFileSync(png)], MOTION_W, MOTION_H] as const);
+  expect(counts[0], 'The motion sheet changed size').not.toBe(-1);
+  const changed = counts.map((n, i) => ({ id: sheet.ids[i], pixels: n })).filter((c) => c.id && c.pixels > MOTION_W * MOTION_H * 0.005);
+  if (changed.length) writeFileSync(test.info().outputPath('motion-actual.png'), Buffer.from(sheet.png));
+  expect(changed).toEqual([]);
+});

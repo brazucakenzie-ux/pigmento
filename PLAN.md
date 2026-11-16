@@ -252,7 +252,8 @@ Decisions: pieces come only from pixel layers; shape layers and text aren't fram
 - [x] 5.10 Export animation dialog (Animate → Export, File → Export animation; frame range, playback, scale 50/100/200 %, background or quality, remembered) and frame renderer `Engine.animationFrame(frame)` (the still export's flatten, so frames match), with progress and Stop
 - [x] 5.11 Animated GIF streamed a frame at a time through its own worker (per-frame palettes, delays in hundredths that add up, loop forever or once, see-through frames replace each other) (+ e2e decoding with `ImageDecoder`: frame count, repeat count, delays, pixels, no trails)
 - [x] 5.12 MP4: H.264 feasibility check first (Main and High profiles encode on this PC, up to level 5.1), then WebCodecs `VideoEncoder` (level by size, odd sizes padded to even, a keyframe every 2 s, three qualities) and a small MP4 writer of our own instead of `mp4-muxer` (deprecated, and its WebCodecs types clash with TypeScript's own) (+ e2e: played in Chromium's player in a test-only window: duration, size and frames)
-- [ ] 5.13 Golden motion sheet (a piece at fixed frames under every easing and path); `npm run check` green; report
+- [x] 5.13 Golden motion sheet (a piece at fixed frames under every easing and path); `npm run check` green; report
+- Stop 5B notes: GIF and MP4 export run in the window (frames are drawn by the engine, GIF encodes in a worker, H.264 in the PC's encoder); MP4 is limited to 4096 × 2304 and has no transparency; the export asks where to save once the frames are encoded.
 
 **Stop 5C — Frame-by-frame**
 - [ ] 5.14 Cels on pixel layers: `surface` follows the frame, pixel undo records its cel and jumps to its frame, size-changing operations cover every cel (+ unit tests)

@@ -6,6 +6,7 @@ export interface PigmentoTestHook {
   doc(): { width: number; height: number };
   history(): { index: number; length: number; dirty: boolean };
   brushSheet(cellW: number, cellH: number, cols: number): Promise<{ ids: string[]; w: number; h: number; png: number[] }>;
+  motionSheet(): Promise<{ ids: string[]; w: number; h: number; png: number[] }>;
   tool(): string;
   docToScreen(x: number, y: number): { x: number; y: number };
   liveKind(): string | null;

@@ -8,7 +8,9 @@ import { openPath } from '../services/files';
 import { autosaveNow } from '../services/autosave';
 import { defaultParams, shapeRegistry } from '@engine/shapes/ShapeRegistry';
 import { paintShape } from '@engine/vector/render';
-import { pieceStateAt } from '@engine/anim/piece';
+import { makePiece, pieceStateAt } from '@engine/anim/piece';
+import { drawPiece } from '@engine/anim/pieceRaster';
+import { EASINGS, type Keyframe } from '@engine/anim/interpolate';
 
 /** Every built-in shape drawn into its own cell (golden-image tests). */
 async function shapeSheet(cell: number, cols: number): Promise<{ ids: string[]; w: number; h: number; png: number[] }> {
@@ -62,6 +64,43 @@ async function brushSheet(cellW: number, cellH: number, cols: number): Promise<{
 }
 
 /** Pixels per cell that differ (any channel by more than 24) between two sheets. */
+/**
+ * The motion sheet (golden-image test): one row per easing and per kind of motion, each showing
+ * a small piece at frames 0, 1 … 8 of a move across the row, drawn through the same pixel path
+ * exports use.
+ */
+async function motionSheet(): Promise<{ ids: string[]; w: number; h: number; png: number[] }> {
+  const W = 480;
+  const H = 64;
+  // A 20 × 12 bar, blue with a red nose, so turns and flips show.
+  const src = { w: 20, h: 12, data: new Uint8ClampedArray(20 * 12 * 4) };
+  for (let y = 0; y < 12; y++) {
+    for (let x = 0; x < 20; x++) {
+      const i = (y * 20 + x) * 4;
+      src.data.set(x >= 15 ? [220, 40, 40, 255] : [40, 80, 220, 255], i);
+    }
+  }
+  type Row = { id: string; keys: [Partial<Keyframe>, Partial<Keyframe>]; pivot?: { x: number; y: number } };
+  const rows: Row[] = [
+    ...EASINGS.map((e): Row => ({ id: e, keys: [{ x: 30, y: 32, easing: e }, { x: 450, y: 32 }] })),
+    { id: 'curve', keys: [{ x: 30, y: 54, out: { x: 160, y: -70 } }, { x: 450, y: 10, in: { x: -160, y: 70 } }] },
+    { id: 'combo', keys: [{ x: 30, y: 32 }, { x: 450, y: 32, angle: 2 * Math.PI, sx: 2, sy: 0.5, skew: 0.3, opacity: 0.3 }] },
+    { id: 'pivot', keys: [{ x: 30, y: 32 }, { x: 420, y: 32, angle: Math.PI }], pivot: { x: 0, y: 6 } },
+  ];
+  const data = new Uint8ClampedArray(W * H * rows.length * 4).fill(255);
+  const view = { data, stride: W, ox: 0, oy: 0 };
+  rows.forEach((row, r) => {
+    const p = makePiece(`sheet-${row.id}`, row.id, 'sheet', src, { x: 0, y: 0, w: 20, h: 12 }, 0);
+    if (row.pivot) p.pivot = row.pivot;
+    const base = p.keyframes[0];
+    const key = (k: Partial<Keyframe>, frame: number): Keyframe => ({ ...base, ...k, frame, y: (k.y ?? 32) + r * H });
+    p.keyframes = [key(row.keys[0], 0), key(row.keys[1], 8)];
+    for (let f = 0; f <= 8; f++) drawPiece(view, { x: 0, y: r * H, w: W, h: H }, p, f);
+  });
+  const png = await engine.codecs.encode('png', W, H * rows.length, data, 100, 96);
+  return { ids: rows.map((r) => r.id), w: W, h: H * rows.length, png: Array.from(png) };
+}
+
 async function compareSheets(a: number[], b: number[], cell: number, cols: number, cellH = cell): Promise<number[]> {
   const [x, y] = await Promise.all([engine.codecs.decode(new Uint8Array(a)), engine.codecs.decode(new Uint8Array(b))]);
   if (x.w !== y.w || x.h !== y.h) return [-1];
@@ -86,6 +125,7 @@ export function installTestHook(): void {
     pixel: (x: number, y: number) => engine.sampleColor(x, y),
     shapeSheet,
     brushSheet,
+    motionSheet,
     compareSheets,
     doc: () => ({ width: engine.doc.width, height: engine.doc.height }),
     history: () => {
