@@ -250,7 +250,7 @@ Decisions: pieces come only from pixel layers; shape layers and text aren't fram
 **Stop 5B — Motion paths and export**
 - [x] 5.9 Curved motion paths: Alt-drag a keyframe dot to bend the path, drag its handles (Alt: one side), drag other keyframes' dots to move them, double-click or Straighten to straighten; keyframes move in time on the timeline (drag, Alt+arrows)
 - [x] 5.10 Export animation dialog (Animate → Export, File → Export animation; frame range, playback, scale 50/100/200 %, background or quality, remembered) and frame renderer `Engine.animationFrame(frame)` (the still export's flatten, so frames match), with progress and Stop
-- [ ] 5.11 Animated GIF streamed through the codec worker (+ e2e decoding with `ImageDecoder`: frame count, delays, pixels)
+- [x] 5.11 Animated GIF streamed a frame at a time through its own worker (per-frame palettes, delays in hundredths that add up, loop forever or once, see-through frames replace each other) (+ e2e decoding with `ImageDecoder`: frame count, repeat count, delays, pixels, no trails)
 - [ ] 5.12 MP4: H.264 feasibility check first, then WebCodecs `VideoEncoder` + `mp4-muxer` in a worker (+ e2e: duration, size and a sampled frame)
 - [ ] 5.13 Golden motion sheet (a piece at fixed frames under every easing and path); `npm run check` green; report
 
