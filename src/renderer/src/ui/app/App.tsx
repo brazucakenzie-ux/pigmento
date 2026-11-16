@@ -28,6 +28,7 @@ import { SidePanel } from './SidePanel';
 import { StatusBar } from './StatusBar';
 import { Toasts } from './Toasts';
 import { TopBar } from './TopBar';
+import { Timeline } from './Timeline';
 import { installTestHook } from './testHook';
 
 function rgbToHex(css: string): string {
@@ -175,6 +176,8 @@ export function App() {
   const ready = useUi((s) => s.ready);
   const panelsLeft = useUi((s) => s.settings.panels.side === 'left');
   const statusBar = useUi((s) => s.settings.view.statusBar);
+  // The timeline is Full mode only, like the Layers panel.
+  const timeline = useUi((s) => s.settings.anim.timeline && s.settings.ui.mode !== 'simple');
   const name = useUi((s) => s.file.name);
   const dirty = useUi((s) => s.history.dirty);
   useTheme();
@@ -275,6 +278,7 @@ export function App() {
         <CanvasArea />
         <SidePanel />
       </div>
+      {timeline ? <Timeline /> : <div />}
       {statusBar ? <StatusBar /> : <div />}
       <DialogHost />
       {tour ? <WelcomeTour /> : null}

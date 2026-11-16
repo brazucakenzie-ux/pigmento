@@ -17,7 +17,7 @@ import {
   type KeyChange,
   type Piece,
 } from './piece';
-import { clampFps, clampFrame, clampLength, type LoopMode, type Timeline } from './timeline';
+import { advance, clampFps, clampFrame, clampLength, type LoopMode, type PlayState, type Timeline } from './timeline';
 
 /** What the animation controller needs from the engine. */
 export interface AnimHost {
@@ -45,6 +45,7 @@ export interface AnimationInfo {
   selectedId: string | null;
   /** The selected piece at the frame shown, for the options bar's number fields. */
   current: PieceFields | null;
+  playing: boolean;
 }
 
 /** A piece's values as the options bar shows them (degrees and percent). */
@@ -166,6 +167,7 @@ export class AnimationController {
       frame: t.frame,
       selectedId: this.selected ? this.selectedId : null,
       current: this.fields(),
+      playing: this.playing,
       pieces: this.doc.pieces.map((p) => ({ id: p.id, name: p.name, layerId: p.layerId, keys: p.keyframes.map((k) => ({ frame: k.frame, easing: k.easing })) })),
     };
   }
@@ -209,8 +211,79 @@ export class AnimationController {
 
   /** A new document was loaded (or the old one replaced). */
   reset(): void {
+    this.stopTimer();
     this.selectedId = null;
     this.drag = null;
+  }
+
+  // ---- playback ---------------------------------------------------------------------------
+
+  private play_: { t0: number; steps: number; pos: PlayState } | null = null;
+  private raf = 0;
+
+  get playing(): boolean {
+    return this.play_ !== null;
+  }
+
+  /** Play from the frame shown at the document's frame rate (frames are skipped if drawing falls behind). */
+  play(): void {
+    if (this.play_ || typeof requestAnimationFrame !== 'function') return;
+    this.host.commitLive();
+    const t = this.doc.timeline;
+    // A timeline that plays once starts again from the beginning when it's at its end.
+    if (t.loop === 'once' && t.frame >= t.length - 1) t.frame = 0;
+    this.play_ = { t0: performance.now(), steps: 0, pos: { frame: t.frame, dir: 1 } };
+    const tick = (now: number): void => {
+      const p = this.play_;
+      if (!p) return;
+      const due = Math.floor(((now - p.t0) / 1000) * this.doc.timeline.fps);
+      if (due > p.steps) {
+        const next = advance(p.pos, due - p.steps, this.doc.timeline);
+        p.steps = due;
+        if (!next) {
+          this.doc.timeline.frame = this.doc.timeline.length - 1;
+          this.stop();
+          return;
+        }
+        p.pos = next;
+        this.doc.timeline.frame = next.frame;
+        this.host.animationChanged(null);
+      }
+      this.raf = requestAnimationFrame(tick);
+    };
+    this.raf = requestAnimationFrame(tick);
+    this.host.animationChanged(null);
+  }
+
+  stop(): void {
+    if (!this.play_) return;
+    this.stopTimer();
+    this.host.animationChanged(null);
+  }
+
+  private stopTimer(): void {
+    if (this.raf && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(this.raf);
+    this.raf = 0;
+    this.play_ = null;
+  }
+
+  togglePlay(): void {
+    if (this.playing) this.stop();
+    else this.play();
+  }
+
+  /** Frames that have a keyframe: of one piece, or of every piece (sorted, no repeats). */
+  keyFrames(id: string | null): number[] {
+    const pieces = id ? [this.piece(id)].filter((p): p is Piece => p !== null) : this.doc.pieces;
+    return [...new Set(pieces.flatMap((p) => p.keyframes.map((k) => k.frame)))].sort((a, b) => a - b);
+  }
+
+  /** Go to the previous (-1) or next (1) keyframe of the selected piece, or of any piece. */
+  stepKey(dir: -1 | 1): void {
+    const frames = this.keyFrames(this.selected ? this.selectedId : null);
+    const f = this.frame;
+    const target = dir > 0 ? frames.find((k) => k > f) : [...frames].reverse().find((k) => k < f);
+    if (target !== undefined) this.setFrame(target);
   }
 
   select(id: string | null): void {
@@ -247,6 +320,8 @@ export class AnimationController {
     const length = change.length === undefined ? t.length : clampLength(change.length);
     const loop = change.loop ?? t.loop;
     if (fps === t.fps && length === t.length && loop === t.loop) return false;
+    // Playback keeps its place when the frame rate changes.
+    if (this.play_) this.play_ = { t0: performance.now(), steps: 0, pos: { ...this.play_.pos } };
     return this.change('history.timeline', () => {
       t.fps = fps;
       t.length = length;

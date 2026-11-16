@@ -18,20 +18,24 @@ const NAMED: Record<string, string> = {
 
 /**
  * Normalise a key event to a combo like "Ctrl+Shift+S". Shift is only part of the combo for
- * letters, digits and named keys, so "+" works whether or not Shift is needed to type it.
+ * letters, digits and named keys, so "+" works whether or not Shift is needed to type it. The
+ * comma and full-stop keys are the exception: they go by the key itself and keep Shift
+ * (Shift+, and Shift+. step between keyframes, whatever those keys type with Shift).
  */
 export function comboOf(e: KeyboardEvent): string {
   let key = e.key;
   const named = NAMED[key];
+  const physical = e.code === 'Comma' || e.code === 'Period' ? e.code : null;
   const printableSymbol = key.length === 1 && !/[a-z0-9]/i.test(key);
-  if (named) key = named;
+  if (physical) key = physical;
+  else if (named) key = named;
   else if (key.length === 1) key = key.toUpperCase();
   // Digits typed with Shift on some layouts: use the physical key.
   if (/^Digit\d$/.test(e.code) && (e.ctrlKey || e.metaKey)) key = e.code.slice(5);
   const parts: string[] = [];
   if (e.ctrlKey || e.metaKey) parts.push('Ctrl');
   if (e.altKey) parts.push('Alt');
-  if (e.shiftKey && !printableSymbol) parts.push('Shift');
+  if (e.shiftKey && (!printableSymbol || physical)) parts.push('Shift');
   parts.push(key);
   return parts.join('+');
 }
@@ -120,6 +124,7 @@ const REGIONS: readonly { region: string; focus: string | null }[] = [
   { region: '.optionsbar', focus: FOCUSABLE },
   { region: '.canvas-host', focus: null },
   { region: '.sidepanel', focus: FOCUSABLE },
+  { region: '.timeline', focus: FOCUSABLE },
   { region: '.statusbar', focus: FOCUSABLE },
 ];
 
@@ -159,6 +164,12 @@ export function handleGlobalKey(e: KeyboardEvent): void {
 
   // The active tool gets first refusal on Enter/Escape/Backspace (commit, cancel, undo point).
   if (['Enter', 'Escape', 'Backspace'].includes(e.key) && engine.handleKey(e)) {
+    e.preventDefault();
+    return;
+  }
+
+  // The Animate tool nudges and deletes the selected piece itself.
+  if (state.tool === 'animate' && (NUDGE[e.key] || e.key === 'Delete') && engine.handleKey(e)) {
     e.preventDefault();
     return;
   }

@@ -69,7 +69,7 @@ test('meets WCAG 2.1 AA in every tab and the main dialogs, in light, dark and hi
   ] as const) {
     await theme(page, family, mode);
     const label = `${family ?? 'Pigmento'} ${mode}`;
-    for (const tab of ['Home', 'Shapes', 'Brushes', 'Effects', 'Image', 'View']) {
+    for (const tab of ['Home', 'Shapes', 'Brushes', 'Effects', 'Animate', 'Image', 'View']) {
       await page.getByRole('tab', { name: tab }).click();
       findings.push(...(await audit(page, `${label} · ${tab} tab`)));
     }

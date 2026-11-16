@@ -277,14 +277,25 @@ function EffectsTab() {
 }
 
 function AnimateTab() {
+  const playing = useUi((s) => s.animation.playing);
   return (
-    <RibbonGroup label={t('group.pieces')}>
-      <ActionButton id="tool.animate" label={t('ribbon.animateTool')} />
-      <ActionButton id="animateSelection" />
-      <div className="rb-stack">
-        <ActionButton id="animKeepOriginal" variant="small" />
-      </div>
-    </RibbonGroup>
+    <>
+      <RibbonGroup label={t('group.pieces')}>
+        <ActionButton id="tool.animate" label={t('ribbon.animateTool')} />
+        <ActionButton id="animateSelection" />
+        <div className="rb-stack">
+          <ActionButton id="animKeepOriginal" variant="small" />
+        </div>
+      </RibbonGroup>
+      <RibbonGroup label={t('group.playback')}>
+        <ActionButton id="animPlay" icon={playing ? 'pause' : 'play'} />
+        <div className="rb-stack">
+          <ActionButton id="animPrevKey" variant="small" />
+          <ActionButton id="animNextKey" variant="small" />
+          <ActionButton id="timeline" variant="small" />
+        </div>
+      </RibbonGroup>
+    </>
   );
 }
 
@@ -448,6 +459,7 @@ function ImageTab() {
 }
 
 function ViewTab() {
+  const simple = useUi((s) => s.settings.ui.mode === 'simple');
   return (
     <>
       <RibbonGroup label={t('group.zoom')}>
@@ -508,6 +520,11 @@ function ViewTab() {
           <ActionButton id="historyPanel" variant="small" />
           <ActionButton id="navigatorPanel" variant="small" />
         </div>
+        {simple ? null : (
+          <div className="rb-stack">
+            <ActionButton id="timeline" variant="small" />
+          </div>
+        )}
       </RibbonGroup>
       <RibbonGroup label={t('group.window')}>
         <div className="rb-stack">

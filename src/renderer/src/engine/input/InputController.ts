@@ -242,6 +242,8 @@ export class InputController {
     this.toolButton = button;
     this.capture(e.pointerId);
     this.el.focus({ preventScroll: true });
+    // Touching the picture stops playback, so it holds still under the tool.
+    engine.anim.stop();
     engine.activeTool.pointerDown(engine, te);
     engine.requestRender();
   };

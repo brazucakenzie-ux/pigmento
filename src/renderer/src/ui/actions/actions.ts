@@ -42,6 +42,11 @@ function selectionDialog(d: Parameters<typeof openDialog>[0]): void {
   openDialog(d);
 }
 
+function toggleTimeline(): void {
+  const anim = useUi.getState().settings.anim;
+  updateSettings({ anim: { ...anim, timeline: !anim.timeline } });
+}
+
 function safe(fn: () => void): () => void {
   return () => {
     try {
@@ -162,9 +167,12 @@ const base: Action[] = [
     labelKey: 'action.animateSelection',
     icon: 'animate',
     group: 'animation',
-    // Straight on to the Animate tool, with the new piece selected.
+    // Straight on to the Animate tool, with the new piece selected and the timeline showing.
     run: safe(() => {
-      if (engine.animateSelection(useUi.getState().settings.anim.keepOriginal)) engine.setTool('animate');
+      const anim = useUi.getState().settings.anim;
+      if (!engine.animateSelection(anim.keepOriginal)) return;
+      engine.setTool('animate');
+      if (!anim.timeline) updateSettings({ anim: { ...anim, timeline: true } });
     }),
     enabled: hasSelection,
   },
@@ -176,6 +184,14 @@ const base: Action[] = [
     run: () => updateSettings({ anim: { ...useUi.getState().settings.anim, keepOriginal: !useUi.getState().settings.anim.keepOriginal } }),
     checked: (s) => s.settings.anim.keepOriginal,
   },
+  { id: 'timeline', labelKey: 'action.timeline', icon: 'timeline', group: 'view', run: () => toggleTimeline(), checked: (s) => s.settings.anim.timeline },
+  { id: 'animPlay', labelKey: 'action.animPlay', icon: 'play', group: 'animation', shortcut: ['Ctrl+Space'], run: () => engine.anim.togglePlay(), checked: (s) => s.animation.playing },
+  { id: 'animFirstFrame', labelKey: 'action.animFirstFrame', icon: 'frame-first', group: 'animation', run: () => engine.anim.setFrame(0) },
+  { id: 'animPrevFrame', labelKey: 'action.animPrevFrame', icon: 'frame-prev', group: 'animation', shortcut: ['Comma'], run: () => engine.anim.setFrame(engine.anim.frame - 1) },
+  { id: 'animNextFrame', labelKey: 'action.animNextFrame', icon: 'frame-next', group: 'animation', shortcut: ['Period'], run: () => engine.anim.setFrame(engine.anim.frame + 1) },
+  { id: 'animLastFrame', labelKey: 'action.animLastFrame', icon: 'frame-last', group: 'animation', run: () => engine.anim.setFrame(engine.anim.timeline.length - 1) },
+  { id: 'animPrevKey', labelKey: 'action.animPrevKey', icon: 'keyframe', group: 'animation', shortcut: ['Shift+Comma'], run: () => engine.anim.stepKey(-1) },
+  { id: 'animNextKey', labelKey: 'action.animNextKey', icon: 'keyframe', group: 'animation', shortcut: ['Shift+Period'], run: () => engine.anim.stepKey(1) },
   { id: 'freeTransform', labelKey: 'action.freeTransform', icon: 'transform', group: 'image', shortcut: ['Ctrl+T'], run: safe(() => void engine.freeTransform()) },
   { id: 'rotateFree', labelKey: 'action.rotateFree', icon: 'rotate-free', group: 'image', run: () => openDialog({ kind: 'rotate' }) },
   { id: 'flipH', labelKey: 'action.flipH', icon: 'flip-h', group: 'image', run: safe(() => engine.flip('h')) },

@@ -93,3 +93,71 @@ test('the Animate tool keys a piece by dragging it, its handles and its fields',
   info = await page.evaluate(() => window.__pigmentoTest!.anim());
   expect(info.pieces[0].keys.map((k) => k.frame)).toEqual([0]);
 });
+
+test('the timeline scrubs, plays, retimes keyframes and renames pieces', async () => {
+  const { page } = h;
+  const layerId = await page.evaluate(() => window.__pigmentoTest!.layers().activeId);
+  await page.evaluate((id) => window.__pigmentoTest!.fillLayer(id, { r: 200, g: 40, b: 40, a: 255 }, { x: 100, y: 100, w: 50, h: 50 }), layerId);
+  await page.evaluate(() => window.__pigmentoTest!.selectRect(100, 100, 50, 50));
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  await page.locator('.ribbon').getByRole('button', { name: 'Animate selection' }).click();
+  // Making a piece shows the timeline.
+  const timeline = page.getByRole('region', { name: 'Timeline' });
+  await expect(timeline).toBeVisible();
+  const id = (await page.evaluate(() => window.__pigmentoTest!.anim())).pieces[0].id;
+  await page.evaluate((pid) => window.__pigmentoTest!.setPieceKey(pid, 8, { x: 400 }), id);
+  await expect(timeline.getByRole('button', { name: /^Frame 9: keyframe of Piece 1/ })).toBeVisible();
+
+  // Click the ruler to go to a frame; the arrow keys step from there.
+  const ruler = timeline.getByRole('slider', { name: 'Frames' });
+  const box = (await ruler.boundingBox())!;
+  await page.mouse.click(box.x + 4 * 14 + 7, box.y + box.height / 2);
+  await expect(ruler).toHaveAttribute('aria-valuenow', '5');
+  await ruler.press('ArrowRight');
+  await expect(ruler).toHaveAttribute('aria-valuetext', 'Frame 6 of 24');
+  await ruler.press('End');
+  expect((await page.evaluate(() => window.__pigmentoTest!.anim())).frame).toBe(23);
+  // The frame shortcuts work from the canvas.
+  await page.locator('.canvas-host').focus();
+  await page.keyboard.press('Shift+Comma');
+  expect((await page.evaluate(() => window.__pigmentoTest!.anim())).frame).toBe(8);
+  await page.keyboard.press('Comma');
+  expect((await page.evaluate(() => window.__pigmentoTest!.anim())).frame).toBe(7);
+
+  // Play: frames advance; clicking the picture stops it.
+  await page.keyboard.press('Control+Space');
+  await expect.poll(() => page.evaluate(() => window.__pigmentoTest!.anim().frame), { timeout: 5000 }).not.toBe(7);
+  expect((await page.evaluate(() => window.__pigmentoTest!.anim())).playing).toBe(true);
+  const c = await page.evaluate(() => window.__pigmentoTest!.docToScreen(600, 600));
+  await page.mouse.click(c.x, c.y);
+  expect((await page.evaluate(() => window.__pigmentoTest!.anim())).playing).toBe(false);
+
+  // Drag the frame-9 keyframe to frame 13.
+  const key = timeline.getByRole('button', { name: /^Frame 9: keyframe/ });
+  const kb = (await key.boundingBox())!;
+  await page.mouse.move(kb.x + kb.width / 2, kb.y + kb.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(kb.x + kb.width / 2 + 4 * 14, kb.y + kb.height / 2, { steps: 5 });
+  await page.mouse.up();
+  await expect(timeline.getByRole('button', { name: /^Frame 13: keyframe/ })).toBeVisible();
+  expect((await page.evaluate(() => window.__pigmentoTest!.anim())).pieces[0].keys.map((k) => k.frame)).toEqual([0, 12]);
+
+  // Its menu sets the easing of the first keyframe.
+  await timeline.getByRole('button', { name: /^Frame 1: keyframe/ }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Easing' }).hover();
+  await page.getByRole('menuitemcheckbox', { name: 'Ease in and out' }).click();
+  expect((await page.evaluate(() => window.__pigmentoTest!.anim())).pieces[0].keys[0].easing).toBe('easeInOut');
+
+  // Double-click the name to rename the piece.
+  await timeline.getByRole('button', { name: 'Piece 1', exact: true }).dblclick();
+  const field = timeline.getByRole('textbox', { name: 'Piece name' });
+  await field.fill('Ball');
+  await field.press('Enter');
+  await expect(timeline.getByRole('button', { name: 'Ball', exact: true })).toBeVisible();
+  expect((await page.evaluate(() => window.__pigmentoTest!.anim())).pieces[0].name).toBe('Ball');
+
+  // Undo walks back the rename, the easing and the retiming.
+  for (let i = 0; i < 3; i++) await page.keyboard.press('Control+z');
+  const info = await page.evaluate(() => window.__pigmentoTest!.anim());
+  expect(info.pieces[0]).toMatchObject({ name: 'Piece 1', keys: [{ frame: 0, easing: 'linear' }, { frame: 8, easing: 'linear' }] });
+});

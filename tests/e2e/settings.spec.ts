@@ -120,7 +120,7 @@ test('Simple mode keeps the Paint essentials, and Full brings everything back', 
   const dlg = page.getByRole('dialog', { name: 'Settings' });
   await dlg.getByRole('radio', { name: 'Full' }).click();
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('tab')).toHaveText(['Home', 'Shapes', 'Brushes', 'Effects', 'Image', 'View']);
+  await expect(page.getByRole('tab')).toHaveText(['Home', 'Shapes', 'Brushes', 'Effects', 'Animate', 'Image', 'View']);
   await expect(layersHead).toBeVisible();
   await expect(bar.getByRole('textbox', { name: 'Smoothing' })).toBeVisible();
 });

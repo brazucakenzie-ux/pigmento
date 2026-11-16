@@ -43,6 +43,7 @@ export interface PigmentoTestHook {
     selectedId: string | null;
     pieces: { id: string; name: string; layerId: string; keys: { frame: number; easing: string }[] }[];
     current: { x: number; y: number; w: number; h: number; angle: number; skew: number; opacity: number; easing: string; keyed: boolean } | null;
+    playing: boolean;
   };
   animateSelection(keepOriginal?: boolean): boolean;
   setFrame(frame: number): void;
