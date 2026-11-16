@@ -13,8 +13,8 @@ import { exportAnimation } from '../services/animExport';
 
 const SCALES = [0.5, 1, 2] as const;
 const QUALITIES: VideoQuality[] = ['low', 'medium', 'high'];
-/** Formats offered (MP4 joins GIF once its encoder is in). */
-export const ANIM_FORMATS: AnimFormat[] = ['gif'];
+/** Formats offered. MP4 uses the PC's H.264 encoder through WebCodecs. */
+export const ANIM_FORMATS: AnimFormat[] = ['gif', 'mp4'];
 
 /** Animate → Export animation: the frames as an animated GIF (or a video), with progress and Stop. */
 export function AnimExportDialog() {

@@ -1,6 +1,7 @@
 // Exporting an animation: the dialog, progress and Stop, GIF and MP4 files.
 import { expect, test, type Page } from '@playwright/test';
 import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { launchApp, ready, tempFile, type AppHandle } from './harness';
 
 let h: AppHandle;
@@ -165,4 +166,99 @@ test('GIFs play the right frames for the right time, and stay clean when see-thr
   // On the way back (frame 3 → 2…): the square at frame 2's place.
   expect(red(gif.pixels[2])).toBe(true);
   expect(gif.pixels[3][3]).toBe(0);
+});
+
+/**
+ * Play an MP4 in Chromium's own player: its length, size, and the colour at (x, y) at a few times.
+ * Pigmento's window doesn't allow media (its security policy), so this uses a hidden test-only
+ * window with a session of its own.
+ */
+async function probeVideo(file: string, probes: { t: number; x: number; y: number }[]): Promise<{ duration: number; w: number; h: number; pixels: number[][] }> {
+  const url = 'file:///' + file.split(path.sep).join('/');
+  const script = `(async () => {
+    const video = document.createElement('video');
+    video.muted = true;
+    video.src = ${JSON.stringify(url)};
+    await new Promise((res, rej) => {
+      video.onloadeddata = () => res();
+      video.onerror = () => rej(new Error('video error ' + (video.error && video.error.message)));
+    });
+    const c = document.createElement('canvas');
+    c.width = video.videoWidth;
+    c.height = video.videoHeight;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    const pixels = [];
+    for (const p of ${JSON.stringify(probes)}) {
+      await new Promise((res) => {
+        video.onseeked = () => res();
+        video.currentTime = p.t;
+      });
+      ctx.drawImage(video, 0, 0);
+      pixels.push(Array.from(ctx.getImageData(p.x, p.y, 1, 1).data));
+    }
+    return { duration: video.duration, w: video.videoWidth, h: video.videoHeight, pixels };
+  })()`;
+  return h.app.evaluate(async ({ BrowserWindow }, js) => {
+    const win = new BrowserWindow({ show: false, webPreferences: { partition: 'mp4-probe', webSecurity: false } });
+    try {
+      await win.loadURL('about:blank');
+      return (await win.webContents.executeJavaScript(js)) as { duration: number; w: number; h: number; pixels: number[][] };
+    } finally {
+      win.destroy();
+    }
+  }, script);
+}
+
+test('MP4 videos play for the right time at the right size, frame by frame', async () => {
+  const { page } = h;
+  await movingSquare(page);
+  const file = tempFile('moving.mp4');
+  await stubSave(file);
+  await page.locator('.ribbon').getByRole('button', { name: 'Export', exact: true }).click();
+  const dlg = page.getByRole('dialog', { name: 'Export animation' });
+  await dlg.getByRole('radio', { name: 'MP4 video' }).click();
+  // MP4 has no transparency, so the background choice gives way to quality.
+  await expect(dlg.getByRole('checkbox', { name: /^Transparent/ })).toHaveCount(0);
+  await dlg.getByRole('radio', { name: 'Best' }).click();
+  await dlg.getByLabel('Playback').selectOption('loop');
+  await dlg.getByRole('button', { name: 'Export…' }).click();
+  await expect(dlg).toBeHidden({ timeout: 60_000 });
+  await expect(page.locator('.toast', { hasText: 'Exported 24 frames to moving.mp4' })).toBeVisible();
+  const head = readFileSync(file).subarray(4, 8).toString('ascii');
+  expect(head).toBe('ftyp');
+  // 24 frames at 12 fps: 2 seconds. Frame 0 at 0 s, frame 5 at 5/12 s, frame 10 onwards held.
+  const v = await probeVideo(file, [
+    { t: 0.01, x: 140, y: 140 },
+    { t: 5 / 12 + 0.02, x: 290, y: 140 },
+    { t: 5 / 12 + 0.02, x: 140, y: 140 },
+    { t: 1.5, x: 440, y: 140 },
+  ]);
+  expect(v.duration).toBeCloseTo(2, 1);
+  expect({ w: v.w, h: v.h }).toEqual({ w: 1280, h: 800 });
+  // Video is lossy, so colours are close rather than exact.
+  const redish = (p: number[]) => p[0] > 180 && p[1] < 90 && p[2] < 90;
+  const whiteish = (p: number[]) => p[0] > 220 && p[1] > 220 && p[2] > 220;
+  expect(redish(v.pixels[0])).toBe(true);
+  expect(redish(v.pixels[1])).toBe(true);
+  expect(whiteish(v.pixels[2])).toBe(true);
+  expect(redish(v.pixels[3])).toBe(true);
+});
+
+test('odd sizes are padded to even for MP4', async () => {
+  const { page } = h;
+  await movingSquare(page);
+  await page.evaluate(() => window.__pigmentoTest!.selectRect(0, 0, 641, 401));
+  await page.keyboard.press('Control+Shift+x');
+  expect(await page.evaluate(() => window.__pigmentoTest!.doc())).toEqual({ width: 641, height: 401 });
+  const file = tempFile('odd.mp4');
+  await stubSave(file);
+  await page.locator('.ribbon').getByRole('button', { name: 'Export', exact: true }).click();
+  const dlg = page.getByRole('dialog', { name: 'Export animation' });
+  await dlg.getByRole('radio', { name: 'MP4 video' }).click();
+  await dlg.getByRole('textbox', { name: 'Last frame' }).fill('3');
+  await dlg.getByRole('button', { name: 'Export…' }).click();
+  await expect(dlg).toBeHidden({ timeout: 60_000 });
+  const v = await probeVideo(file, [{ t: 0.01, x: 140, y: 140 }]);
+  expect({ w: v.w, h: v.h }).toEqual({ w: 642, h: 402 });
+  expect(v.duration).toBeCloseTo(0.25, 1);
 });
