@@ -2,7 +2,7 @@
 
 > *Paint simply. Create boldly.*
 
-Pigmento is a painting app for Windows 11 with the classic Paint layout. It also has layers, more than 150 editable shapes, 50 brushes with a brush designer, and live adjustments and filters, for when you want them.
+Pigmento is a painting app for Windows 11 with the classic Paint layout. It also has layers, more than 150 editable shapes, 50 brushes with a brush designer, live adjustments and filters, and animation, for when you want them.
 
 ![Pigmento with a row of strokes from its brush library](docs/screenshots/brushes.png)
 
@@ -16,6 +16,7 @@ Pigmento is a painting app for Windows 11 with the classic Paint layout. It also
 - **Brushes:** 50 brushes with pressure, tilt and speed dynamics, a stabiliser, symmetry, and Shift for straight lines. There are retouch tools (smudge, blur, sharpen, clone stamp, dodge and burn), and you can stroke outlines and paths with any brush.
 - **Brush Designer:** make your own brushes from a built-in tip, the selection, a PNG or a tip you draw, with grain textures and response curves. Share them as brush packs (`.pigmbrush`).
 - **Effects:** 11 adjustments and 11 filters with a live preview. They work on the selection, and run in the background with progress on big pictures.
+- **Animation:** cut a piece out of a layer and move, turn, stretch, skew and fade it with keyframes, with easing, curved motion paths and a movable pivot. You can also draw frame by frame with onion skin. A timeline shows it all, and it exports as an animated GIF or an MP4 video.
 - **View aids:** zoom, rulers, gridlines and pixel grid, guides and snapping, turning the view, and a reference image.
 - **Made for everyone:** keyboard-friendly throughout (F6 moves between regions), with customisable shortcuts and an adjustable interface size. There are six themes, each in light and dark, including high contrast, and the app passes an automated WCAG 2.1 AA check.
 - **Safe with your work:** autosave and recovery, plain-language errors, a log for problems, and checks before pictures too big for memory.
@@ -23,7 +24,7 @@ Pigmento is a painting app for Windows 11 with the classic Paint layout. It also
 | | |
 |---|---|
 | ![The Shapes tab and its gallery](docs/screenshots/shapes.png) | ![The Brush Designer's dynamics](docs/screenshots/brush-designer.png) |
-| ![A drop shadow previewed live](docs/screenshots/effects.png) | |
+| ![A drop shadow previewed live](docs/screenshots/effects.png) | ![A piece moving along its path, retimed on the timeline](docs/screenshots/animation.png) |
 
 The [user guide](docs/user-guide.md) explains everything; it's also in the app under Help → User guide.
 
@@ -31,8 +32,8 @@ The [user guide](docs/user-guide.md) explains everything; it's also in the app u
 
 Build the installer (see below), then run one of these from `dist/`:
 
-- **`Pigmento Setup 1.0.0.exe`** installs Pigmento for your user account only, with no administrator rights needed. It adds Start menu and desktop shortcuts, opens `.pigm` projects, and adds Pigmento to "Open with" for PNG, JPEG, BMP, GIF and WebP. It never changes your default image viewer. Uninstall it from Settings → Apps.
-- **`Pigmento-1.0.0-portable.exe`** runs without installing.
+- **`Pigmento Setup 1.1.0.exe`** installs Pigmento for your user account only, with no administrator rights needed. It adds Start menu and desktop shortcuts, opens `.pigm` projects, and adds Pigmento to "Open with" for PNG, JPEG, BMP, GIF and WebP. It never changes your default image viewer. Uninstall it from Settings → Apps.
+- **`Pigmento-1.1.0-portable.exe`** runs without installing.
 
 The builds aren't code-signed, so Windows SmartScreen may warn the first time. Choose **More info → Run anyway**.
 
@@ -47,7 +48,7 @@ npm install          # dependencies
 npm run dev          # start the app with hot reload
 npm run build        # production build into out/
 npm start            # run the production build
-npm run dist         # build dist/Pigmento Setup 1.0.0.exe and the portable exe
+npm run dist         # build dist/Pigmento Setup 1.1.0.exe and the portable exe
 ```
 
 | Command | What it does |

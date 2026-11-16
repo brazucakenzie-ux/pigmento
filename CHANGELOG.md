@@ -2,6 +2,32 @@
 
 All notable changes to Pigmento. Versions follow [Semantic Versioning](https://semver.org).
 
+## [1.1.0] — 2026-11-16
+
+Animation.
+
+### Keyframe animation
+- Animate selection lifts part of a layer off as a piece (or animates a copy). The Animate tool moves, scales, stretches, skews and turns it, and every change sets a keyframe at the frame shown.
+- Keyframes interpolate position, size, rotation (more than one turn if you like), skew and opacity, with five easings.
+- Curved motion paths you bend on the canvas, and a pivot you can move without moving the piece.
+- Pieces follow resizes, crops, flips and turns, and are kept by layer duplicates and merges.
+
+### Frame-by-frame drawing
+- New drawing, Copy drawing, Clear drawing and Delete drawing on any pixel layer. Every tool paints on the frame shown, and undo goes back to the frame it changed.
+- Onion skin shows the drawings before and after, on screen only.
+
+### Timeline and playback
+- A timeline with a frame ruler, a row per layer and piece, keyframes to drag in time (with a frame label, and the timeline growing past its end), drawings to hold longer or shorter, and menus for easing, copying and deleting.
+- Playback at the picture's frame rate, looping, once, or back and forth, with keys for frames and keyframes.
+
+### Export and files
+- Export animation as an animated GIF or an MP4 video (H.264), with a frame range, size, progress and Stop.
+- Projects (`.pigm` version 2) keep the animation. Pictures without animation are still saved as version 1.
+
+### Also
+- The interface size goes up to 200 %, and a single shape can be exported as a shape pack.
+- F6 carries on from the last region if the focus falls back to the page.
+
 ## [1.0.0] — 2026-11-15
 
 The first release.

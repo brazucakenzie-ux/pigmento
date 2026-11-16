@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
@@ -57,7 +57,8 @@ test('the installed app starts, draws, saves a project and reopens it through it
   const page = await start();
   // It's the packaged build.
   const info = await page.evaluate(() => window.pigmento.system.appInfo());
-  expect(info).toMatchObject({ version: '1.0.0', isPackaged: true });
+  const version = (JSON.parse(readFileSync(path.resolve(__dirname, '../../package.json'), 'utf8')) as { version: string }).version;
+  expect(info).toMatchObject({ version, isPackaged: true });
   await expect(page).toHaveTitle(/Pigmento/);
 
   await page.getByRole('button', { name: /Colour #D7263D/ }).click();

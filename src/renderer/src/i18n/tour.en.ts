@@ -21,7 +21,7 @@ export const tourEn = {
   'tour.panels.title': 'Panels',
   'tour.panels.body': 'History lets you step back, Navigator shows the whole picture, and Layers stack your work.',
   'tour.mode.title': 'Simple or Full',
-  'tour.mode.body': 'Simple keeps the Paint essentials; Full adds shapes, brushes, effects and layers. Switch any time.',
+  'tour.mode.body': 'Simple keeps the Paint essentials; Full adds shapes, brushes, effects, layers and animation. Switch any time.',
   'tour.help.title': 'Help',
   'tour.help.body': 'Keyboard shortcuts (F1), the user guide and this tour are in Help.',
 } as const;

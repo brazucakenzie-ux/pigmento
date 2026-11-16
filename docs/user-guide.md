@@ -1,17 +1,17 @@
 # Pigmento user guide
 
-Pigmento is a painting app for Windows 11 with the classic Paint layout, plus layers, shapes, brushes and effects when you want them. This guide follows the window from top to bottom. Press F1 at any time for the full list of keyboard shortcuts.
+Pigmento is a painting app for Windows 11 with the classic Paint layout, plus layers, shapes, brushes, effects and animation when you want them. This guide follows the window from top to bottom. Press F1 at any time for the full list of keyboard shortcuts.
 
 ## Installing
 
-- **The installer** (`Pigmento Setup 1.0.0.exe`) installs Pigmento for your account only. It adds Start menu and desktop shortcuts, opens `.pigm` projects with a double-click, and adds Pigmento to "Open with" for PNG, JPEG, BMP, GIF and WebP without changing your usual image viewer. Uninstall it from Windows Settings → Apps.
-- **The portable version** (`Pigmento-1.0.0-portable.exe`) runs without installing.
+- **The installer** (`Pigmento Setup 1.1.0.exe`) installs Pigmento for your account only. It adds Start menu and desktop shortcuts, opens `.pigm` projects with a double-click, and adds Pigmento to "Open with" for PNG, JPEG, BMP, GIF and WebP without changing your usual image viewer. Uninstall it from Windows Settings → Apps.
+- **The portable version** (`Pigmento-1.1.0-portable.exe`) runs without installing.
 
 ## Getting started
 
 The window has five parts:
 
-- **The ribbon** at the top holds the tools and commands, grouped into tabs: Home, Shapes, Brushes, Effects, Image and View. The File menu is at its left, Help at its right.
+- **The ribbon** at the top holds the tools and commands, grouped into tabs: Home, Shapes, Brushes, Effects, Animate, Image and View. The File menu is at its left, Help at its right.
 - **The options bar** under the ribbon shows the settings of the tool you're using, such as its size, opacity or brush.
 - **The canvas** in the middle is your picture.
 - **The side panel** on the right has the Navigator, Layers and History. View → Side panel shows or hides it.
@@ -25,7 +25,7 @@ The first time Pigmento starts, a short tour points these out. Help → Welcome 
 
 The button beside the ribbon tabs switches between two modes:
 
-- **Simple** keeps the Paint essentials: the Home, Image and View tabs, no Layers panel and fewer tool options.
+- **Simple** keeps the Paint essentials: the Home, Image and View tabs, no Layers panel or timeline, and fewer tool options.
 - **Full** shows everything.
 
 Switching never changes your picture or your settings, so you can move between them at any time.
@@ -136,6 +136,64 @@ The **Effects** tab has the adjustments and filters:
 
 Each opens a panel beside the picture. The picture shows a live preview while you change the settings, and Apply makes the change as one undo step. If something is selected, only the selection changes. Big pictures are processed in the background with a progress bar, and Stop cancels.
 
+## Animation
+
+The **Animate** tab makes things move. There are two ways to animate, and you can use both in one picture:
+
+- **Pieces with keyframes:** cut part of a layer out and tell Pigmento where it should be at certain frames. Pigmento works out every frame in between.
+- **Frame by frame:** draw each frame yourself, like a flipbook.
+
+### The timeline
+
+The timeline (Animate → Timeline, or View → Timeline) sits under the picture:
+
+- **The ruler** at the top: click or drag it to go to a frame. With it focused, the arrow keys, Home and End move through the frames.
+- **Below the ruler:** a row for each pixel layer, with the pieces on that layer just under it.
+- **Playback:** Play (Ctrl+Space), the frame you're on, the length in frames, the frame rate (frames a second), and the playback mode: Loop, Once, or Back and forth.
+- **Frame keys:** , and . step back and forward a frame; Shift+, and Shift+. jump to the previous and next keyframe.
+
+Drag the top edge of the timeline to make it taller. It remembers its height.
+
+### Moving pieces with keyframes
+
+1. Select part of a layer (any selection tool) and choose **Animate selection**. The pixels become a *piece*, and the spot they came from becomes see-through. Tick **Leave the original** first to animate a copy instead.
+2. Go to another frame and change the piece with the **Animate** tool (A), as below.
+3. Each change sets a **keyframe** at that frame (a diamond on the piece's row in the timeline). Between keyframes, Pigmento moves the piece smoothly.
+
+With the Animate tool:
+
+- **Move:** drag the piece.
+- **Resize:** drag a box handle to make it bigger, smaller, wider or taller. Shift keeps its proportions, and Alt scales it from its pivot.
+- **Skew:** hold Ctrl and drag the top or bottom edge.
+- **Turn:** drag the round handle (Shift turns in 15° steps). It can turn more than once.
+- **The pivot** (the small target in the middle of a piece) is what it turns and grows around. Drag it anywhere, for example to a shoulder for a swinging arm.
+
+The options bar shows the piece's position, size, angle, skew and **opacity** at the frame you're on. Type a value to set it there; lower the opacity to fade the piece in or out. **Easing** says how it gets to the next keyframe: Even, Ease in, Ease out, Ease in and out, or Hold (it waits, then jumps).
+
+More things you can do:
+
+- **Change the timing:** drag a keyframe's diamond along its row. A label shows the frame it will land on, and dragging past the end makes the timeline longer. Alt+arrow keys move a selected diamond one frame at a time.
+- **Keyframe menu:** right-click a diamond for its easing, Copy, Paste and Delete.
+- **Motion path:** shows as a dotted line with a dot at each keyframe. Drag a dot to move that keyframe.
+- **Curves:** Alt-drag a dot to bend the path there, then drag its handles to shape the curve. Double-click a dot, or use **Straighten**, to make it straight again.
+- **Rename or delete a piece:** double-click its name in the timeline to rename it, or right-click the name for its menu.
+
+### Drawing frame by frame
+
+On the frame where a new drawing should start, choose **New drawing** (a blank page) or **Copy drawing** (a copy of the one showing, to change a little) in the Animate tab. Each drawing shows until the next one starts.
+
+- **Clear drawing** empties the drawing you're on, and **Delete drawing** removes it.
+- In the timeline, each drawing is a block on its layer's row. Drag the start of a block to hold the drawing before it for longer or shorter.
+- **Onion skin** shows the drawings before (orange) and after (blue) the one you're drawing, faintly, so you can line them up. Choose how many to show, and how strong, beside its button in the timeline. It's only on screen: it's never saved or exported.
+
+### Saving and sharing
+
+- **Projects:** a Pigmento project (`.pigm`) keeps the whole animation.
+- **Still pictures:** saving as PNG, JPEG or another picture format saves the frame on screen.
+- **Export** (in the Animate tab, or File → Export animation): choose which frames, the playback, and the size (50, 100 or 200 %), then **Export…**. A bar shows the progress, and **Stop** cancels.
+- **Animated GIF:** plays everywhere, up to 256 colours a frame, and can be see-through.
+- **MP4 video:** smaller files in full colour, up to 4096 × 2304 pixels.
+
 ## Image
 
 The Image tab resizes the picture or the canvas, crops, rotates and flips, and inverts colours. **Resize** (Ctrl+W) keeps the proportions while "Keep aspect ratio" is ticked, and lets you choose how pixels are resampled.
@@ -174,6 +232,10 @@ These are the defaults; F1 always shows the current ones.
 | Brush size | [ and ] (or the mouse side buttons) |
 | Swap colours, Reset colours | X, D |
 | Settings | Ctrl+Alt+S |
+| Animate tool | A |
+| Play or stop the animation | Ctrl+Space |
+| Previous, next frame | , and . |
+| Previous, next keyframe | Shift+, and Shift+. |
 | Keyboard shortcuts | F1 |
 | Move between the ribbon, options bar, picture, side panel and status bar | F6, Shift+F6 |
 
