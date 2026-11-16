@@ -15,6 +15,8 @@ const en = {
   'filter.palette': 'Palette (JSON, GIMP .gpl, Adobe .ase)',
   'filter.brushImage': 'PNG image',
   'filter.brushPack': 'Pigmento brush pack',
+  'filter.animationGif': 'Animated GIF',
+  'filter.animationMp4': 'MP4 video',
   'filter.referenceImage': 'Images',
   'error.title': 'Pigmento',
   'error.internal': 'Something went wrong inside Pigmento. Your picture is safe; if anything looks wrong, save a copy and restart.',

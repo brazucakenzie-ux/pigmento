@@ -12,6 +12,9 @@ export const ASSET_KINDS = {
   brushPack: { open: ['pigmbrush'], save: 'pigmbrush', maxBytes: 50 * 1024 * 1024, filterKey: 'filter.brushPack' },
   /** A PNG for a brush tip or grain texture (decoded and size-checked in the codec worker). */
   brushImage: { open: ['png'], save: 'png', maxBytes: 8 * 1024 * 1024, filterKey: 'filter.brushImage' },
+  /** Exported animations (only ever saved). */
+  animationGif: { open: ['gif'], save: 'gif', maxBytes: 1024 * 1024 * 1024, filterKey: 'filter.animationGif' },
+  animationMp4: { open: ['mp4'], save: 'mp4', maxBytes: 1024 * 1024 * 1024, filterKey: 'filter.animationMp4' },
 } as const;
 
 export type AssetKind = keyof typeof ASSET_KINDS;

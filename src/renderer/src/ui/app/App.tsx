@@ -6,6 +6,7 @@ import { EditColorsDialog, PasteLargerDialog, QualityDialog, RecoverDialog, Shor
 import { clearOwnAutosave, offerRecovery, startAutosave } from '../services/autosave';
 import { CanvasSizeDialog, NewImageDialog, PropertiesDialog, ResizeDialog, RotateDialog } from '../dialogs/ImageDialogs';
 import { ExportDialog } from '../dialogs/ExportDialog';
+import { AnimExportDialog } from '../dialogs/AnimExportDialog';
 import { GradientDialog } from '../dialogs/GradientDialog';
 import { FilterDialog } from '../dialogs/FilterDialog';
 import { SettingsDialog } from '../dialogs/SettingsDialog';
@@ -129,6 +130,8 @@ function DialogHost() {
       return <RecoverDialog items={d.items} />;
     case 'export':
       return <ExportDialog />;
+    case 'exportAnimation':
+      return <AnimExportDialog />;
     case 'modifySelection':
       return <ModifySelectionDialog op={d.op} />;
     case 'colorRange':

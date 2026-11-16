@@ -121,8 +121,12 @@ export const SettingsSchema = z.object({
       keepOriginal: z.boolean().default(false),
       timeline: z.boolean().default(false),
       timelineHeight: z.number().int().min(120).max(480).default(190),
+      /** The Export animation dialog's last choices. */
+      exportFormat: z.enum(['gif', 'mp4']).default('gif'),
+      exportScale: z.number().min(0.25).max(4).default(1),
+      exportQuality: z.enum(['low', 'medium', 'high']).default('high'),
     })
-    .default({ keepOriginal: false, timeline: false, timelineHeight: 190 }),
+    .default({ keepOriginal: false, timeline: false, timelineHeight: 190, exportFormat: 'gif', exportScale: 1, exportQuality: 'high' }),
   /** The interface: its scale (80–200 %), Simple (the Paint essentials) or Full, and the tour. */
   ui: z
     .object({

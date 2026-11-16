@@ -185,6 +185,17 @@ const base: Action[] = [
     checked: (s) => s.settings.anim.keepOriginal,
   },
   { id: 'timeline', labelKey: 'action.timeline', icon: 'timeline', group: 'view', run: () => toggleTimeline(), checked: (s) => s.settings.anim.timeline },
+  {
+    id: 'exportAnimation',
+    labelKey: 'action.exportAnimation',
+    icon: 'timeline',
+    group: 'animation',
+    run: () => {
+      engine.commitLive();
+      openDialog({ kind: 'exportAnimation' });
+    },
+    enabled: (s) => s.animation.pieces.length > 0,
+  },
   { id: 'animPlay', labelKey: 'action.animPlay', icon: 'play', group: 'animation', shortcut: ['Ctrl+Space'], run: () => engine.anim.togglePlay(), checked: (s) => s.animation.playing },
   { id: 'animFirstFrame', labelKey: 'action.animFirstFrame', icon: 'frame-first', group: 'animation', run: () => engine.anim.setFrame(0) },
   { id: 'animPrevFrame', labelKey: 'action.animPrevFrame', icon: 'frame-prev', group: 'animation', shortcut: ['Comma'], run: () => engine.anim.setFrame(engine.anim.frame - 1) },

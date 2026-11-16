@@ -1088,6 +1088,25 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     return { w: r.w, h: r.h, data: out };
   }
 
+  /**
+   * One frame of the animation for an export, through the same flatten as a still export (so a
+   * frame exported as a PNG matches the same frame in a GIF or MP4). Not transparent: on the
+   * paper (or white).
+   */
+  animationFrame(frame: number, o: { scale: number; transparent: boolean; method?: Resample }): ImageBuf {
+    let img = this.flatten(false, this.doc.bounds, !o.transparent, frame);
+    if (!o.transparent) {
+      const p = this.doc.paper;
+      flattenOnto(img.data, p && p.a === 255 ? p : WHITE);
+    }
+    if (o.scale !== 1) {
+      const { w, h } = this.exportSize(o.scale);
+      checkSize(w, h);
+      img = resample(img, w, h, o.method ?? 'bicubic');
+    }
+    return img;
+  }
+
   /** Output size of an export at `scale`. */
   exportSize(scale: number): { w: number; h: number } {
     return { w: Math.max(1, Math.round(this.doc.width * scale)), h: Math.max(1, Math.round(this.doc.height * scale)) };

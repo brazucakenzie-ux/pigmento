@@ -19,7 +19,7 @@ function docName(): string {
   return useUi.getState().file.name ?? t('doc.untitled');
 }
 
-function baseName(): string {
+export function baseName(): string {
   const n = useUi.getState().file.name;
   return n ? n.replace(/\.[^.]+$/, '') : t('doc.untitled');
 }

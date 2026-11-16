@@ -86,6 +86,7 @@ function FileMenu() {
           }
         </SubMenu>
         <ActionMenuItem id="export" close={close} />
+        <ActionMenuItem id="exportAnimation" close={close} />
         <ActionMenuItem id="exportSvg" close={close} />
         <MenuSeparator />
         <ActionMenuItem id="print" close={close} label={t('file.print')} />
@@ -294,6 +295,9 @@ function AnimateTab() {
           <ActionButton id="animNextKey" variant="small" />
           <ActionButton id="timeline" variant="small" />
         </div>
+      </RibbonGroup>
+      <RibbonGroup label={t('group.animExport')}>
+        <ActionButton id="exportAnimation" label={t('ribbon.exportAnimation')} />
       </RibbonGroup>
     </>
   );

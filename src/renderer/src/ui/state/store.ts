@@ -29,6 +29,7 @@ export type DialogState =
   | { kind: 'quality'; format: ImageFormat; transparent: boolean; layers: boolean; selections: boolean; resolve: (q: number | null) => void }
   | { kind: 'recover'; items: AutosaveEntry[] }
   | { kind: 'export' }
+  | { kind: 'exportAnimation' }
   | { kind: 'modifySelection'; op: SelectionModify }
   | { kind: 'colorRange' }
   | { kind: 'saveSelection' }
