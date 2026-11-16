@@ -31,6 +31,8 @@ export interface Action {
 }
 
 const hasSelection = (s: UiState) => s.selection.bounds !== null;
+/** The active layer holds pixels (frame-by-frame drawings are only for pixel layers). */
+const rasterActive = (s: UiState) => findLayerKind(s.layers.tree, s.layers.activeId) === 'raster';
 /** The brush the brush commands act on is a personal one (the library counter changes with it). */
 const customBrush = (s: UiState) => s.brushLibrary >= 0 && isCustomBrush(brushTarget(s).brushId);
 /** At least n objects selected on the active shape layer. */
@@ -40,6 +42,15 @@ const hasShapes = (n: number) => (s: UiState) => s.vectorSelection.count >= n;
 function selectionDialog(d: Parameters<typeof openDialog>[0]): void {
   engine.commitLive(true);
   openDialog(d);
+}
+
+function findLayerKind(tree: UiState['layers']['tree'], id: string): string | null {
+  for (const n of tree) {
+    if (n.id === id) return n.kind;
+    const k = findLayerKind(n.children, id);
+    if (k) return k;
+  }
+  return null;
 }
 
 function toggleTimeline(): void {
@@ -196,6 +207,11 @@ const base: Action[] = [
     },
     enabled: (s) => s.animation.pieces.length > 0,
   },
+  // Frame-by-frame drawings on the active pixel layer, at the frame shown.
+  { id: 'newDrawing', labelKey: 'action.newDrawing', icon: 'new', group: 'animation', run: () => void engine.anim.newDrawing(engine.doc.activeId, false), enabled: rasterActive },
+  { id: 'copyDrawing', labelKey: 'action.copyDrawing', icon: 'copy', group: 'animation', run: () => void engine.anim.newDrawing(engine.doc.activeId, true), enabled: rasterActive },
+  { id: 'clearDrawing', labelKey: 'action.clearDrawing', icon: 'eraser', group: 'animation', run: () => void engine.anim.clearDrawing(engine.doc.activeId), enabled: rasterActive },
+  { id: 'deleteDrawing', labelKey: 'action.deleteDrawing', icon: 'delete', group: 'animation', run: () => void engine.anim.deleteDrawing(engine.doc.activeId), enabled: (s) => s.animation.cels[s.layers.activeId] !== undefined },
   { id: 'animPlay', labelKey: 'action.animPlay', icon: 'play', group: 'animation', shortcut: ['Ctrl+Space'], run: () => engine.anim.togglePlay(), checked: (s) => s.animation.playing },
   { id: 'animFirstFrame', labelKey: 'action.animFirstFrame', icon: 'frame-first', group: 'animation', run: () => engine.anim.setFrame(0) },
   { id: 'animPrevFrame', labelKey: 'action.animPrevFrame', icon: 'frame-prev', group: 'animation', shortcut: ['Comma'], run: () => engine.anim.setFrame(engine.anim.frame - 1) },

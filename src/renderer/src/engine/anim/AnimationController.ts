@@ -1,5 +1,7 @@
 import type { Point, Rect } from '../core/geometry';
-import type { PaintDocument } from '../doc/Document';
+import type { PaintDocument, RasterLayer } from '../doc/Document';
+import { Surface } from '../raster/Surface';
+import { celAt, celIndexAt, celSurfaces, insertCel, MAX_CELS, moveCelStart, removeCelAt, type Cel } from './cels';
 import type { Command, History } from '../history/History';
 import type { ImageBuf } from '../raster/transform';
 import type { I18nKey, I18nParams } from '../../i18n';
@@ -47,6 +49,8 @@ export interface AnimationInfo {
   /** The selected piece at the frame shown, for the options bar's number fields. */
   current: PieceFields | null;
   playing: boolean;
+  /** Frame-by-frame layers: where each drawing starts (layers not listed are still). */
+  cels: Record<string, number[]>;
 }
 
 /** A piece's values as the options bar shows them (degrees and percent). */
@@ -170,6 +174,7 @@ export class AnimationController {
       selectedId: this.selected ? this.selectedId : null,
       current: this.fields(),
       playing: this.playing,
+      cels: Object.fromEntries(this.doc.rasterLayers().flatMap((l) => (l.cels ? [[l.id, l.cels.map((c) => c.start)]] : []))),
       pieces: this.doc.pieces.map((p) => ({ id: p.id, name: p.name, layerId: p.layerId, keys: p.keyframes.map((k) => ({ frame: k.frame, easing: k.easing })) })),
     };
   }
@@ -278,6 +283,105 @@ export class AnimationController {
   togglePlay(): void {
     if (this.playing) this.stop();
     else this.play();
+  }
+
+// ---- frame-by-frame drawings (cels) ---------------------------------------------------------
+
+  /** The pixel layer to change drawings on: null (saying why) if it isn't one or is locked. */
+  private rasterLayer(id: string): RasterLayer | null {
+    const l = this.doc.layerById(id);
+    if (l?.kind !== 'raster') return null;
+    if (l.locked) {
+      this.host.notify('info', 'notice.layerLocked');
+      return null;
+    }
+    return l;
+  }
+
+  /** Change one layer's drawings as one undo step (fn returns false when nothing changed). */
+  private celChange(label: I18nKey, layer: RasterLayer, fn: () => boolean): boolean {
+    this.host.commitLive();
+    const before: CelSnapshot = { surface: layer.surface, cels: layer.cels && layer.cels.map((c) => ({ ...c })) };
+    if (!fn()) return false;
+    // Down to one drawing: the layer is a still layer again.
+    if (layer.cels && layer.cels.length === 1) {
+      layer.surface = layer.cels[0].surface;
+      layer.cels = null;
+    }
+    layer.showFrame(this.frame);
+    const after: CelSnapshot = { surface: layer.surface, cels: layer.cels && layer.cels.map((c) => ({ ...c })) };
+    this.host.history.push(new CelCommand(label, this.host, layer, before, after));
+    this.host.animationChanged(null);
+    return true;
+  }
+
+  /** The drawings of `layer`, made frame-by-frame if it's still. */
+  private celsOf(layer: RasterLayer): Cel[] {
+    return layer.cels ?? [{ start: 0, surface: layer.surface }];
+  }
+
+  /**
+   * A new drawing on `layerId` starting at the current frame: blank, or a copy of the one shown
+   * there (copy-on-write, so copying costs almost nothing until it's drawn on).
+   */
+  newDrawing(layerId: string, copy: boolean): boolean {
+    const layer = this.rasterLayer(layerId);
+    if (!layer) return false;
+    const frame = this.frame;
+    const cels = this.celsOf(layer);
+    if (cels.length >= MAX_CELS) {
+      this.host.notify('error', 'notice.tooManyCels', { max: MAX_CELS });
+      return false;
+    }
+    if (cels.some((c) => c.start === frame)) {
+      this.host.notify('info', 'notice.drawingHere');
+      return false;
+    }
+    const surface = copy ? celAt(cels, frame).surface.clone() : new Surface(this.doc.width, this.doc.height);
+    return this.celChange(copy ? 'history.copyDrawing' : 'history.newDrawing', layer, () => {
+      const next = insertCel(cels, frame, surface);
+      if (!next) return false;
+      layer.cels = next;
+      return true;
+    });
+  }
+
+  /** Delete the drawing shown at the current frame (the one before shows on in its place). */
+  deleteDrawing(layerId: string): boolean {
+    const layer = this.rasterLayer(layerId);
+    const next = layer?.cels ? removeCelAt(layer.cels, this.frame) : null;
+    if (!layer || !next) return false;
+    return this.celChange('history.deleteDrawing', layer, () => {
+      layer.cels = next;
+      return true;
+    });
+  }
+
+  /** Empty the drawing shown at the current frame. */
+  clearDrawing(layerId: string): boolean {
+    const layer = this.rasterLayer(layerId);
+    if (!layer || !layer.surface.contentBounds()) return false;
+    const blank = new Surface(this.doc.width, this.doc.height);
+    return this.celChange('history.clearDrawing', layer, () => {
+      if (!layer.cels) {
+        layer.surface = blank;
+        return true;
+      }
+      const i = celIndexAt(layer.cels, this.frame);
+      layer.cels = layer.cels.map((c, k) => (k === i ? { start: c.start, surface: blank } : { ...c }));
+      return true;
+    });
+  }
+
+  /** Move where drawing `index` starts: the drawing before it is held longer or shorter. */
+  moveDrawing(layerId: string, index: number, start: number): boolean {
+    const layer = this.rasterLayer(layerId);
+    const next = layer?.cels ? moveCelStart(layer.cels, index, clampFrame(start, this.doc.timeline.length)) : null;
+    if (!layer || !next) return false;
+    return this.celChange('history.holdDrawing', layer, () => {
+      layer.cels = next;
+      return true;
+    });
   }
 
   /** Frames that have a keyframe: of one piece, or of every piece (sorted, no repeats). */
@@ -494,4 +598,47 @@ function strip(p: Piece): Omit<Piece, 'src'> {
 /** Scale can't be exactly zero (the piece would vanish and couldn't be grabbed again). */
 function nonZero(v: number): number {
   return Math.abs(v) < 0.01 ? (v < 0 ? -0.01 : 0.01) : v;
+}
+
+/** One layer's drawings at a moment (undo snapshots share the surfaces). */
+interface CelSnapshot {
+  surface: Surface;
+  cels: Cel[] | null;
+}
+
+/** A change to a layer's frame-by-frame drawings. */
+export class CelCommand implements Command {
+  readonly bytes: number;
+
+  constructor(
+    readonly label: I18nKey,
+    private readonly host: AnimHost,
+    private readonly layer: RasterLayer,
+    private readonly before: CelSnapshot,
+    private readonly after: CelSnapshot,
+  ) {
+    // Drawings only one side holds (a new, cleared or deleted one) are what this step keeps alive.
+    const set = (s: CelSnapshot) => new Set(s.cels ? celSurfaces(s.cels) : [s.surface]);
+    const a = set(before);
+    const b = set(after);
+    let n = 128;
+    for (const x of a) if (!b.has(x)) n += x.bytes;
+    for (const x of b) if (!a.has(x)) n += x.bytes;
+    this.bytes = n;
+  }
+
+  private apply(s: CelSnapshot): void {
+    this.layer.cels = s.cels && s.cels.map((c) => ({ ...c }));
+    this.layer.surface = s.surface;
+    this.layer.showFrame(this.host.doc.timeline.frame);
+    this.host.animationChanged(null);
+  }
+
+  undo(): void {
+    this.apply(this.before);
+  }
+
+  redo(): void {
+    this.apply(this.after);
+  }
 }

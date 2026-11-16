@@ -3158,3 +3158,56 @@ dialog.tour::backdrop {
     fill: Highlight;
   }
 }
+/* Frame-by-frame layers on the timeline */
+.tl-still {
+  position: absolute;
+  top: 11px;
+  left: 0;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-strong);
+  opacity: 0.6;
+}
+.tl-cel {
+  position: absolute;
+  top: 4px;
+  height: 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  background: var(--bg-input);
+  pointer-events: none;
+}
+.tl-cel.current {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.tl-cel-start {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 12px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-xs) 0 0 var(--radius-xs);
+  background: var(--accent);
+  cursor: ew-resize;
+  pointer-events: auto;
+}
+.tl-cel-start:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+.tl-name svg {
+  flex-shrink: 0;
+  margin-right: 4px;
+  vertical-align: -2px;
+}
+@media (forced-colors: active) {
+  .tl-cel-start {
+    background: CanvasText;
+  }
+  .tl-cel.current {
+    border-color: Highlight;
+  }
+}

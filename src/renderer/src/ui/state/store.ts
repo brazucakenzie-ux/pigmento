@@ -150,7 +150,7 @@ export const useUi = create<UiState>(() => ({
   shapeLibrary: 0,
   symmetry: { mode: 'off', segments: 6, center: null },
   reference: null,
-  animation: { fps: 12, length: 24, loop: 'loop', frame: 0, pieces: [], selectedId: null, current: null, playing: false },
+  animation: { fps: 12, length: 24, loop: 'loop', frame: 0, pieces: [], selectedId: null, current: null, playing: false, cels: {} },
   brushLibrary: 0,
   patterns: [],
   guides: 0,

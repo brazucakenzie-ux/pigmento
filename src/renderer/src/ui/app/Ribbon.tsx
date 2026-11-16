@@ -288,6 +288,14 @@ function AnimateTab() {
           <ActionButton id="animKeepOriginal" variant="small" />
         </div>
       </RibbonGroup>
+      <RibbonGroup label={t('group.frames')}>
+        <ActionButton id="newDrawing" />
+        <div className="rb-stack">
+          <ActionButton id="copyDrawing" variant="small" />
+          <ActionButton id="clearDrawing" variant="small" />
+          <ActionButton id="deleteDrawing" variant="small" />
+        </div>
+      </RibbonGroup>
       <RibbonGroup label={t('group.playback')}>
         <ActionButton id="animPlay" icon={playing ? 'pause' : 'play'} />
         <div className="rb-stack">

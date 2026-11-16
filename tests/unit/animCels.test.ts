@@ -6,6 +6,7 @@ import { applyDocState, captureDocState, PixelCommand, type CommandHost } from '
 import { Surface } from '@engine/raster/Surface';
 import { compositeLayers } from '@engine/raster/blend';
 import { frameExtras } from '@engine/anim/pieceRaster';
+import { AnimationController } from '@engine/anim/AnimationController';
 import { celAt, celEnd, celIndexAt, insertCel, moveCelStart, removeCelAt, type Cel } from '@engine/anim/cels';
 
 const W = 8;
@@ -183,5 +184,81 @@ describe('layer operations with frame-by-frame layers', () => {
     expect(ctl.mergeDown(l.id)).toBe(false);
     expect(ctl.flatten()).toBe(false);
     expect(notices).toEqual(['notice.mergeCels', 'notice.flattenCels']);
+  });
+});
+
+describe('frame commands', () => {
+  function setup() {
+    const l = new RasterLayer('Ink', painted(10));
+    const doc = new PaintDocument({ width: W, height: H }, [l]);
+    const history = new History();
+    const notices: string[] = [];
+    const anim = new AnimationController({
+      get doc() {
+        return doc;
+      },
+      history,
+      commitLive() {},
+      notify: (_k, key) => notices.push(key),
+      animationChanged() {},
+    });
+    return { l, doc, history, notices, anim };
+  }
+
+  it('adds a blank drawing at the frame shown, and a copy elsewhere', () => {
+    const { l, history, anim } = setup();
+    anim.setFrame(4);
+    expect(anim.newDrawing(l.id, false)).toBe(true);
+    expect(l.cels!.map((c) => c.start)).toEqual([0, 4]);
+    expect(l.surface.contentBounds()).toBeNull();
+    anim.setFrame(8);
+    // A copy of what shows at frame 8 (the blank one) is blank too; copy frame 2's instead.
+    anim.setFrame(2);
+    expect(anim.newDrawing(l.id, true)).toBe(true);
+    expect(l.cels!.map((c) => c.start)).toEqual([0, 2, 4]);
+    expect(red(l.surface)).toBe(10);
+    expect(l.surface).not.toBe(l.cels![0].surface);
+    // Only one drawing can start at a frame.
+    expect(anim.newDrawing(l.id, false)).toBe(false);
+    history.undo();
+    history.undo();
+    expect(l.cels).toBeNull();
+    expect(red(l.surface)).toBe(10);
+    history.redo();
+    expect(l.cels!.map((c) => c.start)).toEqual([0, 4]);
+  });
+
+  it('clears, holds and deletes drawings; one left makes a still layer again', () => {
+    const { l, history, anim } = setup();
+    anim.setFrame(3);
+    anim.newDrawing(l.id, true);
+    anim.setFrame(6);
+    anim.newDrawing(l.id, true);
+    expect(anim.info().cels[l.id]).toEqual([0, 3, 6]);
+    anim.setFrame(4);
+    expect(anim.clearDrawing(l.id)).toBe(true);
+    expect(l.surface.contentBounds()).toBeNull();
+    expect(red(l.cels![0].surface)).toBe(10);
+    expect(anim.moveDrawing(l.id, 2, 9)).toBe(true);
+    expect(l.cels!.map((c) => c.start)).toEqual([0, 3, 9]);
+    anim.setFrame(9);
+    expect(anim.deleteDrawing(l.id)).toBe(true);
+    anim.setFrame(3);
+    expect(anim.deleteDrawing(l.id)).toBe(true);
+    expect(l.cels).toBeNull();
+    expect(anim.info().cels).toEqual({});
+    // Undo all the way back, step by step.
+    history.undo();
+    expect(l.cels!.map((c) => c.start)).toEqual([0, 3]);
+    history.undo();
+    history.undo();
+    expect(l.cels!.map((c) => c.start)).toEqual([0, 3, 6]);
+  });
+
+  it('leaves locked layers alone', () => {
+    const { l, anim, notices } = setup();
+    l.locked = true;
+    expect(anim.newDrawing(l.id, false)).toBe(false);
+    expect(notices).toEqual(['notice.layerLocked']);
   });
 });

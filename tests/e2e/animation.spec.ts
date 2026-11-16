@@ -294,3 +294,57 @@ test('motion paths bend from the canvas, keyframes move there, and straighten ag
   keys = await page.evaluate((pid) => window.__pigmentoTest!.pieceKeys(pid), id);
   expect(keys[1].in).not.toBeNull();
 });
+
+test('frame-by-frame: new and copied drawings, holding longer, and undo that shows the frame', async () => {
+  const { page } = h;
+  const layerId = await page.evaluate(() => window.__pigmentoTest!.layers().activeId);
+  // Frame 1: a blue block.
+  await page.evaluate((id) => window.__pigmentoTest!.fillLayer(id, { r: 0, g: 0, b: 255, a: 255 }, { x: 100, y: 100, w: 60, h: 60 }), layerId);
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  await page.locator('.ribbon').getByRole('button', { name: 'Timeline' }).click();
+  const timeline = page.getByRole('region', { name: 'Timeline' });
+  // Frame 4: a new, blank drawing; draw a red line on it with the pencil.
+  await page.evaluate(() => window.__pigmentoTest!.setFrame(3));
+  await page.locator('.ribbon').getByRole('button', { name: 'New drawing' }).click();
+  expect(await page.evaluate(() => window.__pigmentoTest!.pixel(120, 120))).toEqual({ r: 255, g: 255, b: 255, a: 255 });
+  await page.keyboard.press('p');
+  await page.getByRole('tab', { name: 'Home' }).click();
+  await page.getByRole('button', { name: /Colour #D7263D/ }).click();
+  await drag(page, [
+    [300, 300],
+    [500, 300],
+  ]);
+  expect((await page.evaluate(() => window.__pigmentoTest!.pixel(400, 300))).r).toBeGreaterThan(150);
+  // Frames 1–3 still show the blue block; frames 4 onwards the red line.
+  await page.evaluate(() => window.__pigmentoTest!.setFrame(2));
+  expect(await page.evaluate(() => window.__pigmentoTest!.pixel(120, 120))).toEqual({ r: 0, g: 0, b: 255, a: 255 });
+  expect(await page.evaluate(() => window.__pigmentoTest!.pixel(400, 300))).toEqual({ r: 255, g: 255, b: 255, a: 255 });
+  await page.evaluate(() => window.__pigmentoTest!.setFrame(20));
+  expect((await page.evaluate(() => window.__pigmentoTest!.pixel(400, 300))).r).toBeGreaterThan(150);
+
+  // The layer's row: two drawings. Drag the second one's start from frame 4 to frame 6.
+  const second = timeline.getByRole('button', { name: /^Frame 4: drawing on .*, to frame 24/ });
+  await expect(timeline.getByRole('button', { name: /^Frame 1: drawing on .*, to frame 3/ })).toBeVisible();
+  const box = (await second.boundingBox())!;
+  await page.mouse.move(box.x + 4, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 4 + 2 * 14, box.y + box.height / 2, { steps: 5 });
+  await page.mouse.up();
+  await expect(timeline.getByRole('button', { name: /^Frame 6: drawing on/ })).toBeVisible();
+  expect((await page.evaluate(() => window.__pigmentoTest!.anim())).cels[layerId]).toEqual([0, 5]);
+
+  // Undo the hold, then undo the pencil stroke from frame 1: the timeline goes to frame 4 to show it.
+  await page.keyboard.press('Control+z');
+  expect((await page.evaluate(() => window.__pigmentoTest!.anim())).cels[layerId]).toEqual([0, 3]);
+  await page.evaluate(() => window.__pigmentoTest!.setFrame(0));
+  await page.keyboard.press('Control+z');
+  expect((await page.evaluate(() => window.__pigmentoTest!.anim())).frame).toBe(3);
+  expect(await page.evaluate(() => window.__pigmentoTest!.pixel(400, 300))).toEqual({ r: 255, g: 255, b: 255, a: 255 });
+
+  // Copy drawing at frame 2: a copy of the blue block drawing.
+  await page.evaluate(() => window.__pigmentoTest!.setFrame(1));
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  await page.locator('.ribbon').getByRole('button', { name: 'Copy drawing' }).click();
+  expect((await page.evaluate(() => window.__pigmentoTest!.anim())).cels[layerId]).toEqual([0, 1, 3]);
+  expect(await page.evaluate(() => window.__pigmentoTest!.pixel(120, 120))).toEqual({ r: 0, g: 0, b: 255, a: 255 });
+});

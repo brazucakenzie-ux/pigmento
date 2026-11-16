@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import { EASINGS, type Easing } from '@engine/anim/interpolate';
 import type { KeyChange } from '@engine/anim/piece';
 import { LOOP_MODES, MAX_FPS, MAX_FRAMES, MIN_FPS, type LoopMode } from '@engine/anim/timeline';
@@ -305,10 +305,133 @@ function Ruler({ length, frame }: { length: number; frame: number }) {
   );
 }
 
+/** Pixel layers, top to bottom like the Layers panel. */
+function pixelLayers(tree: LayerNode[]): LayerNode[] {
+  const out: LayerNode[] = [];
+  const walk = (nodes: LayerNode[]) => {
+    for (const n of [...nodes].reverse()) {
+      if (n.kind === 'raster') out.push(n);
+      else if (n.kind === 'group') walk(n.children);
+    }
+  };
+  walk(tree);
+  return out;
+}
+
+/** The frame commands for one layer at the frame shown. */
+function DrawingMenu({ layerId, anchor, onClose }: { layerId: string; anchor: RefObject<HTMLElement | null>; onClose: () => void }) {
+  const cels = useUi((s) => s.animation.cels[layerId]);
+  return (
+    <Menu anchor={anchor} open onClose={onClose} label={t('timeline.celMenu')}>
+      <MenuItem label={t('action.newDrawing')} icon="new" close={onClose} onSelect={() => engine.anim.newDrawing(layerId, false)} />
+      <MenuItem label={t('action.copyDrawing')} icon="copy" close={onClose} onSelect={() => engine.anim.newDrawing(layerId, true)} />
+      <MenuSeparator />
+      <MenuItem label={t('action.clearDrawing')} icon="eraser" close={onClose} onSelect={() => engine.anim.clearDrawing(layerId)} />
+      <MenuItem label={t('action.deleteDrawing')} icon="delete" disabled={!cels} close={onClose} onSelect={() => engine.anim.deleteDrawing(layerId)} />
+    </Menu>
+  );
+}
+
+/** A pixel layer's row: one bar for a still layer, a block per drawing for a frame-by-frame one. */
+function LayerRow({ layer, starts, length, frame, active }: { layer: LayerNode; starts: number[] | undefined; length: number; frame: number; active: boolean }) {
+  const [drag, setDrag] = useState<{ index: number; to: number } | null>(null);
+  const [menu, setMenu] = useState(false);
+  const anchor = useRef<HTMLElement | null>(null);
+  const pick = (f: number) => {
+    if (useUi.getState().layers.activeId !== layer.id) engine.layers.setActive(layer.id);
+    engine.anim.setFrame(f);
+  };
+  const frameAt = (clientX: number, el: HTMLElement) => {
+    const row = el.closest('.tl-row');
+    return Math.max(0, Math.min(length - 1, Math.floor((clientX - (row ? row.getBoundingClientRect().left : 0)) / CELL)));
+  };
+  const openMenu = (el: HTMLElement, f: number) => {
+    pick(f);
+    anchor.current = el;
+    setMenu(true);
+  };
+  const shown = starts && drag ? starts.map((s, i) => (i === drag.index ? drag.to : s)) : starts;
+  const startDrag = (e: ReactPointerEvent<HTMLButtonElement>, index: number) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    pick(starts![index]);
+    if (index === 0) return;
+    const el = e.currentTarget;
+    let to = starts![index];
+    const move = (ev: PointerEvent) => {
+      to = frameAt(ev.clientX, el);
+      setDrag({ index, to });
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      setDrag(null);
+      if (to !== starts![index] && engine.anim.moveDrawing(layer.id, index, to)) engine.anim.setFrame(to);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  return (
+    <div
+      className={`tl-row tl-layer-row ${active ? 'selected' : ''}`}
+      role="group"
+      aria-label={layer.name}
+      onPointerDown={(e) => e.button === 0 && pick(frameAt(e.clientX, e.currentTarget))}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        openMenu(e.currentTarget, frameAt(e.clientX, e.currentTarget));
+      }}
+    >
+      {!shown ? <span className="tl-still" data-tip={t('timeline.still')} style={{ width: length * CELL }} /> : null}
+      {shown?.map((s, i) => {
+        const end = i + 1 < shown.length ? shown[i + 1] - 1 : length - 1;
+        const label = t('timeline.celLabel', { n: s + 1, layer: layer.name, end: end + 1 });
+        return (
+          <span key={`cel-${starts![i]}`} className={`tl-cel ${frame >= s && frame <= end ? 'current' : ''}`} style={{ left: s * CELL, width: Math.max(1, end - s + 1) * CELL }}>
+            <button
+              type="button"
+              className="tl-cel-start"
+              aria-label={label}
+              data-tip={label}
+              onPointerDown={(e) => startDrag(e, i)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openMenu(e.currentTarget, s);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  pick(s);
+                } else if (e.key === 'Delete') {
+                  e.preventDefault();
+                  pick(s);
+                  engine.anim.deleteDrawing(layer.id);
+                } else if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) {
+                  e.preventDefault();
+                  openMenu(e.currentTarget, s);
+                } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e.altKey && i > 0) {
+                  // Alt+arrows hold the drawing before this one a frame shorter or longer.
+                  e.preventDefault();
+                  const to = s + (e.key === 'ArrowLeft' ? -1 : 1);
+                  if (engine.anim.moveDrawing(layer.id, i, to)) engine.anim.setFrame(to);
+                }
+              }}
+            />
+          </span>
+        );
+      })}
+      {menu ? <DrawingMenu layerId={layer.id} anchor={anchor} onClose={() => setMenu(false)} /> : null}
+    </div>
+  );
+}
+
 export function Timeline() {
   const anim = useUi((s) => s.animation);
   const settings = useUi((s) => s.settings.anim);
   const tree = useUi((s) => s.layers.tree);
+  const activeId = useUi((s) => s.layers.activeId);
+  const layers = pixelLayers(tree);
   const [height, setHeight] = useState(settings.timelineHeight);
   const tracks = useRef<HTMLDivElement | null>(null);
   useEffect(() => setHeight(settings.timelineHeight), [settings.timelineHeight]);
@@ -403,21 +526,41 @@ export function Timeline() {
         </button>
       </div>
       <div className="tl-body">
-        <div className="tl-names" role="list" aria-label={t('timeline.pieces')}>
+        <div className="tl-names">
           <div className="tl-names-head" aria-hidden="true" />
+          <div role="list" aria-label={t('timeline.layers')}>
+            {layers.map((l) => (
+              <div key={l.id} role="listitem" className="tl-name-row">
+                <button
+                  type="button"
+                  className={`tl-name ${l.id === activeId ? 'selected' : ''}`}
+                  aria-pressed={l.id === activeId}
+                  onClick={() => engine.layers.setActive(l.id)}
+                >
+                  <Icon name="layers" size={13} />
+                  <span className="tl-name-text">{l.name}</span>
+                </button>
+              </div>
+            ))}
+          </div>
+          <div role="list" aria-label={t('timeline.pieces')}>
           {anim.pieces.map((p, i) => (
             <div key={p.id} role="listitem" className="tl-name-row">
               <PieceName piece={p} index={i} selected={p.id === anim.selectedId} layer={layerName(tree, p.layerId)} />
             </div>
           ))}
+          </div>
         </div>
         <div className="tl-tracks" ref={tracks}>
           <Ruler length={anim.length} frame={anim.frame} />
           <div className="tl-rows" style={{ width: anim.length * CELL }}>
+            {layers.map((l) => (
+              <LayerRow key={l.id} layer={l} starts={anim.cels[l.id]} length={anim.length} frame={anim.frame} active={l.id === activeId} />
+            ))}
             {anim.pieces.map((p, i) => (
               <PieceRow key={p.id} piece={p} index={i} selected={p.id === anim.selectedId} frame={anim.frame} />
             ))}
-            {anim.pieces.length === 0 ? <p className="tl-empty">{t('timeline.empty')}</p> : null}
+            {anim.pieces.length === 0 && Object.keys(anim.cels).length === 0 ? <p className="tl-empty">{t('timeline.empty')}</p> : null}
           </div>
           <div className="tl-playhead" aria-hidden="true" style={{ left: anim.frame * CELL + CELL / 2 }} />
         </div>
