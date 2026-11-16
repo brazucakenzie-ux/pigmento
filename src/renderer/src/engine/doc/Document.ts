@@ -2,6 +2,7 @@ import type { RGBA } from '../core/color';
 import { Surface } from '../raster/Surface';
 import { defaultTimeline, type Timeline } from '../anim/timeline';
 import { clonePiece, type Piece } from '../anim/piece';
+import { celAt, celSurfaces, type Cel } from '../anim/cels';
 import type { Selection } from './Selection';
 import type { Guide } from './guides';
 import type { VectorNode } from '../vector/model';
@@ -84,11 +85,42 @@ abstract class LayerBase implements LayerProps {
 
 export class RasterLayer extends LayerBase {
   readonly kind = 'raster' as const;
+  /** The pixels shown (and painted) at the current frame. */
   surface: Surface;
+  /**
+   * Frame-by-frame drawings, or null for a still layer (one drawing for every frame). When
+   * set, `surface` is always the drawing of the cel shown at the document's current frame.
+   */
+  cels: Cel[] | null = null;
 
   constructor(name: string, surface: Surface, id?: string) {
     super(name, id, 'layer');
     this.surface = surface;
+  }
+
+  /** Every drawing the layer has (one for a still layer). */
+  allSurfaces(): Surface[] {
+    return this.cels ? celSurfaces(this.cels) : [this.surface];
+  }
+
+  /** Show the drawing for `frame` (frame-by-frame layers only). */
+  showFrame(frame: number): void {
+    if (this.cels) this.surface = celAt(this.cels, frame).surface;
+  }
+
+  /**
+   * Replace every drawing with fn(drawing) (resize, crop, turn…); the one shown stays shown.
+   * Copies that shared a surface still share the new one.
+   */
+  mapSurfaces(fn: (s: Surface) => Surface): void {
+    if (!this.cels) {
+      this.surface = fn(this.surface);
+      return;
+    }
+    const mapped = new Map<Surface, Surface>();
+    for (const s of celSurfaces(this.cels)) mapped.set(s, fn(s));
+    this.cels = this.cels.map((c) => ({ start: c.start, surface: mapped.get(c.surface)! }));
+    this.surface = mapped.get(this.surface) ?? this.cels[0].surface;
   }
 }
 
@@ -233,6 +265,16 @@ export class PaintDocument {
   /** Every shape layer, bottom to top, including inside groups. */
   vectorLayers(): VectorLayer[] {
     return [...walkLayers(this.layers)].filter((l): l is VectorLayer => l.kind === 'vector');
+  }
+
+  /** Put each frame-by-frame layer's drawing for `frame` on show. */
+  showFrame(frame: number): void {
+    for (const l of this.rasterLayers()) l.showFrame(frame);
+  }
+
+  /** True if any pixel layer has frame-by-frame drawings. */
+  get hasCels(): boolean {
+    return this.rasterLayers().some((l) => l.cels !== null);
   }
 
   /** Every raster layer, bottom to top, including inside groups. */

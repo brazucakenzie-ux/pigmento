@@ -89,6 +89,7 @@ export function restoreAnim(doc: PaintDocument, s: AnimSnapshot): void {
   doc.timeline.length = s.length;
   doc.timeline.loop = s.loop;
   doc.timeline.frame = clampFrame(doc.timeline.frame, s.length);
+  doc.showFrame(doc.timeline.frame);
 }
 
 /** One undoable change to the pieces or the timeline. */
@@ -233,7 +234,10 @@ export class AnimationController {
     this.host.commitLive();
     const t = this.doc.timeline;
     // A timeline that plays once starts again from the beginning when it's at its end.
-    if (t.loop === 'once' && t.frame >= t.length - 1) t.frame = 0;
+    if (t.loop === 'once' && t.frame >= t.length - 1) {
+      t.frame = 0;
+      this.doc.showFrame(0);
+    }
     this.play_ = { t0: performance.now(), steps: 0, pos: { frame: t.frame, dir: 1 } };
     const tick = (now: number): void => {
       const p = this.play_;
@@ -244,11 +248,13 @@ export class AnimationController {
         p.steps = due;
         if (!next) {
           this.doc.timeline.frame = this.doc.timeline.length - 1;
+          this.doc.showFrame(this.doc.timeline.frame);
           this.stop();
           return;
         }
         p.pos = next;
         this.doc.timeline.frame = next.frame;
+        this.doc.showFrame(next.frame);
         this.host.animationChanged(null);
       }
       this.raf = requestAnimationFrame(tick);
@@ -300,6 +306,7 @@ export class AnimationController {
     if (f === this.doc.timeline.frame) return;
     this.host.commitLive();
     this.doc.timeline.frame = f;
+    this.doc.showFrame(f);
     this.host.animationChanged(null);
   }
 
@@ -329,6 +336,7 @@ export class AnimationController {
       t.length = length;
       t.loop = loop;
       t.frame = clampFrame(t.frame, length);
+      this.doc.showFrame(t.frame);
       return true;
     });
   }

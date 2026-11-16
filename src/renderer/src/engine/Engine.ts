@@ -8,8 +8,9 @@ import { colorRangeMask } from './doc/selectionMath';
 import { LayerController, type LayersInfo } from './doc/LayerController';
 import { AnimationController, type AnimHost, type AnimationInfo } from './anim/AnimationController';
 import { compositeLayers } from './raster/blend';
-import { pieceExtras } from './anim/pieceRaster';
+import { frameExtras } from './anim/pieceRaster';
 import { transformPieces } from './anim/pieceTransform';
+import { celAt } from './anim/cels';
 import { Selection, type SelectionMode, type SelectionModify } from './doc/Selection';
 import { History, type HistoryEntry } from './history/History';
 import {
@@ -421,7 +422,12 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   memoryUse(): { image: number; history: number; layers: number } {
     let tiles = 0;
     const layers = this.doc.rasterLayers();
-    for (const l of layers) for (const t of l.surface.tiles) if (t) tiles++;
+    // Every drawing (cels that share tiles after a copy are counted once per tile).
+    const seen = new Set<unknown>();
+    for (const l of layers) for (const s of l.allSurfaces()) for (const t of s.tiles) if (t && !seen.has(t)) {
+      seen.add(t);
+      tiles++;
+    }
     return { image: tiles * 256 * 256 * 4, history: this.history.bytes, layers: layers.length };
   }
 
@@ -523,7 +529,13 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.notifyPixels();
   }
 
+  showFrame(frame: number): void {
+    this.anim.setFrame(frame);
+  }
+
   animationChanged(r: Rect | null): void {
+    // Frame-by-frame layers may now show another drawing: upload the ones that changed.
+    if (this.doc.hasCels) this.renderer.syncTree();
     this.renderer.invalidate(r);
     this.requestRender();
     this.emit('animation', this.anim.info());
@@ -939,7 +951,13 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     selAfter: Selection | null = this.doc.selection,
   ): void {
     if (!delta) return;
-    this.history.push(new PixelCommand(label, this, layer, delta, selBefore, selAfter));
+    // On a frame-by-frame layer, remember a frame that shows the drawing that changed.
+    let frame: number | null = null;
+    if (layer.cels) {
+      const now = this.doc.timeline.frame;
+      frame = celAt(layer.cels, now).surface === delta.surface ? now : (layer.cels.find((c) => c.surface === delta.surface)?.start ?? null);
+    }
+    this.history.push(new PixelCommand(label, this, layer, delta, selBefore, selAfter, frame));
   }
 
   private pushDocState(label: I18nKey, before: DocState): void {
@@ -1069,7 +1087,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
         out[i + 3] = p.a;
       }
     }
-    compositeLayers(this.doc.layers, r, view, undefined, pieceExtras(this.doc, frame));
+    compositeLayers(this.doc.layers, r, view, undefined, frameExtras(this.doc, frame));
     if (opaque) flattenOnto(out, p && p.a === 255 ? p : WHITE);
     return { w: r.w, h: r.h, data: out };
   }
@@ -1081,7 +1099,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     const wasVisible = layer.visible;
     layer.visible = true;
     try {
-      compositeLayers([layer], r, { data: out, stride: r.w, ox: 0, oy: 0 }, undefined, pieceExtras(this.doc, this.doc.timeline.frame));
+      compositeLayers([layer], r, { data: out, stride: r.w, ox: 0, oy: 0 }, undefined, frameExtras(this.doc, this.doc.timeline.frame));
     } finally {
       layer.visible = wasVisible;
     }
@@ -2436,12 +2454,11 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     const nw = Math.ceil(wb.x + wb.w - 1e-6) - x0;
     const nh = Math.ceil(wb.y + wb.h - 1e-6) - y0;
     checkSize(nw, nh);
-    const rasters = this.doc.rasterLayers();
-    const results = rasters.map((layer) => affineTransform({ w, h, data: layer.surface.toRGBA() }, centered, true));
     this.reframeVectors(matChain(centered, matTranslate(-x0, -y0)), nw, nh);
-    rasters.forEach((layer, i) => {
-      layer.surface = Surface.fromRGBA(nw, nh, results[i].data);
-    });
+    // Every drawing of every layer (frame-by-frame layers have one per cel).
+    for (const layer of this.doc.rasterLayers()) {
+      layer.mapSurfaces((s) => Surface.fromRGBA(nw, nh, affineTransform({ w, h, data: s.toRGBA() }, centered, true).data));
+    }
     this.doc.savedSelections = transformSaved(this.doc.savedSelections, w, h, (img) => affineTransform(img, centered, true));
     // Guides can't rotate with the image; they keep their place on the larger canvas.
     this.doc.guides = reframeGuides(this.doc.guides, { x: (w - nw) / 2, y: (h - nh) / 2, w: nw, h: nh });
@@ -2467,9 +2484,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.commitLive();
     const before = captureDocState(this.doc);
     for (const layer of this.doc.rasterLayers()) {
-      const s = layer.surface;
-      const out = resample({ w: s.width, h: s.height, data: s.toRGBA() }, w, h, method);
-      layer.surface = Surface.fromRGBA(w, h, out.data);
+      layer.mapSurfaces((s) => Surface.fromRGBA(w, h, resample({ w: s.width, h: s.height, data: s.toRGBA() }, w, h, method).data));
     }
     this.doc.savedSelections = transformSaved(this.doc.savedSelections, this.doc.width, this.doc.height, (img) => resample(img, w, h, method));
     this.doc.guides = scaleGuides(this.doc.guides, this.doc.width, this.doc.height, w, h);
@@ -2502,9 +2517,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     checkSize(r.w, r.h);
     const before = captureDocState(this.doc);
     for (const layer of this.doc.rasterLayers()) {
-      const s = layer.surface;
-      const out = placeImage({ w: s.width, h: s.height, data: s.toRGBA() }, r.w, r.h, -r.x, -r.y);
-      layer.surface = Surface.fromRGBA(r.w, r.h, out.data);
+      layer.mapSurfaces((s) => Surface.fromRGBA(r.w, r.h, placeImage({ w: s.width, h: s.height, data: s.toRGBA() }, r.w, r.h, -r.x, -r.y).data));
     }
     this.doc.savedSelections = transformSaved(this.doc.savedSelections, this.doc.width, this.doc.height, (img) =>
       placeImage(img, r.w, r.h, -r.x, -r.y),
@@ -2541,7 +2554,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     if (this._live && this._live.kind !== 'float') this.commitLive(true);
     const float = this.floating;
     let u: Rect | null = null;
-    for (const l of this.doc.rasterLayers()) u = rectUnion(u, l.surface.contentBounds());
+    for (const l of this.doc.rasterLayers()) for (const s of l.allSurfaces()) u = rectUnion(u, s.contentBounds());
     for (const l of this.doc.vectorLayers()) u = rectUnion(u, this.vectorExtent(l));
     if (float) u = rectUnion(u, float.extent());
     if (!u) {
@@ -2575,11 +2588,13 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     if (!b) return;
     const before = captureDocState(this.doc);
     for (const layer of this.doc.rasterLayers()) {
-      const data = layer.surface.readRect(b);
-      if (!sel.isRect) {
-        for (let p = 0; p < sel.mask.length; p++) data[p * 4 + 3] = (data[p * 4 + 3] * sel.mask[p]) / 255;
-      }
-      layer.surface = Surface.fromRGBA(b.w, b.h, data);
+      layer.mapSurfaces((s) => {
+        const data = s.readRect(b);
+        if (!sel.isRect) {
+          for (let p = 0; p < sel.mask.length; p++) data[p * 4 + 3] = (data[p * 4 + 3] * sel.mask[p]) / 255;
+        }
+        return Surface.fromRGBA(b.w, b.h, data);
+      });
     }
     this.doc.savedSelections = transformSaved(this.doc.savedSelections, this.doc.width, this.doc.height, (img) =>
       placeImage(img, b.w, b.h, -b.x, -b.y),

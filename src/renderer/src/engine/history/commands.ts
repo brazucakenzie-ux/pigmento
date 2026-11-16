@@ -8,6 +8,7 @@ import type { Surface, TileDelta } from '../raster/Surface';
 import type { I18nKey } from '../../i18n';
 import type { Command } from './History';
 import { clonePiece, type Piece } from '../anim/piece';
+import type { Cel } from '../anim/cels';
 
 /** What commands need from the engine to keep the display in sync. */
 export interface CommandHost {
@@ -25,6 +26,8 @@ export interface CommandHost {
   guidesChanged(): void;
   /** A shape layer's objects changed. */
   vectorChanged(layer: VectorLayer): void;
+  /** Go to a frame (undoing a change to a frame-by-frame drawing shows that frame first). */
+  showFrame?(frame: number): void;
 }
 
 /** Pixel edit of one layer, stored as a tile delta (swap on undo/redo). */
@@ -36,6 +39,8 @@ export class PixelCommand implements Command {
     private readonly delta: TileDelta,
     private readonly selBefore: Selection | null = null,
     private readonly selAfter: Selection | null = null,
+    /** For a frame-by-frame layer: a frame showing the drawing that changed. */
+    private readonly frame: number | null = null,
   ) {}
 
   get bytes(): number {
@@ -43,6 +48,7 @@ export class PixelCommand implements Command {
   }
 
   private apply(sel: Selection | null): void {
+    if (this.frame !== null && this.host.doc.timeline.frame !== this.frame) this.host.showFrame?.(this.frame);
     const r = this.delta.swap();
     this.host.layerChanged(this.layer, r);
     this.host.setSelection(sel);
@@ -63,8 +69,8 @@ export interface DocState {
   height: number;
   dpi: number;
   paper: RGBA | null;
-  /** Surface of every raster layer (including inside groups) at capture time. */
-  surfaces: Map<RasterLayer, Surface>;
+  /** Surface (and frame-by-frame cels) of every raster layer, including inside groups, at capture time. */
+  surfaces: Map<RasterLayer, { surface: Surface; cels: Cel[] | null }>;
   selection: Selection | null;
   saved: SavedSelection[];
   guides: Guide[];
@@ -80,7 +86,7 @@ export function captureDocState(doc: PaintDocument): DocState {
     height: doc.height,
     dpi: doc.dpi,
     paper: doc.paper ? { ...doc.paper } : null,
-    surfaces: new Map(doc.rasterLayers().map((l) => [l, l.surface])),
+    surfaces: new Map(doc.rasterLayers().map((l) => [l, { surface: l.surface, cels: l.cels && l.cels.map((c) => ({ ...c })) }])),
     selection: doc.selection,
     saved: doc.savedSelections,
     guides: doc.guides,
@@ -94,7 +100,10 @@ export function applyDocState(doc: PaintDocument, s: DocState): void {
   doc.height = s.height;
   doc.dpi = s.dpi;
   doc.paper = s.paper ? { ...s.paper } : null;
-  for (const [layer, surface] of s.surfaces) layer.surface = surface;
+  for (const [layer, v] of s.surfaces) {
+    layer.surface = v.surface;
+    layer.cels = v.cels && v.cels.map((c) => ({ ...c }));
+  }
   doc.selection = s.selection;
   doc.savedSelections = s.saved;
   doc.guides = s.guides;
@@ -225,7 +234,13 @@ export class DocStateCommand implements Command {
 
   get bytes(): number {
     // Surfaces shared by both states are counted once.
-    const all = new Set([...this.before.surfaces.values(), ...this.after.surfaces.values()]);
+    const all = new Set<Surface>();
+    for (const s of [this.before, this.after]) {
+      for (const v of s.surfaces.values()) {
+        all.add(v.surface);
+        for (const c of v.cels ?? []) all.add(c.surface);
+      }
+    }
     let n = 0;
     for (const sf of all) n += sf.bytes;
     return n;

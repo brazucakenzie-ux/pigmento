@@ -1,5 +1,6 @@
 import type { Rect } from '../core/geometry';
-import type { BlendMode, Layer } from '../doc/Document';
+import type { BlendMode, Layer, RasterLayer } from '../doc/Document';
+import type { Surface } from './Surface';
 import { applyImage, type PixelView } from './pixels';
 
 /**
@@ -132,13 +133,14 @@ export function compositeLayers(
   for (const layer of layers) {
     if (!layer.visible || layer.opacity <= 0 || skip?.(layer)) continue;
     if (layer.kind === 'raster' || layer.kind === 'vector') {
+      const surface = (layer.kind === 'raster' && extras?.surfaceOf?.(layer)) || layer.surface;
       if (extras?.covers(layer, r)) {
         const view: PixelView = { data: new Uint8ClampedArray(r.w * r.h * 4), stride: r.w, ox: r.x, oy: r.y };
-        layer.surface.forEachTile(r, (tile, sub) => applyImage(view, sub, tile, 'over', 1), false, true);
+        surface.forEachTile(r, (tile, sub) => applyImage(view, sub, tile, 'over', 1), false, true);
         extras.draw(layer, r, view);
         blendImage(out, r, view, layer.blend, layer.opacity);
       } else {
-        layer.surface.forEachTile(r, (tile, sub) => blendImage(out, sub, tile, layer.blend, layer.opacity), false, true);
+        surface.forEachTile(r, (tile, sub) => blendImage(out, sub, tile, layer.blend, layer.opacity), false, true);
       }
     } else {
       const buf = new Uint8ClampedArray(r.w * r.h * 4);
@@ -155,4 +157,6 @@ export interface LayerExtras {
   covers(layer: Layer, r: Rect): boolean;
   /** Draw it into view (an isolated copy of the layer's pixels) inside r. */
   draw(layer: Layer, r: Rect, view: PixelView): void;
+  /** The pixels to use for a pixel layer (its drawing for another frame), if not its own. */
+  surfaceOf?(layer: RasterLayer): Surface | null;
 }

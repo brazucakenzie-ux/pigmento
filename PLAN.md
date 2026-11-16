@@ -256,7 +256,7 @@ Decisions: pieces come only from pixel layers; shape layers and text aren't fram
 - Stop 5B notes: GIF and MP4 export run in the window (frames are drawn by the engine, GIF encodes in a worker, H.264 in the PC's encoder); MP4 is limited to 4096 × 2304 and has no transparency; the export asks where to save once the frames are encoded.
 
 **Stop 5C — Frame-by-frame**
-- [ ] 5.14 Cels on pixel layers: `surface` follows the frame, pixel undo records its cel and jumps to its frame, size-changing operations cover every cel (+ unit tests)
+- [x] 5.14 Cels on pixel layers: `surface` follows the frame, pixel undo records its cel and jumps to its frame, size-changing operations cover every cel (+ unit tests)
 - [ ] 5.15 Timeline layer rows: new blank frame, duplicate frame (copy-on-write), delete, clear, hold longer or shorter by dragging, all undoable
 - [ ] 5.16 GPU mirror per cel with a memory cap; memory check before adding cels
 - [ ] 5.17 Onion skin: 1–3 frames before and after on the active layer, tinted, with opacity; screen only

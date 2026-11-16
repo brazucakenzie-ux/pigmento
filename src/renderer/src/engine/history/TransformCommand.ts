@@ -35,9 +35,10 @@ export function applyLossless(doc: PaintDocument, op: LosslessOp, inverse: boole
   const nw = swap ? doc.height : doc.width;
   const nh = swap ? doc.width : doc.height;
   for (const layer of doc.rasterLayers()) {
-    const s = layer.surface;
-    const out = applyToImage(op, { w: s.width, h: s.height, data: s.toRGBA() }, inverse);
-    layer.surface = Surface.fromRGBA(out.w, out.h, out.data);
+    layer.mapSurfaces((s) => {
+      const out = applyToImage(op, { w: s.width, h: s.height, data: s.toRGBA() }, inverse);
+      return Surface.fromRGBA(out.w, out.h, out.data);
+    });
   }
   doc.savedSelections = transformSaved(doc.savedSelections, doc.width, doc.height, (img) => applyToImage(op, img, inverse));
   const turn = op.kind === 'rotate' && inverse ? { kind: 'rotate' as const, quarterTurns: -op.quarterTurns } : op;

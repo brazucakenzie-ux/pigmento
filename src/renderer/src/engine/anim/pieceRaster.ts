@@ -5,6 +5,7 @@ import { applyImage, type PixelView } from '../raster/pixels';
 import { affineTransform } from '../raster/transform';
 import { stateMatrix } from './interpolate';
 import { pieceBounds, pieceStateAt, type Piece } from './piece';
+import { celAt } from './cels';
 
 /** Pieces grouped by the layer they belong to, bottom to top. */
 export function piecesByLayer(pieces: readonly Piece[]): Map<string, Piece[]> {
@@ -29,11 +30,13 @@ export function drawPiece(view: PixelView, r: Rect, p: Piece, frame: number): vo
 }
 
 /**
- * The pixel path's view of pieces (flatten, export, colour picker): each layer's pieces at
- * `frame` are drawn into an isolated copy of that layer before it's blended.
+ * The pixel path's view of a frame (flatten, export, colour picker): each frame-by-frame
+ * layer's drawing for `frame`, and each layer's pieces at `frame` drawn into an isolated copy
+ * of that layer before it's blended.
  */
-export function pieceExtras(doc: PaintDocument, frame: number): LayerExtras | undefined {
-  if (!doc.pieces.length) return undefined;
+export function frameExtras(doc: PaintDocument, frame: number): LayerExtras | undefined {
+  const cels = doc.hasCels;
+  if (!doc.pieces.length && !cels) return undefined;
   const byLayer = piecesByLayer(doc.pieces);
   const visibleIn = (layer: Layer, r: Rect): Piece[] =>
     (byLayer.get(layer.id) ?? []).filter((p) => pieceStateAt(p, frame).opacity > 0 && rectIntersect(pieceBounds(p, frame), r) !== null);
@@ -42,5 +45,6 @@ export function pieceExtras(doc: PaintDocument, frame: number): LayerExtras | un
     draw: (layer, r, view) => {
       for (const p of visibleIn(layer, r)) drawPiece(view, r, p, frame);
     },
+    surfaceOf: cels ? (layer) => (layer.cels ? celAt(layer.cels, frame).surface : null) : undefined,
   };
 }

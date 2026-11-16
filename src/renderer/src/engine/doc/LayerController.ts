@@ -71,10 +71,24 @@ function node(l: Layer, depth: number): LayerNode {
   };
 }
 
+/** A copy of a pixel layer, frame-by-frame drawings included (copy-on-write, so it's cheap). */
+function cloneRaster(l: RasterLayer, name: string): RasterLayer {
+  const copy = new RasterLayer(name, l.surface.clone());
+  if (l.cels) {
+    const copies = new Map<Surface, Surface>([[l.surface, copy.surface]]);
+    copy.cels = l.cels.map((c) => {
+      let s = copies.get(c.surface);
+      if (!s) copies.set(c.surface, (s = c.surface.clone()));
+      return { start: c.start, surface: s };
+    });
+  }
+  return copy;
+}
+
 function cloneLayer(l: Layer, name: string): Layer {
   const copy =
     l.kind === 'raster'
-      ? new RasterLayer(name, l.surface.clone())
+      ? cloneRaster(l, name)
       : l.kind === 'vector'
         ? new VectorLayer(name, l.width, l.height, l.objects.map(cloneNode))
         : new GroupLayer(
@@ -302,6 +316,11 @@ export class LayerController {
     const slot = this.doc.slotOf(id)!;
     const upper = slot.list[slot.index];
     const lower = slot.list[slot.index - 1] as RasterLayer;
+    // Frame-by-frame layers would need merging frame by frame; that isn't offered.
+    if (lower.cels || [...walkLayers([upper])].some((l) => l.kind === 'raster' && l.cels)) {
+      this.host.notify('info', 'notice.mergeCels');
+      return false;
+    }
     // Pieces of the layer below would end up in front of the pixels above them.
     if (this.doc.pieces.some((p) => p.layerId === lower.id)) {
       this.host.notify('info', 'notice.mergePiecesBelow');
@@ -346,6 +365,10 @@ export class LayerController {
     const visible = new Set([...walkLayers(this.doc.layers)].filter((l) => this.doc.isEffectivelyVisible(l.id)).map((l) => l.id));
     if (this.doc.pieces.some((p) => visible.has(p.layerId))) {
       this.host.notify('info', 'notice.flattenPieces');
+      return false;
+    }
+    if (this.doc.rasterLayers().some((l) => l.cels && visible.has(l.id))) {
+      this.host.notify('info', 'notice.flattenCels');
       return false;
     }
     const { width: w, height: h } = this.doc;

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PaintDocument, RasterLayer } from '@engine/doc/Document';
 import { Surface } from '@engine/raster/Surface';
 import { compositeLayers } from '@engine/raster/blend';
-import { pieceExtras } from '@engine/anim/pieceRaster';
+import { frameExtras } from '@engine/anim/pieceRaster';
 import { makePiece, setKey, type Piece } from '@engine/anim/piece';
 import type { ImageBuf } from '@engine/raster/transform';
 
@@ -26,7 +26,7 @@ function setup(layerPixels?: ImageBuf): { doc: PaintDocument; layer: RasterLayer
 
 function render(doc: PaintDocument, frame: number): (x: number, y: number) => number[] {
   const data = new Uint8ClampedArray(W * H * 4);
-  compositeLayers(doc.layers, { x: 0, y: 0, w: W, h: H }, { data, stride: W, ox: 0, oy: 0 }, undefined, pieceExtras(doc, frame));
+  compositeLayers(doc.layers, { x: 0, y: 0, w: W, h: H }, { data, stride: W, ox: 0, oy: 0 }, undefined, frameExtras(doc, frame));
   return (x, y) => Array.from(data.slice((y * W + x) * 4, (y * W + x) * 4 + 4));
 }
 
@@ -81,7 +81,7 @@ describe('pieces in the pixel path', () => {
   it('leaves layers without pieces exactly as before', () => {
     const { doc } = setup(solid(W, H, [10, 20, 30, 255]));
     doc.pieces = [];
-    expect(pieceExtras(doc, 0)).toBeUndefined();
+    expect(frameExtras(doc, 0)).toBeUndefined();
     expect(render(doc, 0)(5, 5)).toEqual([10, 20, 30, 255]);
   });
 });

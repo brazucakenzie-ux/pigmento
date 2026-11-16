@@ -103,5 +103,7 @@ export const animEn = {
   'notice.mergePiecesBlend': 'The moved pieces now show without the merged layer’s blend mode.',
   'notice.flattenPieces': 'Animated pieces each need a layer to move on, so the picture can’t be flattened. Delete the pieces, or hide their layers, first.',
   'notice.savedFrame': 'Saved frame {n} as the still picture {name}. Use Export animation for a moving picture, or save a Pigmento project (.pigm) to keep editing it.',
+  'notice.mergeCels': 'Layers drawn frame by frame can’t be merged. Flatten a copy of the picture at each frame instead, or move the drawings onto one layer.',
+  'notice.flattenCels': 'Layers drawn frame by frame can’t be flattened into one picture. Hide them first, or export the animation.',
   'notice.animatePixelsOnly': 'Pieces can only come from a pixel layer. Rasterise the layer first.',
 } as const;
