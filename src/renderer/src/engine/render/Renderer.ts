@@ -10,7 +10,7 @@ import type { ImageBuf } from '../raster/transform';
 import { stateMatrix } from '../anim/interpolate';
 import { pieceBounds, pieceStateAt, type Piece } from '../anim/piece';
 import { piecesByLayer } from '../anim/pieceRaster';
-import { celIndexAt } from '../anim/cels';
+import { celAt, celIndexAt } from '../anim/cels';
 
 /** Onion-skin tints: drawings before the one shown, and after it. */
 const ONION_BEFORE = '#ff6a14';
@@ -72,6 +72,8 @@ export class Renderer {
   private celMirrors = new Map<Surface, Mirror & { used: number }>();
   private useClock = 0;
   static CEL_MIRROR_BYTES = 768 * 1024 * 1024;
+  private exportFull: GroupCanvas | null = null;
+  private exportScaled: GroupCanvas | null = null;
   /** Onion skin on the active frame-by-frame layer (null = off). */
   onion: { count: number; opacity: number } | null = null;
   private onionScratch: GroupCanvas | null = null;
@@ -218,8 +220,7 @@ export class Renderer {
   }
 
   /** Draw pieces as they are at the current frame (r = only those touching it; alpha scales them). */
-  private drawPieces(ctx: Ctx2D | CanvasRenderingContext2D, pieces: readonly Piece[], r: Rect | null, alpha = 1): void {
-    const frame = this.doc.timeline.frame;
+  private drawPieces(ctx: Ctx2D | CanvasRenderingContext2D, pieces: readonly Piece[], r: Rect | null, alpha = 1, frame = this.doc.timeline.frame): void {
     for (const p of pieces) {
       const st = pieceStateAt(p, frame);
       if (st.opacity <= 0 || p.src.w === 0 || p.src.h === 0) continue;
@@ -265,6 +266,45 @@ export class Renderer {
   /** How many frame-by-frame drawings have a GPU copy (for tests and the performance overlay). */
   get celMirrorCount(): number {
     return this.celMirrors.size;
+  }
+
+/**
+   * The picture at `frame` for an export, drawn on the GPU with the same compositing as the screen
+   * (no onion skin, live objects, guides or selection), at w × h, on `background` (null =
+   * see-through). The returned canvas is reused by the next call.
+   */
+  frameCanvas(frame: number, w: number, h: number, background: string | null): OffscreenCanvas {
+    const dw = this.doc.width;
+    const dh = this.doc.height;
+    if (!this.exportFull || this.exportFull.canvas.width !== dw || this.exportFull.canvas.height !== dh) {
+      const canvas = new OffscreenCanvas(dw, dh);
+      this.exportFull = { canvas, ctx: ctx2d(canvas) };
+    }
+    const full = this.exportFull.ctx;
+    const r = { x: 0, y: 0, w: dw, h: dh };
+    full.save();
+    full.clearRect(0, 0, dw, dh);
+    if (background) {
+      full.fillStyle = background;
+      full.fillRect(0, 0, dw, dh);
+    }
+    this.passPieces = this.doc.pieces.length ? piecesByLayer(this.doc.pieces) : null;
+    this.drawLayers(full, this.doc.layers, r, frame);
+    this.passPieces = null;
+    full.restore();
+    // Shared canvases (groups, isolated layers) were drawn for this frame: redraw the screen later.
+    this.invalidate(null);
+    if (w === dw && h === dh) return this.exportFull.canvas;
+    if (!this.exportScaled || this.exportScaled.canvas.width !== w || this.exportScaled.canvas.height !== h) {
+      const canvas = new OffscreenCanvas(w, h);
+      this.exportScaled = { canvas, ctx: ctx2d(canvas) };
+    }
+    const sc = this.exportScaled.ctx;
+    sc.clearRect(0, 0, w, h);
+    sc.imageSmoothingEnabled = true;
+    sc.imageSmoothingQuality = 'high';
+    sc.drawImage(this.exportFull.canvas, 0, 0, w, h);
+    return this.exportScaled.canvas;
   }
 
   /** Mirror canvas of a raster layer, if it exists. */
@@ -432,16 +472,18 @@ export class Renderer {
   }
 
   /** Draw a layer list into ctx inside r. Groups render into their own canvas first. */
-  private drawLayers(ctx: Ctx2D, layers: Layer[], r: Rect): void {
+  private drawLayers(ctx: Ctx2D, layers: Layer[], r: Rect, exportFrame: number | null = null): void {
     const active = this.doc.activeLayer;
+    const frame = exportFrame ?? this.doc.timeline.frame;
     for (const layer of layers) {
       if (layer.visible) {
-        if (layer === active && layer.kind === 'raster') this.drawOnion(ctx, layer, r);
+        if (exportFrame === null && layer === active && layer.kind === 'raster') this.drawOnion(ctx, layer, r);
         let source: OffscreenCanvas;
         // Pieces drawn straight over the layer (same result when it's normal at full opacity).
         let over: Piece[] | null = null;
         if (layer.kind === 'raster') {
-          source = this.mirrorFor(layer).canvas;
+          // Another frame's drawing comes from its own GPU copy.
+          source = exportFrame !== null && layer.cels ? this.drawingCanvas(celAt(layer.cels, exportFrame).surface) : this.mirrorFor(layer).canvas;
           const pieces = this.passPieces?.get(layer.id);
           if (pieces?.length && layer.blend === 'normal' && layer.opacity === 1) over = pieces;
           else if (pieces?.length) {
@@ -452,7 +494,7 @@ export class Renderer {
             iso.ctx.clip();
             iso.ctx.clearRect(r.x, r.y, r.w, r.h);
             iso.ctx.drawImage(source, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
-            this.drawPieces(iso.ctx, pieces, r);
+            this.drawPieces(iso.ctx, pieces, r, 1, frame);
             iso.ctx.restore();
             source = iso.canvas;
           }
@@ -466,7 +508,7 @@ export class Renderer {
           g.ctx.rect(r.x, r.y, r.w, r.h);
           g.ctx.clip();
           g.ctx.clearRect(r.x, r.y, r.w, r.h);
-          this.drawLayers(g.ctx, layer.children, r);
+          this.drawLayers(g.ctx, layer.children, r, exportFrame);
           g.ctx.restore();
           source = g.canvas;
         }
@@ -475,10 +517,10 @@ export class Renderer {
         ctx.drawImage(source, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
         ctx.globalAlpha = 1;
         ctx.globalCompositeOperation = 'source-over';
-        if (over) this.drawPieces(ctx, over, r);
+        if (over) this.drawPieces(ctx, over, r, 1, frame);
       }
       // Live objects (shape being drawn, floating pixels) sit right above the active layer.
-      if (layer === active && this.liveDrawer) this.liveDrawer(ctx, r);
+      if (exportFrame === null && layer === active && this.liveDrawer) this.liveDrawer(ctx, r);
     }
   }
 

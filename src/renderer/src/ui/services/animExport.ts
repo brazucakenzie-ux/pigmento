@@ -32,7 +32,7 @@ export async function exportAnimation(c: AnimExportChoice, onProgress: (done: nu
   let bytes: Uint8Array;
   try {
     bytes = await encodeAnimation(
-      (f) => engine.animationFrame(f, { scale: c.scale, transparent }),
+      (f) => engine.animationFrameCanvas(f, { scale: c.scale, transparent }),
       { format: c.format, frames, fps: engine.anim.timeline.fps, repeat: c.playback === 'once' ? -1 : 0, transparent, quality: c.quality },
       onProgress,
       signal,

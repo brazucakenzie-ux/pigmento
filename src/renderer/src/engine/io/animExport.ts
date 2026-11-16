@@ -1,4 +1,3 @@
-import type { ImageBuf } from '../raster/transform';
 import { frameDelays } from '../anim/exportFrames';
 import { GifStream } from './gifStream';
 import { avcCodecFor, muxMp4, type Mp4Sample } from './mp4';
@@ -18,8 +17,11 @@ export interface AnimEncodeRequest {
   quality: VideoQuality;
 }
 
-/** Renders frames (the engine's animationFrame, bound to the export's size and background). */
-export type FrameSource = (frame: number) => ImageBuf;
+/**
+ * Renders a frame at the export's size and background (the engine's animationFrameCanvas). The
+ * canvas may be reused for the next frame, so it's read before asking for another.
+ */
+export type FrameSource = (frame: number) => OffscreenCanvas;
 
 export class AnimExportError extends Error {
   constructor(
@@ -59,8 +61,10 @@ async function encodeGif(render: FrameSource, req: AnimEncodeRequest, onProgress
   try {
     for (let i = 0; i < total; i++) {
       abortIfNeeded(signal);
-      const img = render(req.frames[i]);
-      stream ??= new GifStream({ w: img.w, h: img.h, repeat: req.repeat, transparent: req.transparent });
+      const c = render(req.frames[i]);
+      const ctx = c.getContext('2d') as OffscreenCanvasRenderingContext2D;
+      const img = ctx.getImageData(0, 0, c.width, c.height);
+      stream ??= new GifStream({ w: c.width, h: c.height, repeat: req.repeat, transparent: req.transparent });
       stream.frame(img.data, delays[i]);
       // Stay at most a few frames ahead of the encoder, so memory stays flat.
       await stream.encoded(i - 2);
@@ -75,32 +79,37 @@ async function encodeGif(render: FrameSource, req: AnimEncodeRequest, onProgress
   }
 }
 
-/** Pixels padded to even width and height (H.264 needs them), repeating the last column/row. */
-function padEven(img: ImageBuf): ImageBuf {
-  const w = img.w + (img.w & 1);
-  const h = img.h + (img.h & 1);
-  if (w === img.w && h === img.h) return img;
-  const out = new Uint8ClampedArray(w * h * 4);
-  for (let y = 0; y < h; y++) {
-    const sy = Math.min(y, img.h - 1);
-    out.set(img.data.subarray(sy * img.w * 4, (sy + 1) * img.w * 4), y * w * 4);
-    if (w !== img.w) out.set(img.data.subarray((sy * img.w + img.w - 1) * 4, (sy * img.w + img.w) * 4), (y * w + w - 1) * 4);
-  }
-  return { w, h, data: out };
+let padded: OffscreenCanvas | null = null;
+
+/** A frame padded to even width and height (H.264 needs them), repeating the last column/row. */
+function padEven(c: OffscreenCanvas): OffscreenCanvas {
+  const w = c.width + (c.width & 1);
+  const h = c.height + (c.height & 1);
+  if (w === c.width && h === c.height) return c;
+  if (!padded || padded.width !== w || padded.height !== h) padded = new OffscreenCanvas(w, h);
+  const ctx = padded.getContext('2d') as OffscreenCanvasRenderingContext2D;
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, w, h);
+  ctx.drawImage(c, 0, 0);
+  if (w !== c.width) ctx.drawImage(c, c.width - 1, 0, 1, c.height, c.width, 0, 1, c.height);
+  if (h !== c.height) ctx.drawImage(padded, 0, c.height - 1, w, 1, 0, c.height, w, 1);
+  return padded;
 }
 
 async function encodeMp4(render: FrameSource, req: AnimEncodeRequest, onProgress: (d: number, t: number) => void, signal: AbortSignal): Promise<Uint8Array> {
   if (typeof VideoEncoder !== 'function') throw new AnimExportError('error.videoUnsupported', 'No VideoEncoder');
   const total = req.frames.length;
-  const first = padEven(render(req.frames[0]));
-  const codec = avcCodecFor(first.w, first.h);
-  if (!codec) throw new AnimExportError('error.videoTooLarge', `${first.w}x${first.h}`);
+  const probe = render(req.frames[0]);
+  const width = probe.width + (probe.width & 1);
+  const height = probe.height + (probe.height & 1);
+  const codec = avcCodecFor(width, height);
+  if (!codec) throw new AnimExportError('error.videoTooLarge', `${width}x${height}`);
   const config: VideoEncoderConfig = {
     codec,
-    width: first.w,
-    height: first.h,
+    width,
+    height,
     framerate: req.fps,
-    bitrate: Math.max(300_000, Math.round(first.w * first.h * req.fps * BITS_PER_PIXEL[req.quality])),
+    bitrate: Math.max(300_000, Math.round(width * height * req.fps * BITS_PER_PIXEL[req.quality])),
     avc: { format: 'avc' },
     latencyMode: 'quality',
   };
@@ -128,9 +137,10 @@ async function encodeMp4(render: FrameSource, req: AnimEncodeRequest, onProgress
     for (let i = 0; i < total; i++) {
       abortIfNeeded(signal);
       if (failure) throw failure;
-      const img = i === 0 ? first : padEven(render(req.frames[i]));
-      if (img.w !== first.w || img.h !== first.h) throw new AnimExportError('error.animExport', 'Frame size changed');
-      const frame = new VideoFrame(img.data, { format: 'RGBA', codedWidth: img.w, codedHeight: img.h, timestamp: Math.round((i * 1e6) / req.fps), duration: Math.round(1e6 / req.fps) });
+      const img = padEven(render(req.frames[i]));
+      if (img.width !== width || img.height !== height) throw new AnimExportError('error.animExport', 'Frame size changed');
+      // Straight from the GPU canvas to the encoder: no read-back.
+      const frame = new VideoFrame(img, { timestamp: Math.round((i * 1e6) / req.fps), duration: Math.round(1e6 / req.fps) });
       encoder.encode(frame, { keyFrame: i % keyEvery === 0 });
       frame.close();
       // Don't let frames pile up waiting for the encoder.
@@ -145,5 +155,5 @@ async function encodeMp4(render: FrameSource, req: AnimEncodeRequest, onProgress
     if (encoder.state !== 'closed') encoder.close();
   }
   if (!avcC || samples.length !== total) throw new AnimExportError('error.animExport', `Encoder gave ${samples.length} of ${total} frames`);
-  return muxMp4({ width: first.w, height: first.h, fps: req.fps, avcC, samples });
+  return muxMp4({ width, height, fps: req.fps, avcC, samples });
 }

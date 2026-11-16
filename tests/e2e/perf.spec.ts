@@ -163,3 +163,104 @@ test('opens a 100-megapixel image within its time and memory budget', async () =
   ]);
   await expect.poll(() => page.evaluate(() => window.__pigmentoTest!.history().length)).toBe(1);
 });
+
+async function newImage(page: Page, w: number, hh: number): Promise<void> {
+  await page.keyboard.press('Control+n');
+  const dlg = page.getByRole('dialog', { name: 'New image' });
+  await dlg.getByRole('textbox', { name: 'Width' }).fill(String(w));
+  await dlg.getByRole('textbox', { name: 'Height' }).fill(String(hh));
+  await dlg.getByRole('textbox', { name: 'Height' }).press('Tab');
+  await dlg.getByRole('button', { name: 'Create' }).click();
+  await expect.poll(() => page.evaluate(() => window.__pigmentoTest!.doc())).toEqual({ width: w, height: hh });
+}
+
+/** Five full layers with four moving, turning, fading pieces each (20 in all), over 48 frames. */
+async function busyAnimation(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const t = window.__pigmentoTest!;
+    const { width: w, height: hh } = t.doc();
+    for (let l = 0; l < 5; l++) {
+      const id = l === 0 ? t.layers().activeId : t.addLayer();
+      // A full layer underneath (a backdrop), then four pieces cut from it.
+      t.fillLayer(id, { r: 40 * l, g: 120, b: 200 - 30 * l, a: l === 0 ? 255 : 90 });
+      for (let p = 0; p < 4; p++) {
+        const x = 60 + p * 300;
+        const y = 60 + l * 160;
+        t.fillLayer(id, { r: 230, g: 40 * p, b: 60, a: 255 }, { x, y, w: 200, h: 120 });
+        t.selectRect(x, y, 200, 120);
+        t.animateSelection(false);
+        const pid = t.anim().pieces.at(-1)!.id;
+        t.setPieceKey(pid, 47, { x: (x + 700) % (w - 100), y: (y + 300) % (hh - 100), angle: Math.PI * (p + 1), sx: 1.5, opacity: 0.6 });
+      }
+    }
+  });
+}
+
+test('animation: 20 pieces at 1080p scrub in under 16 ms a frame and play at 24 fps', async () => {
+  test.setTimeout(120_000);
+  h = await launchApp();
+  const { page } = h;
+  await ready(page);
+  await newImage(page, 1920, 1080);
+  await busyAnimation(page);
+  expect((await page.evaluate(() => window.__pigmentoTest!.anim())).pieces).toHaveLength(20);
+  // Scrubbing: going to a frame and drawing it, frame by frame and jumping about.
+  const frames = [...Array(48).keys(), 40, 3, 27, 11, 46, 0];
+  await page.evaluate((f) => window.__pigmentoTest!.renderTimes(f), [1, 2, 3]);
+  const times = (await page.evaluate((f) => window.__pigmentoTest!.renderTimes(f), frames)).sort((a, b) => a - b);
+  const median = times[Math.floor(times.length / 2)];
+  const p95 = times[Math.floor(times.length * 0.95)];
+  console.warn('1080p, 20 pieces, frame draw (ms): median', median.toFixed(1), 'p95', p95.toFixed(1));
+  expect(p95).toBeLessThan(16);
+  // Playback at 24 fps for two seconds: (nearly) every frame is shown, none skipped.
+  await page.evaluate(() => {
+    window.__pigmentoTest!.setTimeline({ length: 48, fps: 24 });
+    window.__pigmentoTest!.setFrame(0);
+  });
+  await page.locator('.canvas-host').focus();
+  const seen = await page.evaluate(async () => {
+    const t = window.__pigmentoTest!;
+    const frames: number[] = [];
+    const start = performance.now();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', ctrlKey: true, bubbles: true }));
+    await new Promise<void>((res) => {
+      const tick = () => {
+        frames.push(t.anim().frame);
+        if (performance.now() - start < 2000) requestAnimationFrame(tick);
+        else res();
+      };
+      requestAnimationFrame(tick);
+    });
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', ctrlKey: true, bubbles: true }));
+    let changes = 0;
+    for (let i = 1; i < frames.length; i++) if (frames[i] !== frames[i - 1]) changes++;
+    return changes;
+  });
+  console.warn('1080p, 20 pieces, 24 fps playback: frames shown in 2 s', seen);
+  // 48 frames in 2 s; allow a couple for start-up.
+  expect(seen).toBeGreaterThanOrEqual(44);
+});
+
+test('animation export: a 48-frame 720p GIF in under 15 s', async () => {
+  test.setTimeout(120_000);
+  h = await launchApp();
+  const { page } = h;
+  await ready(page);
+  await newImage(page, 1280, 720);
+  await busyAnimation(page);
+  const gif = await page.evaluate(() => window.__pigmentoTest!.encodeAnimation('gif', 48));
+  console.warn('48-frame 1280×720 GIF (s):', (gif.ms / 1000).toFixed(1), 'size (KB):', Math.round(gif.bytes / 1024));
+  expect(gif.ms).toBeLessThan(15_000);
+});
+
+test('animation export: a 240-frame 1080p MP4 in under 30 s', async () => {
+  test.setTimeout(120_000);
+  h = await launchApp();
+  const { page } = h;
+  await ready(page);
+  await newImage(page, 1920, 1080);
+  await busyAnimation(page);
+  const mp4 = await page.evaluate(() => window.__pigmentoTest!.encodeAnimation('mp4', 240));
+  console.warn('240-frame 1920×1080 MP4 (s):', (mp4.ms / 1000).toFixed(1), 'size (KB):', Math.round(mp4.bytes / 1024));
+  expect(mp4.ms).toBeLessThan(30_000);
+});

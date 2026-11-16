@@ -267,6 +267,7 @@ Decisions: pieces come only from pixel layers; shape layers and text aren't fram
 
 **Stop 5D — Polish and release**
 - [x] 5.19 Accessibility: axe audit of the Animate tab, the timeline (every kind of row), the Animate tool's options and the export dialog (GIF and MP4) in light, dark and high contrast (it also caught the Navigator's view box, now an image with its label); keyboard-only timeline e2e (moved keyframes and drawing starts keep the focus); nothing new animates, so reduced motion needs nothing; the timeline is capped at 35 % of the window
-- [ ] 5.20 Performance budgets: 24 fps playback at 1920×1080 with 5 layers and 20 pieces; scrubbing a frame < 16 ms; GIF of 48 frames at 1280×720 < 15 s; MP4 of 240 frames at 1080p < 30 s
+- [x] 5.20 Performance budgets: 24 fps playback at 1920×1080 with 5 layers and 20 pieces; scrubbing a frame < 16 ms; GIF of 48 frames at 1280×720 < 15 s; MP4 of 240 frames at 1080p < 30 s (+ perf e2e)
+- Measured on this PC (5.20): with 5 full layers and 20 moving pieces at 1920×1080, drawing a frame takes 0.2 ms (median; 0.4 ms at the 95th percentile) and 24 fps playback shows all 48 frames in 2 s. The MP4 first took 61.7 s for 240 frames, because each frame was composited in JavaScript; export frames are now drawn on the GPU with the screen's compositing and go straight to the encoder, so it takes 1.9 s, and the 48-frame 720p GIF 0.7 s (from 6.1 s).
 - [ ] 5.21 User guide Animation section, README, CHANGELOG 1.1.0, version 1.1.0, welcome tour mention
 - [ ] 5.22 `npm run check` green, installer rebuilt and smoke-tested; final report listing every animation feature with its status

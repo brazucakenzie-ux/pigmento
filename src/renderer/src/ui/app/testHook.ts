@@ -10,6 +10,7 @@ import { defaultParams, shapeRegistry } from '@engine/shapes/ShapeRegistry';
 import { paintShape } from '@engine/vector/render';
 import { makePiece, pieceStateAt } from '@engine/anim/piece';
 import { drawPiece } from '@engine/anim/pieceRaster';
+import { encodeAnimation } from '@engine/io/animExport';
 import { EASINGS, type Keyframe } from '@engine/anim/interpolate';
 
 /** Every built-in shape drawn into its own cell (golden-image tests). */
@@ -211,6 +212,26 @@ export function installTestHook(): void {
     setPieceKey: (id: string, frame: number, change: Partial<Record<'x' | 'y' | 'sx' | 'sy' | 'angle' | 'skew' | 'opacity', number>>) =>
       engine.anim.setKey(id, frame, change),
     celMirrors: () => engine.renderer.celMirrorCount,
+    setTimeline: (change: { fps?: number; length?: number }) => engine.anim.setTimeline(change),
+    /** Milliseconds to go to each frame and draw it (the work, without waiting for the screen). */
+    renderTimes: (frames: number[]) =>
+      frames.map((f) => {
+        const t0 = performance.now();
+        engine.anim.setFrame(f);
+        engine.renderer.render();
+        return performance.now() - t0;
+      }),
+    /** Encode frames 0 … count-1 as a GIF or MP4 the way Export animation does (no Save dialog). */
+    encodeAnimation: async (format: 'gif' | 'mp4', count: number) => {
+      const t0 = performance.now();
+      const bytes = await encodeAnimation(
+        (f) => engine.animationFrameCanvas(f, { scale: 1, transparent: false }),
+        { format, frames: Array.from({ length: count }, (_, i) => i), fps: engine.anim.timeline.fps, repeat: 0, transparent: false, quality: 'high' },
+        () => undefined,
+        new AbortController().signal,
+      );
+      return { ms: performance.now() - t0, bytes: bytes.length };
+    },
     pieceKeys: (id: string) => (engine.anim.piece(id)?.keyframes ?? []).map((k) => ({ ...k })),
     pieceAt: (id: string, frame: number) => {
       const p = engine.anim.piece(id);

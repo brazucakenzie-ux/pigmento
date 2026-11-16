@@ -1,4 +1,4 @@
-import { BLACK, WHITE, colorEquals, type RGBA } from './core/color';
+import { BLACK, WHITE, colorEquals, toCss, type RGBA } from './core/color';
 import { Emitter } from './core/emitter';
 import { rectCorners, rectEquals, rectIntersect, rectUnion, type Point, type Rect } from './core/geometry';
 import { matApplyPoints, matApplyRect, matAround, matRotate, matScale, matSkew, matTranslate, matChain, type Mat } from './core/matrix';
@@ -11,6 +11,7 @@ import { compositeLayers } from './raster/blend';
 import { frameExtras } from './anim/pieceRaster';
 import { transformPieces } from './anim/pieceTransform';
 import { celAt } from './anim/cels';
+import { clampFrame } from './anim/timeline';
 import { Selection, type SelectionMode, type SelectionModify } from './doc/Selection';
 import { History, type HistoryEntry } from './history/History';
 import {
@@ -1114,22 +1115,15 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   }
 
   /**
-   * One frame of the animation for an export, through the same flatten as a still export (so a
-   * frame exported as a PNG matches the same frame in a GIF or MP4). Not transparent: on the
-   * paper (or white).
+   * One frame of the animation for an export, drawn on the GPU like the screen (fast enough for
+   * long videos): on the paper (or white), or see-through. The canvas is reused by the next call.
    */
-  animationFrame(frame: number, o: { scale: number; transparent: boolean; method?: Resample }): ImageBuf {
-    let img = this.flatten(false, this.doc.bounds, !o.transparent, frame);
-    if (!o.transparent) {
-      const p = this.doc.paper;
-      flattenOnto(img.data, p && p.a === 255 ? p : WHITE);
-    }
-    if (o.scale !== 1) {
-      const { w, h } = this.exportSize(o.scale);
-      checkSize(w, h);
-      img = resample(img, w, h, o.method ?? 'bicubic');
-    }
-    return img;
+  animationFrameCanvas(frame: number, o: { scale: number; transparent: boolean }): OffscreenCanvas {
+    const { w, h } = this.exportSize(o.scale);
+    checkSize(w, h);
+    const p = this.doc.paper;
+    const bg = o.transparent ? null : toCss(p && p.a === 255 ? p : WHITE);
+    return this.renderer.frameCanvas(clampFrame(frame, this.doc.timeline.length), w, h, bg);
   }
 
   /** Output size of an export at `scale`. */
