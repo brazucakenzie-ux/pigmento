@@ -228,3 +228,40 @@ Make it feel finished and install it. Each item is ticked in the same commit as 
 - [x] 4.11 Docs: README with screenshots and build instructions, user guide in `docs/user-guide.md`, `CHANGELOG.md`
 - [x] 4.12 `npm run check` clean; final report listing every feature from the brief with its status
 - Checking the brief feature by feature (4.12) found and fixed: the interface size now reaches 200 % in 5 % steps (the brief lists 100/125/150/200 %); one of My shapes can be exported as a pack on its own; a short side panel scrolls instead of squashing its sections; and the ribbon tabs wrap rather than run off the edge of a narrow window. The installer was rebuilt from the final code and smoke-tested again (15 checks, clean uninstall).
+
+### Milestone 5 — Animation mode (requested after 1.0)
+Keyframe animation of pieces cut from a selection (move, rotate, scale, stretch, skew, fade, curved motion paths, movable pivot), frame-by-frame drawing with onion skin, and export to animated GIF and MP4. Split into four stops; each ends with a working app, `npm run check` green and a report, then waits for "continue". Each item is ticked in the same commit as its work.
+
+Words used in the UI: the **timeline** (fps 1–60, default 12; length 1–2000 frames, default 24; loop, once or ping-pong), a **piece** (pixels lifted from a selection on a pixel layer, drawn just above that layer's pixels and inside the layer), a **keyframe** (position, scale X/Y, rotation, skew, opacity, easing to the next keyframe, optional motion-path handles; held before the first and after the last; rotation isn't wrapped), the **pivot** (what a piece turns and scales around; moving it never moves the piece), and a **cel** (one drawing of a frame-by-frame layer, shown from its start frame until the next cel).
+
+Decisions: pieces come only from pixel layers; shape layers and text aren't frame-by-frame; pieces are cut-outs (animated, not repainted); animation is Full mode only; MP4 has no sound.
+
+**Stop 5A — Keyframe animation**
+- [ ] 5.1 Timeline model and `engine/anim/interpolate.ts`: easing (linear, ease in/out/in-out, hold), unwrapped rotation, pivot, Bézier motion path, `pieceMatrixAt(piece, frame)` (+ unit tests on known values)
+- [ ] 5.2 Pieces: Animate selection (rectangle and free-form), "Leave the original in place", piece list, rename and delete; `PieceCommand` undo/redo (+ unit tests)
+- [ ] 5.3 Pieces drawn at the current frame on screen (isolated layer canvas) and in the JS flatten (sampling, thumbnails, navigator, still export match) (+ pixel tests)
+- [ ] 5.4 Animate tool (A): select a piece, handles (move, scale, stretch, rotate, skew), pivot handle, auto-key, options-bar fields (X, Y, W %, H %, rotation, skew, opacity, easing)
+- [ ] 5.5 Timeline panel (View → Timeline, docked above the status bar, resizable, remembered, hidden in Simple mode): ruler and playhead scrubbing, keyframe rows (drag to retime, easing, copy, paste, delete), transport, fps, length and loop; F6 region, keyboard and ARIA
+- [ ] 5.6 Playback (requestAnimationFrame at the document's fps, skipping frames when slow); size-changing and layer operations keep pieces right
+- [ ] 5.7 `.pigm` version 2 (timeline, pieces with PNG sources and keyframes; version 1 still opens; format in `docs/project-format.md`); still formats save the current frame with a notice (+ round-trip unit test)
+- [ ] 5.8 E2e: make a piece, keyframe it, scrub, play, undo, save and reopen; `npm run check` green; report
+
+**Stop 5B — Motion paths and export**
+- [ ] 5.9 Curved motion paths: on-canvas handles at keyframes, straighten; nudge keyframes in time
+- [ ] 5.10 Export animation dialog (format, frame range, scale, loop, background, quality) and frame renderer `flattenAt(frame)`, with progress and Cancel
+- [ ] 5.11 Animated GIF streamed through the codec worker (+ e2e decoding with `ImageDecoder`: frame count, delays, pixels)
+- [ ] 5.12 MP4: H.264 feasibility check first, then WebCodecs `VideoEncoder` + `mp4-muxer` in a worker (+ e2e: duration, size and a sampled frame)
+- [ ] 5.13 Golden motion sheet (a piece at fixed frames under every easing and path); `npm run check` green; report
+
+**Stop 5C — Frame-by-frame**
+- [ ] 5.14 Cels on pixel layers: `surface` follows the frame, pixel undo records its cel and jumps to its frame, size-changing operations cover every cel (+ unit tests)
+- [ ] 5.15 Timeline layer rows: new blank frame, duplicate frame (copy-on-write), delete, clear, hold longer or shorter by dragging, all undoable
+- [ ] 5.16 GPU mirror per cel with a memory cap; memory check before adding cels
+- [ ] 5.17 Onion skin: 1–3 frames before and after on the active layer, tinted, with opacity; screen only
+- [ ] 5.18 Cels in `.pigm` and in exports; e2e (paint frame 3, frames 2 and 4 unchanged; onion skin not exported); `npm run check` green; report
+
+**Stop 5D — Polish and release**
+- [ ] 5.19 Accessibility: axe audit of the Animate tab, timeline and export dialog in light, dark and high contrast; keyboard-only timeline e2e; reduced motion
+- [ ] 5.20 Performance budgets: 24 fps playback at 1920×1080 with 5 layers and 20 pieces; scrubbing a frame < 16 ms; GIF of 48 frames at 1280×720 < 15 s; MP4 of 240 frames at 1080p < 30 s
+- [ ] 5.21 User guide Animation section, README, CHANGELOG 1.1.0, version 1.1.0, welcome tour mention
+- [ ] 5.22 `npm run check` green, installer rebuilt and smoke-tested; final report listing every animation feature with its status
