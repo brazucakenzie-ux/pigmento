@@ -6,6 +6,7 @@ All notable changes to Pigmento. Versions follow [Semantic Versioning](https://s
 
 ### Installing
 - The installer is now called `Pigmento-Setup-<version>.exe`. Without spaces in the name, the file on the Releases page matches its line in the checksum file (GitHub turned the spaces into dots).
+- Releases are built on GitHub from the tagged source (`.github/workflows/release.yml`), ready to be code-signed through SignPath Foundation's free programme for open-source projects.
 
 ## [1.1.0] — 2026-11-16
 

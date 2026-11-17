@@ -71,6 +71,8 @@ The end-to-end tests use a temporary profile, so they never touch your real sett
 | `PIGMENTO_SCREENSHOT=1` with `PIGMENTO_SCREENSHOT_DIR=<folder>` | Saves screenshots of the interface for review |
 | `PIGMENTO_UPDATE_GOLDEN=1` | Rewrites `tests/golden/` after an intended change to a built-in shape or brush |
 
+Release builds are made on GitHub by `.github/workflows/release.yml` when a version tag is pushed. [docs/releasing.md](docs/releasing.md) explains how to cut a release and how code signing through SignPath Foundation is turned on.
+
 ## How it's built
 
 Pigmento is an Electron app. Its React interface sits on a painting engine written in plain TypeScript, which never imports React:
