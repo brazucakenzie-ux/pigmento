@@ -279,12 +279,38 @@ test('picks brushes from the library, with favourites, for the Brush and the Era
   await lib.getByRole('combobox', { name: 'Category' }).selectOption('all');
   await page.keyboard.press('Escape');
 
+  // Calligraphy's flat nib has an angle (45°, leaning like "/"): thin along it, thick across it.
+  const nib = page.locator('.optionsbar').getByRole('textbox', { name: 'Nib angle' });
+  await expect(nib).toHaveCount(0);
+  await page.locator('.brush-pick').click();
+  await tiles.getByRole('option', { name: 'Calligraphy' }).click();
+  await expect(nib).toHaveValue('45');
+  await drag(page, [
+    [400, 300],
+    [500, 200],
+  ]);
+  await drag(page, [
+    [600, 200],
+    [700, 300],
+  ]);
+  expect(await pixel(page, 450, 250)).toEqual(RED);
+  expect(await pixel(page, 453, 253)).toEqual(WHITE);
+  expect(await pixel(page, 653, 246)).toEqual(RED);
+  await nib.fill('135');
+  await nib.press('Enter');
+  await drag(page, [
+    [800, 300],
+    [900, 200],
+  ]);
+  expect(await pixel(page, 853, 253)).toEqual(RED);
+
   // From the Home tab's Brush menu.
   await page.locator('.rb-split', { has: page.getByRole('button', { name: 'Brush', exact: true }) }).locator('[aria-haspopup="menu"]').click();
   const menu = page.getByRole('menu', { name: 'Brushes' });
   await menu.getByRole('menuitemradio', { name: 'Watercolour' }).click();
   await expect(page.locator('.brush-pick')).toContainText('Watercolour');
   expect(await page.evaluate(() => window.__pigmentoTest!.tool())).toBe('brush');
+  await expect(nib).toHaveCount(0);
 
   // An eraser brush switches to the Eraser; the Eraser can use any brush.
   await page.locator('.brush-pick').click();

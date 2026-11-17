@@ -60,7 +60,8 @@ export const BUILTIN_BRUSHES: BrushDef[] = [
   defineBrush('distress', 'textured', { size: 30, hardness: 0.5, flow: 0.7, scatter: 0.4, dynamics: dyn({ flow: random(0.2) }) }, ['grunge', 'worn', 'rough']),
 
   // ---- Artistic ------------------------------------------------------------------------------
-  defineBrush('calligraphy', 'artistic', { size: 20, hardness: 0.95, roundness: 0.15, angle: 45, spacing: 0.04, dynamics: dyn({ size: pressure(0.4) }) }, ['nib', 'lettering']),
+  // A broad-edge nib leaning like "/" (tip angles turn clockwise): hairlines along "/", full width along "\".
+  defineBrush('calligraphy', 'artistic', { size: 20, hardness: 0.95, roundness: 0.15, angle: -45, spacing: 0.04, dynamics: dyn({ size: pressure(0.4) }) }, ['nib', 'lettering']),
   defineBrush('splatter', 'artistic', { tip: image('splatter'), size: 60, spacing: 0.9, angleJitter: 1, sizeJitter: 0.5, scatter: 0.6, opacityJitter: 0.2 }, ['drops', 'paint']),
   defineBrush('fur', 'artistic', { tip: image('fur'), size: 40, spacing: 0.18, followStroke: true, angleJitter: 0.08, lightJitter: 0.2, sizeJitter: 0.2 }, ['hair', 'animal']),
   defineBrush('grass', 'artistic', { tip: image('grass'), size: 56, spacing: 0.3, sizeJitter: 0.45, angleJitter: 0.08, scatter: 0.3, hueJitter: 0.06, lightJitter: 0.3 }, ['lawn', 'meadow']),

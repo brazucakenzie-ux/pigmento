@@ -110,6 +110,7 @@ The Brush tool works with any of 50 brushes: pencils, paints, airbrushes, chalk,
 - **Smoothing** steadies a shaky hand: the brush follows the pointer on a string.
 - **Symmetry** mirrors strokes left–right, top–bottom, both ways, or radially. Drag its centre to move it.
 - **Pen pressure** can change the size, opacity and more, depending on the brush. A mouse always paints at full pressure.
+- **Nib angle** (Calligraphy): the flat nib draws thin lines along it and thick lines across it. The pointer shows the nib as a line, and Nib angle in the options bar turns it (45° leans like "/").
 - **Retouch** (in Home → Tools) holds Smudge, Blur, Sharpen, Clone stamp and Dodge and burn. For the clone stamp, Alt+click where to copy from.
 - **Stroke selection outline** and **Stroke path with brush** (Brushes tab) paint along an outline with the current brush. "Taper the ends" makes the stroke thin out like a pen.
 
