@@ -19,6 +19,7 @@ Pigmento is a paint-style raster editor (Electron + React + a framework-free TS 
 E2E runs with `PIGMENTO_USER_DATA` pointed at a temp folder, so tests never touch the real `%APPDATA%\Pigmento`. `PIGMENTO_E2E=1` exposes `window.__pigmentoTest` (`src/renderer/src/ui/app/testHook.ts`) for assertions. Native dialogs are stubbed from the test with `app.evaluate(({ dialog }) => …)`.
 Opt-in e2e switches: `PIGMENTO_E2E_CLIPBOARD=1` (overwrites the real clipboard), `PIGMENTO_SCREENSHOT=1` with `PIGMENTO_SCREENSHOT_DIR=<folder>` (captures UI states for visual review), `PIGMENTO_UPDATE_GOLDEN=1` (rewrites `tests/golden/shapes.png` + `.json` after an intended change to a built-in shape; review the sheet before committing).
 `npm run e2e` always rebuilds first; when running `npx playwright test` directly, run `npm run build` after changing source.
+Checks: `.github/workflows/ci.yml` runs lint, typecheck and unit tests on every pull request and push to `main`.
 Releases: `.github/workflows/release.yml` builds the installers on GitHub (lint, typecheck and unit tests, no e2e) on a `v*` tag, and signs them through SignPath once the secret and variables exist; `scripts/signing-hook.mjs` swaps in the signed uninstaller. See `docs/releasing.md`.
 
 ## Architecture (summary, details in PLAN.md section 3)
