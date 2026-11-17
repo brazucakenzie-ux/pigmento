@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { existsSync } from 'node:fs';
-import { clickDoc, drag, launchApp, pixel, ready, tempFile, type AppHandle } from './harness';
+import { clickDoc, drag, launchApp, pixel, ready, tempFile, type AppHandle, settle } from './harness';
 
 let h: AppHandle;
 
@@ -168,6 +168,7 @@ test('recolours, resizes and edits shapes; keeps them in projects; rasterises', 
 
   // Double-click to edit in place; Enter puts it back as the same object.
   const id = (await objects(page))![0].id;
+  await settle(page);
   await page.mouse.dblclick(...(await page.evaluate(() => {
     const s = window.__pigmentoTest!.docToScreen(250, 175);
     return [s.x, s.y] as [number, number];

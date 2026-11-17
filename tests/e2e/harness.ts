@@ -78,13 +78,41 @@ async function start(userData: string, extraArgs: string[], windowTimeout?: numb
   };
 }
 
-/** Wait until the UI and test hook are ready. */
+/** Wait until the UI and test hook are ready, and the picture has stopped moving on screen. */
 export async function ready(page: Page): Promise<void> {
   await page.waitForSelector('.ribbon');
   await page.waitForFunction(() => window.__pigmentoTest !== undefined);
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
+  await settle(page);
 }
 
+/**
+ * Wait until the picture holds still on screen (the same place and zoom for four frames). The view
+ * moves a moment after the canvas area changes size (the font loading, the timeline opening), and
+ * a drag measured before that lands in the wrong place, which is what made drag tests fail now
+ * and then under load.
+ */
+export async function settle(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const at = () => {
+      const a = window.__pigmentoTest!.docToScreen(0, 0);
+      const b = window.__pigmentoTest!.docToScreen(100, 100);
+      return `${a.x},${a.y},${b.x},${b.y}`;
+    };
+    let last = at();
+    let still = 0;
+    for (let i = 0; i < 180 && still < 4; i++) {
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+      const now = at();
+      still = now === last ? still + 1 : 0;
+      last = now;
+    }
+  });
+}
+
+/** Where a document point is on screen, once the view has settled. */
 export async function docToScreen(page: Page, x: number, y: number): Promise<{ x: number; y: number }> {
+  await settle(page);
   return page.evaluate(([dx, dy]) => window.__pigmentoTest!.docToScreen(dx, dy), [x, y] as const);
 }
 
@@ -94,6 +122,7 @@ export async function pixel(page: Page, x: number, y: number): Promise<{ r: numb
 
 /** Drag through doc-space points with the given button. */
 export async function drag(page: Page, points: [number, number][], button: 'left' | 'right' = 'left'): Promise<void> {
+  // (docToScreen settles the view first, so the whole drag uses one view.)
   const first = await docToScreen(page, points[0][0], points[0][1]);
   await page.mouse.move(first.x, first.y);
   await page.mouse.down({ button });

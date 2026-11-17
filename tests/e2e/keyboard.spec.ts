@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { launchApp, ready, type AppHandle } from './harness';
+import { launchApp, ready, type AppHandle, settle } from './harness';
 
 let h: AppHandle;
 
@@ -48,8 +48,10 @@ test('F6 moves between the regions, and the window works from the keyboard alone
   for (let i = 0; i < 4; i++) await page.keyboard.press('Control+=');
   for (let i = 0; i < 2; i++) await page.keyboard.press('F6');
   expect((await focus(page)).region).toBe('.canvas-host');
+  await settle(page);
   const before = await page.evaluate(() => window.__pigmentoTest!.docToScreen(0, 0));
   await page.keyboard.press('ArrowRight');
+  await settle(page);
   const after = await page.evaluate(() => window.__pigmentoTest!.docToScreen(0, 0));
   expect(before.x - after.x).toBeCloseTo(40, 0);
 

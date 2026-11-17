@@ -2,7 +2,7 @@
 import { expect, test } from '@playwright/test';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { drag, launchApp, ready, tempFile, type AppHandle } from './harness';
+import { drag, launchApp, ready, tempFile, type AppHandle, settle } from './harness';
 
 let h: AppHandle;
 
@@ -137,6 +137,7 @@ test('the timeline scrubs, plays, retimes keyframes and renames pieces', async (
   await page.keyboard.press('Control+Space');
   await expect.poll(() => page.evaluate(() => window.__pigmentoTest!.anim().frame), { timeout: 5000 }).not.toBe(7);
   expect((await page.evaluate(() => window.__pigmentoTest!.anim())).playing).toBe(true);
+  await settle(page);
   const c = await page.evaluate(() => window.__pigmentoTest!.docToScreen(600, 600));
   await page.mouse.click(c.x, c.y);
   expect((await page.evaluate(() => window.__pigmentoTest!.anim())).playing).toBe(false);
@@ -255,7 +256,9 @@ test('motion paths bend from the canvas, keyframes move there, and straighten ag
   await page.evaluate((pid) => window.__pigmentoTest!.setPieceKey(pid, 10, { x: 630 }), id);
 
   // Alt-drag the last keyframe's dot upwards: the path now arrives from above.
+  await settle(page);
   const end = await page.evaluate(() => window.__pigmentoTest!.docToScreen(630, 220));
+  await settle(page);
   const up = await page.evaluate(() => window.__pigmentoTest!.docToScreen(630, 120));
   await page.mouse.move(end.x, end.y);
   await page.keyboard.down('Alt');
@@ -275,6 +278,7 @@ test('motion paths bend from the canvas, keyframes move there, and straighten ag
   await page.waitForTimeout(700);
   await page.mouse.move(end.x, end.y);
   await page.mouse.down();
+  await settle(page);
   const lower = await page.evaluate(() => window.__pigmentoTest!.docToScreen(630, 400));
   await page.mouse.move(lower.x, lower.y, { steps: 6 });
   await page.mouse.up();

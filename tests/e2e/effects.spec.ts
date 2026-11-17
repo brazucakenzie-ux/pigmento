@@ -1,6 +1,6 @@
 import { writeFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
-import { drag, launchApp, pixel, ready, tempFile, type AppHandle } from './harness';
+import { drag, launchApp, pixel, ready, tempFile, type AppHandle, settle } from './harness';
 
 let h: AppHandle;
 
@@ -99,7 +99,9 @@ test('turns the view (not the picture) and shows a reference image that is never
   expect((await pixel(page, 300, 300)).g).toBeLessThan(80);
   expect(await pixel(page, 300, 330)).toEqual(WHITE);
   // On screen the stroke runs top to bottom now.
+  await settle(page);
   const a = await page.evaluate(() => window.__pigmentoTest!.docToScreen(200, 300));
+  await settle(page);
   const b = await page.evaluate(() => window.__pigmentoTest!.docToScreen(400, 300));
   expect(Math.abs(a.x - b.x)).toBeLessThan(1);
   expect(b.y).toBeGreaterThan(a.y);
