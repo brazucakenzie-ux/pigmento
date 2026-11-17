@@ -2,14 +2,9 @@
 
 All notable changes to Pigmento. Versions follow [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
-
-### Installer
-- When Pigmento is already installed, the installer asks first whether to update it, reinstall the same version or replace a newer version with an older one, instead of quietly installing over it. No changes nothing, settings are kept either way, and silent installs (`/S`) don't ask.
-
 ## [1.1.0] — 2026-11-16
 
-Animation.
+Animation, and Pigmento is now open source.
 
 ### Keyframe animation
 - Animate selection lifts part of a layer off as a piece (or animates a copy). The Animate tool moves, scales, stretches, skews and turns it, and every change sets a keyframe at the frame shown.
@@ -28,6 +23,13 @@ Animation.
 ### Export and files
 - Export animation as an animated GIF or an MP4 video (H.264), with a frame range, size, progress and Stop.
 - Projects (`.pigm` version 2) keep the animation. Pictures without animation are still saved as version 1.
+
+### Open source and installing
+- Pigmento is free and open-source software under the MIT licence.
+- The full text of every third-party licence ships with the app and shows in Help → About.
+- When Pigmento is already installed, the installer asks first whether to update it, reinstall the same version or replace a newer version with an older one, instead of quietly installing over it. No changes nothing, settings are kept either way, and silent installs (`/S`) don't ask.
+- The packaged app is hardened: it can't be run as plain Node.js, and it only loads its own code, checked against a hash in the exe.
+- `npm run dist` also writes SHA-256 checksums for the files to publish.
 
 ### Also
 - The interface size goes up to 200 %, and a single shape can be exported as a shape pack.

@@ -22,7 +22,7 @@
     "icons": "node scripts/build-icons.mjs",
     "notices": "node scripts/notices.mjs",
     "typecheck:e2e": "tsc --noEmit -p tsconfig.e2e.json",
-    "dist": "npm run build && electron-builder --win --publish never",
+    "dist": "npm run build && electron-builder --win --publish never && node scripts/checksums.mjs",
     "smoke:installed": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-installed.ps1"
   },
   "devDependencies": {

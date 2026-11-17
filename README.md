@@ -48,7 +48,7 @@ npm install          # dependencies
 npm run dev          # start the app with hot reload
 npm run build        # production build into out/
 npm start            # run the production build
-npm run dist         # build dist/Pigmento Setup 1.1.0.exe and the portable exe
+npm run dist         # build dist/Pigmento Setup 1.1.0.exe, the portable exe and their SHA-256 checksums
 ```
 
 | Command | What it does |
