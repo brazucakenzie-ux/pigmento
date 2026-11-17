@@ -16,6 +16,8 @@ extraResources:
     to: LICENSE.txt
   - from: LICENSES.md
     to: LICENSES.md
+  - from: THIRD-PARTY-NOTICES.md
+    to: THIRD-PARTY-NOTICES.md
 asar: true
 win:
   target:

@@ -2,7 +2,7 @@
 
 Pigmento's own code, logo (`resources/logo.svg`), cursors, custom icons and palette are original work created for this project, released under the MIT licence (`LICENSE`).
 
-The components below are bundled into the app. Their full licence texts ship inside each package under `node_modules/<package>/LICENSE`, and Electron's bundled Chromium licences are in `LICENSES.chromium.html` next to the packaged executable.
+The components below are bundled into the app. Their full licence texts are in `THIRD-PARTY-NOTICES.md`, which ships with the app and is shown under Help → About Pigmento. Electron's own licence and those of Chromium and Node.js, which it includes, are in `LICENSE.electron.txt` and `LICENSES.chromium.html` next to the packaged executable.
 
 | Component | Version | Licence | Copyright | Used for |
 |---|---|---|---|---|

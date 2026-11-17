@@ -4,6 +4,7 @@ import type { AppInfo } from '@shared/ipc';
 import guide from '../../../../../docs/user-guide.md?raw';
 import licences from '../../../../../LICENSES.md?raw';
 import ownLicence from '../../../../../LICENSE?raw';
+import notices from '../../../../../THIRD-PARTY-NOTICES.md?raw';
 import { t } from '../../i18n';
 import { Dialog } from '../components/Dialog';
 import { headingsOf, Markdown } from '../components/Markdown';
@@ -32,24 +33,12 @@ export function UserGuideDialog() {
       <div className="guide">
         <nav className="guide-contents" aria-label={t('help.contents')}>
           {contents.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              className="guide-link"
-              aria-current={c.id === current ? 'true' : undefined}
-              onClick={() => go(c.id)}
-            >
+            <button key={c.id} type="button" className="guide-link" aria-current={c.id === current ? 'true' : undefined} onClick={() => go(c.id)}>
               {c.text}
             </button>
           ))}
         </nav>
-        <div
-          ref={body}
-          className="guide-body"
-          tabIndex={0}
-          role="document"
-          aria-label={t('help.guide')}
-        >
+        <div ref={body} className="guide-body" tabIndex={0} role="document" aria-label={t('help.guide')}>
           <Markdown source={guide} skipTitle />
         </div>
       </div>
@@ -57,11 +46,13 @@ export function UserGuideDialog() {
   );
 }
 
-/** About: version, what it's built on, Pigmento's own licence (LICENSE) and every third-party licence (LICENSES.md), bundled. */
+/**
+ * About: version, what it's built on, Pigmento's own licence (LICENSE), every third-party licence
+ * (LICENSES.md) and their full texts (THIRD-PARTY-NOTICES.md), all bundled.
+ */
 export function AboutDialog() {
   const allLicences = useMemo(
-    () =>
-      `# ${t('dialog.about.ownLicence')}\n\n\`\`\`\n${ownLicence.trim()}\n\`\`\`\n\n${licences}`,
+    () => `# ${t('dialog.about.ownLicence')}\n\n\`\`\`\n${ownLicence.trim()}\n\`\`\`\n\n${licences}\n\n${notices}`,
     [],
   );
   const [info, setInfo] = useState<AppInfo | null>(null);
@@ -86,13 +77,7 @@ export function AboutDialog() {
         {info ? (
           <>
             <p>{t('dialog.about.version', { version: info.version })}</p>
-            <p>
-              {t('dialog.about.built', {
-                electron: info.electron,
-                chrome: info.chrome,
-                node: info.node,
-              })}
-            </p>
+            <p>{t('dialog.about.built', { electron: info.electron, chrome: info.chrome, node: info.node })}</p>
           </>
         ) : null}
         <p>{t('dialog.about.open')}</p>

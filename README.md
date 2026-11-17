@@ -58,6 +58,7 @@ npm run dist         # build dist/Pigmento Setup 1.1.0.exe and the portable exe
 | `npm run e2e` | Builds, then runs the end-to-end tests (Playwright driving the Electron app) |
 | `npm run smoke:installed` | Installs the built installer, smoke-tests the installed app, then uninstalls it |
 | `npm run icons` | Regenerates `build/icon.ico` and the PNG icons from `resources/logo.svg` |
+| `npm run notices` | Regenerates `THIRD-PARTY-NOTICES.md` (the full licence texts shipped with the app) after adding or updating a package the app bundles; the build fails if it's out of date |
 | `npm run lint`, `npm run typecheck` | ESLint and TypeScript on their own |
 
 The end-to-end tests use a temporary profile, so they never touch your real settings. A few extras are opt-in:

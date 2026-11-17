@@ -20,6 +20,7 @@
     "e2e": "npm run build && playwright test",
     "check": "npm run lint && npm run typecheck && npm run test && npm run e2e",
     "icons": "node scripts/build-icons.mjs",
+    "notices": "node scripts/notices.mjs",
     "typecheck:e2e": "tsc --noEmit -p tsconfig.e2e.json",
     "dist": "npm run build && electron-builder --win --publish never",
     "smoke:installed": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-installed.ps1"

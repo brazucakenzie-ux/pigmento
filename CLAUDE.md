@@ -14,6 +14,7 @@ Pigmento is a paint-style raster editor (Electron + React + a framework-free TS 
 | `npm run e2e` | Build, then Playwright Electron tests (`tests/e2e`) |
 | `npm run check` | lint + typecheck + unit + e2e: must be green before a milestone is done |
 | `npm run icons` | Regenerate `build/icon.ico` + PNGs from `resources/logo.svg` |
+| `npm run notices` | Regenerate `THIRD-PARTY-NOTICES.md` after adding/updating a bundled package (the build fails if it's stale) |
 
 E2E runs with `PIGMENTO_USER_DATA` pointed at a temp folder, so tests never touch the real `%APPDATA%\Pigmento`. `PIGMENTO_E2E=1` exposes `window.__pigmentoTest` (`src/renderer/src/ui/app/testHook.ts`) for assertions. Native dialogs are stubbed from the test with `app.evaluate(({ dialog }) => …)`.
 Opt-in e2e switches: `PIGMENTO_E2E_CLIPBOARD=1` (overwrites the real clipboard), `PIGMENTO_SCREENSHOT=1` with `PIGMENTO_SCREENSHOT_DIR=<folder>` (captures UI states for visual review), `PIGMENTO_UPDATE_GOLDEN=1` (rewrites `tests/golden/shapes.png` + `.json` after an intended change to a built-in shape; review the sheet before committing).
