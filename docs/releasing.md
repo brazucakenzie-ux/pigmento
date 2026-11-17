@@ -40,8 +40,8 @@ Only the repository owner can do these steps: they involve creating accounts and
    - Everyone on the team uses multi-factor authentication on GitHub and SignPath.
    - Every release is approved for signing by hand.
    - Only the project's own files are signed. Upstream binaries, such as Electron's DLLs and electron-builder's `elevate.exe`, may ship unsigned inside the signed package, but must not be signed with the project's certificate. The artifact configurations below sign only Pigmento's own files.
-2. **Add a code signing policy** to the README (and link it from the release notes), using the text in [Code signing policy text](#code-signing-policy-text) below. The terms ask for this on the project's home and download pages.
-3. **Apply** at [signpath.org/apply](https://signpath.org/apply). Once the project is accepted, SignPath sets up an organisation and a project on [app.signpath.io](https://app.signpath.io), with GitHub.com as the trusted build system for this repository. Install the SignPath GitHub App if they ask you to.
+2. **Add a code signing policy** to the README (and link it from the release notes) before you apply, using the text in [Code signing policy text](#code-signing-policy-text) below. The application form asks for a download page that mentions SignPath Foundation, and the terms ask for the policy on the project's home and download pages.
+3. **Apply** at [signpath.org/apply](https://signpath.org/apply). The form asks for the repository, homepage and download page, a one-line tagline, a short description, links showing the project is used ("reputation"), the build system (GitHub Actions), and your name and email, which become your SignPath account. You fill it in and send it yourself, behind a reCAPTCHA. Once the project is accepted, SignPath sets up an organisation and a project on [app.signpath.io](https://app.signpath.io), with GitHub.com as the trusted build system for this repository. Install the SignPath GitHub App if they ask you to.
 4. **In SignPath**, add two artifact configurations to the project:
    - slug `app`, with the contents of [`.github/signpath/app.xml`](../.github/signpath/app.xml)
    - slug `installers`, with the contents of [`.github/signpath/installers.xml`](../.github/signpath/installers.xml)
@@ -70,7 +70,7 @@ The order matters, because signing a file must be the last change made to it:
 
 ## Code signing policy text
 
-Add this to the README once SignPath Foundation has accepted the project. Replace the team links with the real ones.
+Add this to the README before you apply (step 2 above). Replace the team links with the real ones.
 
 ```markdown
 ## Code signing policy
