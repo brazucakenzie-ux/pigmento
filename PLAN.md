@@ -283,3 +283,11 @@ Decisions: pieces come only from pixel layers; shape layers and text aren't fram
 - [x] CHANGELOG 1.1.0 includes the installer question and these changes; `npm run dist` writes SHA-256 checksums for the files to upload
 - [x] `npm run check` green; installers rebuilt; fuses read back; the packaged app starts and shows its licences; the installer question still works
 - Notes: 437 unit and 117 e2e tests pass (18 opt-in skipped). On the packaged build, ELECTRON_RUN_AS_NODE opens the app instead of running Node, and a copy with one byte of app.asar changed exits without a window. The installers are unsigned, so Windows SmartScreen warns on first download until they are signed or gain reputation.
+
+### Side step: release builds on GitHub, ready for free code signing (requested after Milestone 5)
+SignPath Foundation signs open-source projects for free, but only builds made on CI. Each item is ticked in the same commit as its work.
+- [x] The installer is named `Pigmento-Setup-<version>.exe` (GitHub turns spaces in uploaded file names into dots, so `Pigmento Setup 1.1.0.exe` no longer matched its checksum line); the checksums, the installed-app smoke script, README, user guide and CHANGELOG follow
+- [ ] `.github/workflows/release.yml`: on a pushed `v*` tag or run by hand, `windows-latest` with Node 26 runs `npm ci`, lint, type-check and unit tests, then builds the installer, the portable exe and their checksums and keeps them as workflow artifacts; a tag must match `package.json`'s version; e2e stays a local step before tagging
+- [ ] SignPath signing in the workflow, off until the owner adds the `SIGNPATH_API_TOKEN` secret and the SignPath variables: Pigmento.exe and the uninstaller are signed first, the installer and portable exe are built around them and then signed, the signatures are checked, and the checksums are taken from the signed files
+- [ ] `docs/releasing.md`: how to cut a release, and what the owner does to turn signing on (apply at signpath.org, the artifact configurations, the secret and variables, the code signing policy section SignPath Foundation asks for)
+- [ ] `npm run check` green; `npm run dist` writes the renamed files and checksums; the workflow passes actionlint; the signed path's two-pass uninstaller swap checked locally

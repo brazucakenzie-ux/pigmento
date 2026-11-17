@@ -4,9 +4,9 @@ Pigmento is a painting app for Windows 11 with the classic Paint layout, plus la
 
 ## Installing
 
-- **The installer** (`Pigmento Setup 1.1.0.exe`) installs Pigmento for your account only. It adds Start menu and desktop shortcuts, opens `.pigm` projects with a double-click, and adds Pigmento to "Open with" for PNG, JPEG, BMP, GIF and WebP without changing your usual image viewer. Uninstall it from Windows Settings → Apps.
+- **The installer** (`Pigmento-Setup-<version>.exe`) installs Pigmento for your account only. It adds Start menu and desktop shortcuts, opens `.pigm` projects with a double-click, and adds Pigmento to "Open with" for PNG, JPEG, BMP, GIF and WebP without changing your usual image viewer. Uninstall it from Windows Settings → Apps.
 - **Updating:** run the new installer. If Pigmento is already installed, it asks first: update it, reinstall the same version, or go back to an older version. Choose **No** to leave things as they are. Your settings, brushes, shapes and palettes are kept.
-- **The portable version** (`Pigmento-1.1.0-portable.exe`) runs without installing.
+- **The portable version** (`Pigmento-<version>-portable.exe`) runs without installing.
 
 ## Getting started
 

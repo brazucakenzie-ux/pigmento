@@ -5,7 +5,7 @@ import path from 'node:path';
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
 /**
- * Smoke test of the installed app (run after installing dist/Pigmento Setup *.exe; see
+ * Smoke test of the installed app (run after installing dist/Pigmento-Setup-*.exe; see
  * scripts/smoke-installed.ps1). It launches the installed Pigmento.exe exactly as Windows would
  * through the file association and "Open with", with a temporary profile.
  */

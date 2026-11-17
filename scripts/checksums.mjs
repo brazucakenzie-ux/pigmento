@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dist = path.join(root, 'dist');
 const { version } = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
-const files = [`Pigmento Setup ${version}.exe`, `Pigmento-${version}-portable.exe`];
+const files = [`Pigmento-Setup-${version}.exe`, `Pigmento-${version}-portable.exe`];
 
 function sha256(file) {
   return new Promise((resolve, reject) => {

@@ -2,6 +2,11 @@
 
 All notable changes to Pigmento. Versions follow [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Installing
+- The installer is now called `Pigmento-Setup-<version>.exe`. Without spaces in the name, the file on the Releases page matches its line in the checksum file (GitHub turned the spaces into dots).
+
 ## [1.1.0] — 2026-11-16
 
 Animation, and Pigmento is now open source.
