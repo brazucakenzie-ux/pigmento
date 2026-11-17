@@ -19,6 +19,16 @@ extraResources:
   - from: THIRD-PARTY-NOTICES.md
     to: THIRD-PARTY-NOTICES.md
 asar: true
+# Hardening for the packaged app (Electron fuses): Pigmento.exe can't be run as plain Node.js
+# (ELECTRON_RUN_AS_NODE) or take Node options from the environment (NODE_OPTIONS), and it only loads
+# its own code from app.asar, which is checked against a hash embedded in the exe. The --inspect
+# switch stays on because the installed-app tests (tests/installed) drive Pigmento through it.
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+  grantFileProtocolExtraPrivileges: false
 win:
   target:
     - target: nsis
