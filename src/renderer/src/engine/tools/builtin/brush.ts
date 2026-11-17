@@ -1,8 +1,24 @@
-import { brushOf, BRUSH_OPTION, createBrushTool, SMOOTHING_OPTION } from '../brushTool';
+import { brushOf, BRUSH_OPTION, createBrushTool, drawBrushCursor, SMOOTHING_OPTION, type ToolBrush } from '../brushTool';
 import { brushRegistry } from '../../brush/BrushRegistry';
+import { isFlatNib, nibAngleOf, tipAngleForNib } from '../../brush/nib';
+import type { ToolContext } from '../Tool';
 import { registerTool } from '../ToolRegistry';
 
 const DEFAULT = 'round';
+
+/** The picked brush with the options bar's values. */
+function current(ctx: ToolContext): ToolBrush {
+  const o = ctx.options('brush');
+  const s = brushOf(o, DEFAULT).settings;
+  const angle = isFlatNib(s) ? tipAngleForNib(Number(o.nibAngle ?? nibAngleOf(s))) : s.angle;
+  return {
+    settings: { ...s, angle, flow: Number(o.flow ?? 100) / 100, hardness: Number(o.hardness ?? 80) / 100 },
+    size: Number(o.size ?? 8),
+    opacity: Number(o.opacity ?? 100) / 100,
+    pressure: o.pressure !== false,
+    smoothing: Number(o.smoothing ?? 0) / 100,
+  };
+}
 
 export default registerTool(
   createBrushTool({
@@ -18,6 +34,18 @@ export default registerTool(
     options: [
       BRUSH_OPTION(DEFAULT),
       { key: 'size', type: 'slider', labelKey: 'opt.size', min: 1, max: 400, step: 1, unit: 'px', default: 8, presets: [3, 8, 16, 32], log: true },
+      {
+        key: 'nibAngle',
+        type: 'slider',
+        labelKey: 'opt.nibAngle',
+        min: 0,
+        max: 180,
+        step: 1,
+        unit: '°',
+        default: 45,
+        // Flat nibs (calligraphy) only: other tips are round or turn by themselves.
+        visibleIf: (o) => isFlatNib(brushOf(o, DEFAULT).settings),
+      },
       { key: 'opacity', type: 'slider', labelKey: 'opt.opacity', min: 1, max: 100, step: 1, unit: '%', default: 100 },
       { key: 'flow', advanced: true, type: 'slider', labelKey: 'opt.flow', min: 1, max: 100, step: 1, unit: '%', default: 100 },
       {
@@ -36,20 +64,10 @@ export default registerTool(
       { key: 'pressure', advanced: true, type: 'toggle', labelKey: 'opt.pressure', default: true },
     ],
     cursor: () => 'none',
-    brush: (ctx) => {
-      const o = ctx.options('brush');
-      const def = brushOf(o, DEFAULT);
-      return {
-        settings: { ...def.settings, flow: Number(o.flow ?? 100) / 100, hardness: Number(o.hardness ?? 80) / 100 },
-        size: Number(o.size ?? 8),
-        opacity: Number(o.opacity ?? 100) / 100,
-        pressure: o.pressure !== false,
-        smoothing: Number(o.smoothing ?? 0) / 100,
-      };
-    },
+    brush: current,
     overlay: (ctx, ov, hover) => {
-      const size = Number(ctx.options('brush').size ?? 8);
-      ov.brushCursor(ov.toScreen(hover), (size / 2) * ctx.view.zoom);
+      const b = current(ctx);
+      drawBrushCursor(ctx, ov, hover, b.settings, b.size);
     },
   }),
 );

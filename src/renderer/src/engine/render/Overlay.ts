@@ -255,17 +255,41 @@ export class Overlay {
     c.stroke();
     if (r < 4) {
       c.beginPath();
-      c.moveTo(center.x - 7, center.y);
-      c.lineTo(center.x - 3, center.y);
-      c.moveTo(center.x + 3, center.y);
-      c.lineTo(center.x + 7, center.y);
-      c.moveTo(center.x, center.y - 7);
-      c.lineTo(center.x, center.y - 3);
-      c.moveTo(center.x, center.y + 3);
-      c.lineTo(center.x, center.y + 7);
+      this.crossPath(center);
       c.stroke();
     }
     c.restore();
+  }
+
+  /** A flat nib's cursor: a line across the nib (screen points), with a crosshair while it's tiny. */
+  nibCursor(a: Point, b: Point): void {
+    const c = this.ctx;
+    c.save();
+    c.beginPath();
+    c.moveTo(a.x, a.y);
+    c.lineTo(b.x, b.y);
+    if (Math.hypot(b.x - a.x, b.y - a.y) < 8) this.crossPath({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+    c.lineCap = 'round';
+    c.lineWidth = 2.5;
+    c.strokeStyle = 'rgba(255,255,255,0.85)';
+    c.stroke();
+    c.lineWidth = 1;
+    c.strokeStyle = 'rgba(0,0,0,0.85)';
+    c.stroke();
+    c.restore();
+  }
+
+  /** Adds a small crosshair with an open centre to the current path. */
+  private crossPath(center: Point): void {
+    const c = this.ctx;
+    c.moveTo(center.x - 7, center.y);
+    c.lineTo(center.x - 3, center.y);
+    c.moveTo(center.x + 3, center.y);
+    c.lineTo(center.x + 7, center.y);
+    c.moveTo(center.x, center.y - 7);
+    c.lineTo(center.x, center.y - 3);
+    c.moveTo(center.x, center.y + 3);
+    c.lineTo(center.x, center.y + 7);
   }
 
   /** Square outline for pixel-exact tools. */

@@ -4,6 +4,9 @@ All notable changes to Pigmento. Versions follow [Semantic Versioning](https://s
 
 ## [Unreleased]
 
+### Brushes
+- The Calligraphy brush shows its flat nib as a line under the pointer instead of a circle, and a new **Nib angle** option turns the nib. It now leans like "/" by default, the way a broad-edge pen is held, so strokes going up to the right are hairlines.
+
 ### Installing
 - The installer is now called `Pigmento-Setup-<version>.exe`. Without spaces in the name, the file on the Releases page matches its line in the checksum file (GitHub turned the spaces into dots).
 - Releases are built on GitHub from the tagged source (`.github/workflows/release.yml`), ready to be code-signed through SignPath Foundation's free programme for open-source projects.

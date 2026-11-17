@@ -316,6 +316,7 @@ export const en = {
   'opt.hardness': 'Hardness',
   'opt.flow': 'Flow',
   'opt.smoothing': 'Smoothing',
+  'opt.nibAngle': 'Nib angle',
   'opt.strength': 'Strength',
   'opt.exposure': 'Exposure',
   'opt.cloneAligned': 'Aligned',

@@ -295,3 +295,7 @@ SignPath Foundation signs open-source projects for free, but only builds made on
 
 ### Side step: checks on pull requests (requested after the release workflow)
 - [x] `.github/workflows/ci.yml` runs lint, type-check and unit tests on `windows-latest` with Node 26 for every pull request and every push to `main`; e2e stays local
+
+### Side step: calligraphy nib (requested after the release workflow)
+- [x] A flat nib at a fixed angle (`engine/brush/nib.ts`: at most a quarter as thick as wide, not turning by itself) shows as a line along the nib instead of the circle cursor (Brush and Eraser), and the Brush tool has a Nib angle option for it (0–180°, anticlockwise, loaded when the brush is picked, shown only for flat nibs). The built-in Calligraphy nib now leans like "/" at 45°, as a broad-edge pen is held (it leaned like "\"); the brush golden sheet was regenerated for that one tile (+ unit tests for stroke width by direction and the angle mapping, e2e in the brush picker test)
+- Notes: lint, type-check, 442 unit and 115 e2e tests pass (18 opt-in skipped). The MP4 frame test failed once in the full run and passed on its own. The 100-megapixel open test failed here and on an untouched `main` build alike, with about 3 GB of 14 GB free while the installed Pigmento was open.

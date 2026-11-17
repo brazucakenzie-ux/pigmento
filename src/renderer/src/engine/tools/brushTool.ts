@@ -2,6 +2,7 @@ import type { RGBA } from '../core/color';
 import { rectIntersect, rectUnion, type Point, type Rect } from '../core/geometry';
 import { BrushStroke, strokeSeed, type StrokeSample } from '../brush/BrushStroke';
 import { dabShapeOf, paintDabInto, type Dab, type DabShape } from '../brush/dab';
+import { isFlatNib, nibAngleOf, nibEnds } from '../brush/nib';
 import type { DabOp } from '../brush/retouch';
 import { stabilize, symmetryAxes, symmetryCenter, symmetryCopies } from '../brush/symmetry';
 import type { BrushSettings } from '../brush/types';
@@ -67,10 +68,19 @@ export function brushOf(o: ToolOptions, fallback: string): BrushDef {
   return brushRegistry.get(String(o.brushId ?? '')) ?? brushRegistry.get(fallback)!;
 }
 
-/** Picking a brush loads its size, opacity, flow and hardness into the tool's sliders. */
+/** Picking a brush loads its size, opacity, flow, hardness and (flat nibs) angle into the tool's sliders. */
 export function brushOptionsFor(def: BrushDef): ToolOptions {
   const s = def.settings;
-  return { brushId: def.id, size: Math.max(1, Math.round(s.size)), opacity: Math.round(s.opacity * 100), flow: Math.round(s.flow * 100), hardness: Math.round(s.hardness * 100) };
+  const nib = isFlatNib(s) ? { nibAngle: nibAngleOf(s) } : {};
+  return { brushId: def.id, size: Math.max(1, Math.round(s.size)), opacity: Math.round(s.opacity * 100), flow: Math.round(s.flow * 100), hardness: Math.round(s.hardness * 100), ...nib };
+}
+
+/** The brush's outline under the pointer: a circle, or a line across a flat nib at its angle. */
+export function drawBrushCursor(ctx: ToolContext, ov: Overlay, hover: Point, settings: BrushSettings, size: number): void {
+  if (isFlatNib(settings)) {
+    const [a, b] = nibEnds(hover, size, settings.angle);
+    ov.nibCursor(ov.toScreen(a), ov.toScreen(b));
+  } else ov.brushCursor(ov.toScreen(hover), (size / 2) * ctx.view.zoom);
 }
 
 /** The longest the stabiliser's string gets, in screen px. */

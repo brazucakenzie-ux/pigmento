@@ -1,4 +1,4 @@
-import { brushOf, BRUSH_OPTION, createBrushTool, SMOOTHING_OPTION } from '../brushTool';
+import { brushOf, BRUSH_OPTION, createBrushTool, drawBrushCursor, SMOOTHING_OPTION } from '../brushTool';
 import { registerTool } from '../ToolRegistry';
 
 /** Paint's eraser by default (hard square pixels); any brush can erase. */
@@ -29,8 +29,9 @@ export default registerTool(
     overlay: (ctx, ov, hover) => {
       const o = ctx.options('eraser');
       const size = Number(o.size ?? 10);
-      if (brushOf(o, DEFAULT).settings.pixel) ov.squareCursor(hover.x, hover.y, size);
-      else ov.brushCursor(ov.toScreen(hover), (size / 2) * ctx.view.zoom);
+      const s = brushOf(o, DEFAULT).settings;
+      if (s.pixel) ov.squareCursor(hover.x, hover.y, size);
+      else drawBrushCursor(ctx, ov, hover, s, size);
     },
   }),
 );
