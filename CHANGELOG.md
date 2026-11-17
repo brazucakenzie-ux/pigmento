@@ -2,7 +2,9 @@
 
 All notable changes to Pigmento. Versions follow [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
+## [1.1.1] — 2026-11-17
+
+A calligraphy nib you can turn, and installers built on GitHub.
 
 ### Brushes
 - The Calligraphy brush shows its flat nib as a line under the pointer instead of a circle, and a new **Nib angle** option turns the nib. It now leans like "/" by default, the way a broad-edge pen is held, so strokes going up to the right are hairlines.
