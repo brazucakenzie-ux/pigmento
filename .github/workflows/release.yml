@@ -1,0 +1,216 @@
+# Builds Pigmento's Windows installers on GitHub, on a pushed v* tag or by hand (Actions → Release
+# build → Run workflow). The installer, the portable exe and their checksums are kept as the run's
+# artifact, to attach to a GitHub release by hand (docs/releasing.md).
+#
+# Code signing through SignPath Foundation is ready but off: it turns on once the repository has the
+# SIGNPATH_API_TOKEN secret and the SIGNPATH_ORGANIZATION_ID, SIGNPATH_PROJECT_SLUG and
+# SIGNPATH_SIGNING_POLICY_SLUG variables. Until then the build is unsigned.
+#
+# The end-to-end tests (npm run e2e) don't run here: run `npm run check` on your PC before tagging.
+# The runners have no GPU and 4 CPU cores, and the suite holds performance budgets measured on a PC
+# with a GPU (brush latency, 100-megapixel open, MP4 export time), so they'd fail for the runner,
+# not for Pigmento.
+name: Release build
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      sign:
+        description: Sign with SignPath (when it's set up)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  # SignPath fetches the files to sign from this run's artifacts with the workflow's token.
+  actions: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build the Windows installers
+    runs-on: windows-latest
+    # Signing waits for a person to approve each request on SignPath (twice per release).
+    timeout-minutes: 300
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # No dependency cache: a release build starts clean.
+      - name: Set up Node.js 26
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+
+      - name: Read the version
+        id: version
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") {
+            throw "The tag $env:GITHUB_REF_NAME doesn't match the version in package.json ($version)."
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "VERSION=$version" >> $env:GITHUB_ENV
+
+      - name: Is signing set up?
+        id: signing
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          # Empty on a tag push; false when a run by hand was asked not to sign.
+          SIGN: ${{ inputs.sign }}
+        run: |
+          $names = 'SIGNPATH_API_TOKEN', 'SIGNPATH_ORGANIZATION_ID', 'SIGNPATH_PROJECT_SLUG', 'SIGNPATH_SIGNING_POLICY_SLUG'
+          $missing = @($names | Where-Object { -not [Environment]::GetEnvironmentVariable($_) })
+          if ($env:SIGN -eq 'false') {
+            'enabled=false' >> $env:GITHUB_OUTPUT
+            '::notice::Building unsigned installers, as asked.'
+          } elseif ($missing.Count -eq 0) {
+            'enabled=true' >> $env:GITHUB_OUTPUT
+            'Signing with SignPath.'
+          } else {
+            'enabled=false' >> $env:GITHUB_OUTPUT
+            "::notice::Building unsigned installers. To sign them, add $($missing -join ', ') (docs/releasing.md)."
+          }
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      # Unsigned: the same command as on a PC.
+      - name: Build the installers (unsigned)
+        if: steps.signing.outputs.enabled != 'true'
+        run: npm run dist
+
+      # Signed. electron-builder packs the app (app.asar, its hash in Pigmento.exe, the fuses, the icon
+      # and version details), and the installer embeds an uninstaller it builds on the way. So
+      # Pigmento.exe and the uninstaller are signed first, then the installer and the portable exe
+      # are built around them (--prepackaged packs nothing again) and signed in their turn.
+      - name: Build the app
+        if: steps.signing.outputs.enabled == 'true'
+        run: npm run build
+
+      - name: Pack the app
+        if: steps.signing.outputs.enabled == 'true'
+        run: npx electron-builder --win --x64 --dir --publish never
+
+      # An installer is built only for its uninstaller, which scripts/signing-hook.mjs copies out.
+      - name: Build the uninstaller
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          PIGMENTO_SIGNING: collect
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npx electron-builder --win nsis --x64 --prepackaged dist/win-unpacked --publish never --config.win.signtoolOptions.sign=./scripts/signing-hook.mjs
+          Remove-Item "dist/Pigmento-Setup-$env:VERSION.exe*"
+          Copy-Item dist/win-unpacked/Pigmento.exe dist/signing/unsigned/
+
+      - name: Upload the app and uninstaller for signing
+        id: upload-app
+        if: steps.signing.outputs.enabled == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: unsigned-app
+          path: dist/signing/unsigned/
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign the app and uninstaller
+        if: steps.signing.outputs.enabled == 'true'
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: app
+          github-artifact-id: ${{ steps.upload-app.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 7200
+          output-artifact-directory: dist/signing/signed
+          parameters: |
+            version: ${{ toJSON(steps.version.outputs.version) }}
+
+      # The hook swaps in the signed uninstaller, after checking it was signed from the same file.
+      - name: Build the installers around the signed app
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          PIGMENTO_SIGNING: apply
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          Copy-Item dist/signing/signed/Pigmento.exe dist/win-unpacked/Pigmento.exe -Force
+          npx electron-builder --win --prepackaged dist/win-unpacked --publish never --config.win.signtoolOptions.sign=./scripts/signing-hook.mjs
+          New-Item -ItemType Directory -Force dist/signing/installers | Out-Null
+          Copy-Item "dist/Pigmento-Setup-$env:VERSION.exe", "dist/Pigmento-$env:VERSION-portable.exe" dist/signing/installers/
+
+      - name: Upload the installers for signing
+        id: upload-installers
+        if: steps.signing.outputs.enabled == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: unsigned-installers
+          path: dist/signing/installers/
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Sign the installers
+        if: steps.signing.outputs.enabled == 'true'
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: installers
+          github-artifact-id: ${{ steps.upload-installers.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 7200
+          output-artifact-directory: dist/signing/installers-signed
+          parameters: |
+            version: ${{ toJSON(steps.version.outputs.version) }}
+
+      - name: Check the signatures and write the checksums
+        if: steps.signing.outputs.enabled == 'true'
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          Copy-Item dist/signing/installers-signed/*.exe dist/ -Force
+          $files = 'dist/win-unpacked/Pigmento.exe', 'dist/signing/signed/uninstaller.exe',
+            "dist/Pigmento-Setup-$env:VERSION.exe", "dist/Pigmento-$env:VERSION-portable.exe"
+          foreach ($file in $files) {
+            $signature = Get-AuthenticodeSignature $file
+            if ($signature.Status -ne 'Valid') { throw "${file}: $($signature.Status) $($signature.StatusMessage)" }
+            "${file}: signed by $($signature.SignerCertificate.Subject)"
+          }
+          node scripts/checksums.mjs
+
+      - name: Keep the installers
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Pigmento-${{ steps.version.outputs.version }}-${{ steps.signing.outputs.enabled == 'true' && 'signed' || 'unsigned' }}
+          path: |
+            dist/Pigmento-Setup-${{ steps.version.outputs.version }}.exe
+            dist/Pigmento-${{ steps.version.outputs.version }}-portable.exe
+            dist/Pigmento-${{ steps.version.outputs.version }}-SHA256SUMS.txt
+          if-no-files-found: error
+          compression-level: 0

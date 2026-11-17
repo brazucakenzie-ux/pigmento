@@ -1,11 +1,11 @@
-# Installs dist/Pigmento Setup <version>.exe for the current user, smoke-tests the installed app
+# Installs dist/Pigmento-Setup-<version>.exe for the current user, smoke-tests the installed app
 # (tests/installed, with a temporary profile, so %APPDATA%\Pigmento is never touched), checks a
 # real double-click through Windows' file association, then uninstalls and checks nothing is left.
 # Run `npm run dist` first. Usage: powershell -File scripts/smoke-installed.ps1
 $ErrorActionPreference = 'Stop'
 Set-Location (Join-Path $PSScriptRoot '..')
 $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-$setup = Join-Path (Resolve-Path dist) "Pigmento Setup $version.exe"
+$setup = Join-Path (Resolve-Path dist) "Pigmento-Setup-$version.exe"
 $dir = Join-Path $env:LOCALAPPDATA 'Programs\Pigmento'
 $exe = Join-Path $dir 'Pigmento.exe'
 $results = [ordered]@{}

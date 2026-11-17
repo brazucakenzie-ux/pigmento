@@ -57,5 +57,8 @@ nsis:
   uninstallDisplayName: Pigmento
   include: build/installer.nsh
   deleteAppDataOnUninstall: false
+  # No spaces: GitHub turns them into dots when a release file is uploaded, so the name would no
+  # longer match its line in the checksum file.
+  artifactName: Pigmento-Setup-${version}.${ext}
 portable:
   artifactName: Pigmento-${version}-portable.exe

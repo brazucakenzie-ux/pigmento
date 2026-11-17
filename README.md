@@ -32,8 +32,8 @@ The [user guide](docs/user-guide.md) explains everything; it's also in the app u
 
 Download the latest version from the [Releases page](https://github.com/brazucakenzie-ux/pigmento/releases/latest) (Windows 11, 64-bit), or build it yourself (see below). There are two ways to run it:
 
-- **`Pigmento Setup 1.1.0.exe`** installs Pigmento for your user account only, with no administrator rights needed. It adds Start menu and desktop shortcuts, opens `.pigm` projects, and adds Pigmento to "Open with" for PNG, JPEG, BMP, GIF and WebP. It never changes your default image viewer. If Pigmento is already installed, it first asks whether to update it, reinstall the same version or go back to an older one (No changes nothing), and your settings, brushes, shapes and palettes are kept either way. A silent install (`/S`) doesn't ask. Uninstall it from Settings → Apps.
-- **`Pigmento-1.1.0-portable.exe`** runs without installing.
+- **`Pigmento-Setup-<version>.exe`** installs Pigmento for your user account only, with no administrator rights needed. It adds Start menu and desktop shortcuts, opens `.pigm` projects, and adds Pigmento to "Open with" for PNG, JPEG, BMP, GIF and WebP. It never changes your default image viewer. If Pigmento is already installed, it first asks whether to update it, reinstall the same version or go back to an older one (No changes nothing), and your settings, brushes, shapes and palettes are kept either way. A silent install (`/S`) doesn't ask. Uninstall it from Settings → Apps.
+- **`Pigmento-<version>-portable.exe`** runs without installing.
 
 The builds aren't code-signed, so Windows SmartScreen may warn the first time. Choose **More info → Run anyway**.
 
@@ -50,7 +50,7 @@ npm install          # dependencies
 npm run dev          # start the app with hot reload
 npm run build        # production build into out/
 npm start            # run the production build
-npm run dist         # build dist/Pigmento Setup 1.1.0.exe, the portable exe and their SHA-256 checksums
+npm run dist         # build dist/Pigmento-Setup-<version>.exe, the portable exe and their SHA-256 checksums
 ```
 
 | Command | What it does |
@@ -70,6 +70,8 @@ The end-to-end tests use a temporary profile, so they never touch your real sett
 | `PIGMENTO_E2E_CLIPBOARD=1` | Also tests the real Windows clipboard (it overwrites what you copied) |
 | `PIGMENTO_SCREENSHOT=1` with `PIGMENTO_SCREENSHOT_DIR=<folder>` | Saves screenshots of the interface for review |
 | `PIGMENTO_UPDATE_GOLDEN=1` | Rewrites `tests/golden/` after an intended change to a built-in shape or brush |
+
+Release builds are made on GitHub by `.github/workflows/release.yml` when a version tag is pushed. [docs/releasing.md](docs/releasing.md) explains how to cut a release and how code signing through SignPath Foundation is turned on.
 
 ## How it's built
 

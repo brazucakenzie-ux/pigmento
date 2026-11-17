@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SignPath artifact configuration "installers" (slug: installers), for the release workflow's
+     second signing request: the installer and the portable exe, built around the signed
+     Pigmento.exe and uninstaller (docs/releasing.md). -->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+  </parameters>
+  <zip-file>
+    <pe-file path="Pigmento-Setup-${version}.exe" product-name="Pigmento" product-version="${version}">
+      <authenticode-sign />
+    </pe-file>
+    <pe-file path="Pigmento-${version}-portable.exe" product-name="Pigmento" product-version="${version}">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>
