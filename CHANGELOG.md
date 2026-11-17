@@ -2,6 +2,11 @@
 
 All notable changes to Pigmento. Versions follow [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Installer
+- When Pigmento is already installed, the installer asks first whether to update it, reinstall the same version or replace a newer version with an older one, instead of quietly installing over it. No changes nothing, settings are kept either way, and silent installs (`/S`) don't ask.
+
 ## [1.1.0] — 2026-11-16
 
 Animation.

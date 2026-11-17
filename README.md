@@ -32,7 +32,7 @@ The [user guide](docs/user-guide.md) explains everything; it's also in the app u
 
 Build the installer (see below), then run one of these from `dist/`:
 
-- **`Pigmento Setup 1.1.0.exe`** installs Pigmento for your user account only, with no administrator rights needed. It adds Start menu and desktop shortcuts, opens `.pigm` projects, and adds Pigmento to "Open with" for PNG, JPEG, BMP, GIF and WebP. It never changes your default image viewer. Uninstall it from Settings → Apps.
+- **`Pigmento Setup 1.1.0.exe`** installs Pigmento for your user account only, with no administrator rights needed. It adds Start menu and desktop shortcuts, opens `.pigm` projects, and adds Pigmento to "Open with" for PNG, JPEG, BMP, GIF and WebP. It never changes your default image viewer. If Pigmento is already installed, it first asks whether to update it, reinstall the same version or go back to an older one (No changes nothing), and your settings, brushes, shapes and palettes are kept either way. A silent install (`/S`) doesn't ask. Uninstall it from Settings → Apps.
 - **`Pigmento-1.1.0-portable.exe`** runs without installing.
 
 The builds aren't code-signed, so Windows SmartScreen may warn the first time. Choose **More info → Run anyway**.
