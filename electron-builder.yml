@@ -10,7 +10,10 @@ directories:
 files:
   - out/**/*
   - package.json
+# Pigmento's licence and the third-party licences go next to the app as files too.
 extraResources:
+  - from: LICENSE
+    to: LICENSE.txt
   - from: LICENSES.md
     to: LICENSES.md
 asar: true

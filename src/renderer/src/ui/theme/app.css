@@ -2884,6 +2884,10 @@ dialog.tour::backdrop {
   background: var(--bg-input);
   overflow-x: auto;
 }
+/* Licence texts wrap rather than scroll sideways. */
+.about-licences pre {
+  white-space: pre-wrap;
+}
 .md-table {
   overflow-x: auto;
   margin: 0 0 10px;

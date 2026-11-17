@@ -1,6 +1,6 @@
 # Third-party licences
 
-Pigmento's own code, logo (`resources/logo.svg`), cursors, custom icons and palette are original work created for this project.
+Pigmento's own code, logo (`resources/logo.svg`), cursors, custom icons and palette are original work created for this project, released under the MIT licence (`LICENSE`).
 
 The components below are bundled into the app. Their full licence texts ship inside each package under `node_modules/<package>/LICENSE`, and Electron's bundled Chromium licences are in `LICENSES.chromium.html` next to the packaged executable.
 

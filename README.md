@@ -78,7 +78,9 @@ Pigmento is an Electron app. Its React interface sits on a painting engine writt
 
 [`PLAN.md`](PLAN.md) has the full architecture and the milestone checklist, and [`CLAUDE.md`](CLAUDE.md) has the conventions. The file formats are documented in [`docs/project-format.md`](docs/project-format.md), [`docs/shape-format.md`](docs/shape-format.md), [`docs/brush-format.md`](docs/brush-format.md) and [`docs/palette-and-svg.md`](docs/palette-and-svg.md).
 
-## Licences
+## Licence
+
+Pigmento is free and open-source software under the [MIT licence](LICENSE): you may use, copy, change and share it, including in other projects, as long as the copyright notice and licence go with it. It comes with no warranty.
 
 Pigmento's own code, logo, cursors and palette are original work. Third-party components and their licences are listed in [`LICENSES.md`](LICENSES.md); they're also shown in the app under Help → About Pigmento.
 

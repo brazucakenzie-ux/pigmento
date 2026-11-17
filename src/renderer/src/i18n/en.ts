@@ -595,6 +595,8 @@ export const en = {
   'dialog.about.title': 'About Pigmento',
   'dialog.about.version': 'Version {version}',
   'dialog.about.built': 'Electron {electron} · Chromium {chrome} · Node {node}',
+  'dialog.about.open': 'Free and open-source software under the MIT licence.',
+  'dialog.about.ownLicence': 'Pigmento licence',
   'dialog.about.credits': 'Made with open-source software',
   'dialog.about.licenses': 'Third-party licences are listed in LICENSES.md.',
 
