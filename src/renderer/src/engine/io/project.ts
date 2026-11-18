@@ -33,7 +33,7 @@ import {
 import { Surface } from '../raster/Surface';
 import { MAX_DIMENSION, MAX_PIXELS } from './protocol';
 import { EASINGS, type Easing, type Keyframe } from '../anim/interpolate';
-import { MAX_KEYFRAMES, MAX_PIECES, MAX_SCROLL, newPieceId, REPEATS, type Piece, type Repeat } from '../anim/piece';
+import { BACKS, MAX_KEYFRAMES, MAX_PIECES, MAX_SCROLL, newPieceId, REPEATS, type Back, type Piece, type Repeat } from '../anim/piece';
 import { LOOP_MODES, MAX_FPS, MAX_FRAMES, MIN_FPS, clampFrame, type LoopMode } from '../anim/timeline';
 import { MAX_CELS, type Cel } from '../anim/cels';
 
@@ -43,15 +43,21 @@ import { MAX_CELS, type Cel } from '../anim/cels';
  */
 export const PROJECT_MAGIC = 'pigmento-project';
 /**
- * Version 2 adds animation, version 3 what 1.2 adds to pieces (repeat and scroll so far). A
- * picture is written as the oldest version that holds everything in it, so older Pigmentos open
- * whatever they can show correctly: 1 without animation, 2 with 1.1's animation only.
+ * Version 2 adds animation, version 3 what 1.2 adds to pieces (repeat, scroll, 3D). A picture is
+ * written as the oldest version that holds everything in it, so older Pigmentos open whatever
+ * they can show correctly: 1 without animation, 2 with 1.1's animation only.
  */
 export const PROJECT_VERSION = 3;
 
+/** Furthest a piece can be pushed behind the canvas, or pulled in front of it, in pixels. */
+export const MAX_PIECE_DEPTH = 1e6;
+
 /** The oldest version that holds everything in `doc`. */
 export function versionFor(doc: PaintDocument): 1 | 2 | 3 {
-  if (doc.pieces.some((p) => p.repeat !== 'none' || p.keyframes.some((k) => k.scrollX !== 0 || k.scrollY !== 0))) return 3;
+  const v3 = doc.pieces.some(
+    (p) => p.repeat !== 'none' || p.back !== 'mirror' || p.keyframes.some((k) => k.scrollX !== 0 || k.scrollY !== 0 || k.depth !== 0 || k.tilt !== 0 || k.turn !== 0),
+  );
+  if (v3) return 3;
   return doc.pieces.length || doc.hasCels ? 2 : 1;
 }
 
@@ -306,6 +312,10 @@ const KeyframeJson = z.object({
   /** Version 3: where a repeating piece's tiles have slid (version 2 has none). */
   scrollX: z.number().min(-MAX_SCROLL).max(MAX_SCROLL).default(0),
   scrollY: z.number().min(-MAX_SCROLL).max(MAX_SCROLL).default(0),
+  /** Version 3: in 3D, how far behind the canvas (px), and the tilt and turn (radians, not wrapped). */
+  depth: z.number().min(-MAX_PIECE_DEPTH).max(MAX_PIECE_DEPTH).default(0),
+  tilt: z.number().min(-1e6).max(1e6).default(0),
+  turn: z.number().min(-1e6).max(1e6).default(0),
   easing: z.enum(EASINGS as [Easing, ...Easing[]]),
   in: PointJson.nullable(),
   out: PointJson.nullable(),
@@ -320,6 +330,8 @@ const PieceJson = z.object({
   keyframes: z.array(KeyframeJson).min(1).max(MAX_KEYFRAMES),
   /** Version 3: copies tiling on; version 2 pieces don't repeat. */
   repeat: z.enum(REPEATS as [Repeat, ...Repeat[]]).default('none'),
+  /** Version 3: what shows when it's turned round (its pixels mirrored, like paper, or nothing). */
+  back: z.enum(BACKS as [Back, ...Back[]]).default('mirror'),
 });
 const AnimationJson = z.object({
   fps: int.min(MIN_FPS).max(MAX_FPS),
@@ -452,13 +464,13 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
       image: { file, w: p.src.width, h: p.src.height },
       home: { ...p.home },
       pivot: { ...p.pivot },
-      keyframes: p.keyframes.map(({ scrollX, scrollY, ...k }) => ({
+      keyframes: p.keyframes.map(({ scrollX, scrollY, depth, tilt, turn, ...k }) => ({
         ...k,
         in: k.in && { ...k.in },
         out: k.out && { ...k.out },
-        ...(v3 ? { scrollX, scrollY } : {}),
+        ...(v3 ? { scrollX, scrollY, depth, tilt, turn } : {}),
       })),
-      ...(v3 ? { repeat: p.repeat } : {}),
+      ...(v3 ? { repeat: p.repeat, back: p.back } : {}),
     });
   }
   const t = doc.timeline;
@@ -661,6 +673,7 @@ async function readAnimation(doc: PaintDocument, a: NonNullable<DocumentJson['an
       pivot: { ...p.pivot },
       keyframes: [...byFrame.values()].sort((x, y) => x.frame - y.frame),
       repeat: p.repeat,
+      back: p.back,
     });
   }
   doc.pieces = pieces;

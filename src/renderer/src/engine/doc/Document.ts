@@ -3,6 +3,7 @@ import { Surface } from '../raster/Surface';
 import { defaultTimeline, type Timeline } from '../anim/timeline';
 import { clonePiece, type Piece } from '../anim/piece';
 import { celAt, celSurfaces, type Cel } from '../anim/cels';
+import { defaultCamera, spaceOf, type Camera, type Space } from '../anim/space';
 import type { Selection } from './Selection';
 import type { Guide } from './guides';
 import type { VectorNode } from '../vector/model';
@@ -232,6 +233,8 @@ export class PaintDocument {
   timeline: Timeline = defaultTimeline();
   /** Animated pieces, bottom to top within each layer (saved in projects). */
   pieces: Piece[] = [];
+  /** The camera 3D pieces are seen through (saved in projects). */
+  camera: Camera;
 
   constructor(init: DocumentInit, layers?: Layer[]) {
     this.width = init.width;
@@ -241,6 +244,12 @@ export class PaintDocument {
     // Layer names are user content; '' means "unnamed" and the UI shows a localised default.
     this.layers = layers ?? [new RasterLayer('', new Surface(init.width, init.height))];
     this.activeId = this.layers[this.layers.length - 1].id;
+    this.camera = defaultCamera(init.width, init.height);
+  }
+
+  /** The camera worked out for the picture's size (what placing pieces in 3D needs). */
+  get space(): Space {
+    return spaceOf(this.camera, this.width, this.height);
   }
 
   get activeLayer(): Layer {

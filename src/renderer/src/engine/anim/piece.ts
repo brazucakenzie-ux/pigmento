@@ -3,6 +3,7 @@ import { matApplyPoints, type Mat } from '../core/matrix';
 import { Surface } from '../raster/Surface';
 import type { ImageBuf } from '../raster/transform';
 import { identityState, stateAt, stateMatrix, STATE_KEYS, type Easing, type Keyframe, type PieceState } from './interpolate';
+import { FLAT_SPACE, placementOf, type Placement, type Space } from './space';
 
 /**
  * Pixels with their own size, belonging to a pixel layer and animated with keyframes. It's
@@ -24,10 +25,15 @@ export interface Piece {
   keyframes: Keyframe[];
   /** Copies of it tile on along its own axes: across, down, or both (an endless plane). */
   repeat: Repeat;
+  /** Turned round in 3D: its pixels show mirrored, like paper, or it isn't drawn. */
+  back: Back;
 }
 
 export type Repeat = 'none' | 'x' | 'y' | 'both';
 export const REPEATS: readonly Repeat[] = ['none', 'x', 'y', 'both'];
+
+export type Back = 'mirror' | 'hide';
+export const BACKS: readonly Back[] = ['mirror', 'hide'];
 
 /** Which of a piece's own axes it repeats along. */
 export function repeatAxes(r: Repeat): { x: boolean; y: boolean } {
@@ -73,6 +79,7 @@ export function makePiece(id: string, name: string, layerId: string, src: ImageB
     pivot,
     keyframes: [{ ...identityState(home.x + pivot.x, home.y + pivot.y), frame, easing: 'linear', in: null, out: null }],
     repeat: 'none',
+    back: 'mirror',
   };
 }
 
@@ -93,6 +100,11 @@ export function cloneKeyframe(k: Keyframe): Keyframe {
 export function pieceStateAt(p: Piece, frame: number): PieceState {
   // Never empty, so stateAt always has an answer.
   return stateAt(p.keyframes, frame) ?? identityState(p.home.x + p.pivot.x, p.home.y + p.pivot.y);
+}
+
+/** Where the piece is at `frame`, in 3D as `space` sees it (flat pieces get an affine too). */
+export function piecePlacementAt(p: Piece, frame: number, space: Space = FLAT_SPACE): Placement {
+  return placementOf(pieceStateAt(p, frame), p.pivot, p.src.width, p.src.height, space);
 }
 
 export function pieceMatrixAt(p: Piece, frame: number): Mat {
