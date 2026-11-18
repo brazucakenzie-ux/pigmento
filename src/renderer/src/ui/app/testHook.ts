@@ -8,7 +8,8 @@ import { openPath } from '../services/files';
 import { autosaveNow } from '../services/autosave';
 import { defaultParams, shapeRegistry } from '@engine/shapes/ShapeRegistry';
 import { paintShape } from '@engine/vector/render';
-import { makePiece, pieceStateAt } from '@engine/anim/piece';
+import { makePiece, piecePlacementAt, pieceStateAt } from '@engine/anim/piece';
+import { project } from '@engine/anim/space';
 import { drawPiece } from '@engine/anim/pieceRaster';
 import { encodeAnimation } from '@engine/io/animExport';
 import { EASINGS, type Keyframe } from '@engine/anim/interpolate';
@@ -209,7 +210,7 @@ export function installTestHook(): void {
     anim: () => engine.anim.info(),
     animateSelection: (keepOriginal = false) => engine.animateSelection(keepOriginal),
     setFrame: (frame: number) => engine.anim.setFrame(frame),
-    setPieceKey: (id: string, frame: number, change: Partial<Record<'x' | 'y' | 'sx' | 'sy' | 'angle' | 'skew' | 'opacity' | 'scrollX' | 'scrollY', number>>) =>
+    setPieceKey: (id: string, frame: number, change: Partial<Record<'x' | 'y' | 'sx' | 'sy' | 'angle' | 'skew' | 'opacity' | 'scrollX' | 'scrollY' | 'depth' | 'tilt' | 'turn', number>>) =>
       engine.anim.setKey(id, frame, change),
     celMirrors: () => engine.renderer.celMirrorCount,
     setTimeline: (change: { fps?: number; length?: number }) => engine.anim.setTimeline(change),
@@ -247,5 +248,19 @@ export function installTestHook(): void {
     pieceFromLayer: (keepOriginal = false) => engine.pieceFromLayer(keepOriginal),
     setPieceRepeat: (id: string, repeat: 'none' | 'x' | 'y' | 'both') => engine.anim.setRepeat(id, repeat),
     selectPiece: (id: string | null) => engine.anim.select(id),
+    setPieceBack: (id: string, back: 'mirror' | 'hide') => engine.anim.setBack(id, back),
+    gpuPlanes: () => engine.renderer.gpuPlanes,
+    /** A pixel of an animation-export frame (drawn on the GPU like the screen), on the paper. */
+    exportFramePixel: (frame: number, x: number, y: number) => {
+      const c = engine.animationFrameCanvas(frame, { scale: 1, transparent: false });
+      const d = c.getContext('2d')!.getImageData(x, y, 1, 1).data;
+      return { r: d[0], g: d[1], b: d[2], a: d[3] };
+    },
+    /** Where a point of a piece (its own pixels) shows in the document at the frame shown. */
+    pieceHandle: (id: string, x: number, y: number) => {
+      const p = engine.anim.piece(id);
+      if (!p) return { x: Number.NaN, y: Number.NaN };
+      return project(piecePlacementAt(p, engine.anim.frame, engine.doc.space), { x, y }) ?? { x: Number.NaN, y: Number.NaN };
+    },
   };
 }

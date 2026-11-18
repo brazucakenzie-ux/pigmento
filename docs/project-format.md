@@ -198,6 +198,15 @@ Pieces in 1.2 can be bigger than the canvas and sit anywhere, partly or wholly o
 - **`repeat`:** `none`, `x` (copies tile on across, along the piece's own horizontal axis), `y` (down) or `both` (an endless plane). Left out, it's `none`.
 - **`scrollX`, `scrollY`** (on each keyframe): how far the tiles have slid along the piece's own axes, in its own pixels, from −1,000,000 to 1,000,000. Only the axes it repeats along count. They aren't wrapped, so a long scroll keeps its speed between keyframes. Left out, they're 0.
 - A repeating piece draws its copies wherever its plane reaches. The pixel at piece point (u, v) shows the piece's own pixel ((u − scrollX) mod width, (v − scrollY) mod height) on the axes it repeats along. Smoothing blends across the seams between copies.
+- **`depth`, `tilt`, `turn`** (on each keyframe): the piece in 3D. Left out, they're 0.
+  - `depth` is how far behind the canvas its pivot is, in pixels (negative is in front), from −1,000,000 to 1,000,000.
+  - `tilt` turns it round its own horizontal axis, top edge back, then `turn` turns it round the upright, like a door. Both are in radians and not wrapped.
+  - `x` and `y` stay where the pivot shows on the canvas. A piece with no tilt or turn stays flat, and depth just shrinks it towards that spot.
+- **`back`** (on the piece): `mirror` (its pixels show mirrored when it's turned round, like paper) or `hide`. Left out, it's `mirror`.
+- **The camera:** it looks at the canvas straight on from its vanishing point, at a distance of (50 % ÷ strength) × the picture's diagonal. The pivot's point in 3D is the one at its depth that shows where the pivot is.
+- **`shade`** (on the piece): how much the picture's light darkens it as it turns away from it, from 0 (off, the default) to 1. A face that faces the camera keeps its colours.
+- **`light`** (in `document.json`): `{ "angle": -30, "height": 45 }`. `angle` is where the light comes from round the picture, in degrees clockwise from straight above, and `height` runs from 0 (grazing) to 90 (from the front). It's left out while it's the default shown here.
+- **`camera`** (in `document.json`, beside `animation`): `{ "x": 640, "y": 400, "strength": 50 }`, the vanishing point in document pixels (−1,000,000 to 1,000,000) and the strength from 1 to 100 %. It's left out while the camera is the default one, in the middle of the canvas at 50 %.
 
 ## Limits and safety
 - Width and height are at most 30,000 px each and 250 megapixels in total. Files may hold at most 2,000 layers, nested at most 64 deep, 200 saved selections and 256 pictures (each at most 4096 × 4096 px; bigger pictures are scaled down when chosen).

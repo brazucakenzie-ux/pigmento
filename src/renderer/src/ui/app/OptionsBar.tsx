@@ -15,8 +15,9 @@ import { actions, runAction } from '../actions/actions';
 import { GradientButton, PatternPicker } from './PaintOptions';
 import { SelectedShapeParams, ShapeOption, ShapeToolParams } from './ShapeGallery';
 import { BrushPicker } from './BrushPicker';
+import { CameraField, LightFields } from './CameraField';
 import { EASINGS, type Easing } from '@engine/anim/interpolate';
-import { REPEATS, repeatAxes, type Repeat } from '@engine/anim/piece';
+import { BACKS, REPEATS, repeatAxes, type Back, type Repeat } from '@engine/anim/piece';
 
 const FALLBACK_FONTS = ['Segoe UI', 'Arial', 'Calibri', 'Cambria', 'Comic Sans MS', 'Consolas', 'Georgia', 'Impact', 'Segoe Print', 'Times New Roman', 'Trebuchet MS', 'Verdana'];
 
@@ -370,13 +371,17 @@ function TransformFields() {
   );
 }
 
-/** The selected piece at the frame shown: position, size, turn, skew, opacity and easing (auto-key). */
-function PieceFields() {
+/**
+ * The selected piece at the frame shown: position, size, turn, skew, opacity and easing
+ * (auto-key). For the Perspective plane tool (`plane`): position, depth, tilt, turn and spin,
+ * size, opacity and what shows of its back.
+ */
+function PieceFields({ plane = false }: { plane?: boolean }) {
   const info = useUi((s) => s.animation.current);
   const keys = useUi((s) => s.animation.pieces.find((p) => p.id === s.animation.selectedId)?.keys.length ?? 0);
   if (!info) return <span className="opt-hint">{t('piece.noneSelected')}</span>;
   const axes = repeatAxes(info.repeat);
-  const field = (key: 'x' | 'y' | 'w' | 'h' | 'angle' | 'skew' | 'opacity' | 'scrollX' | 'scrollY', labelKey: I18nKey, unit: string, min: number, max: number, decimals: number) => {
+  const field = (key: 'x' | 'y' | 'w' | 'h' | 'angle' | 'skew' | 'opacity' | 'scrollX' | 'scrollY' | 'depth' | 'tilt' | 'turn', labelKey: I18nKey, unit: string, min: number, max: number, decimals: number) => {
     const label = t(labelKey);
     return (
       <span className="opt tf-field">
@@ -422,11 +427,58 @@ function PieceFields() {
       </button>
       {field('x', 'transform.x', 'px', -100000, 100000, 0)}
       {field('y', 'transform.y', 'px', -100000, 100000, 0)}
+      {plane ? (
+        <>
+          {field('depth', 'piece.depth', 'px', -100000, 1000000, 0)}
+          {field('tilt', 'piece.tilt', '°', -36000, 36000, 1)}
+          {field('turn', 'piece.turn', '°', -36000, 36000, 1)}
+          {field('angle', 'piece.spin', '°', -36000, 36000, 1)}
+        </>
+      ) : null}
       {field('w', 'transform.w', '%', -100000, 100000, 1)}
       {field('h', 'transform.h', '%', -100000, 100000, 1)}
-      {field('angle', 'transform.angle', '°', -36000, 36000, 1)}
-      {field('skew', 'transform.skew', '°', -85, 85, 1)}
+      {plane ? null : field('angle', 'transform.angle', '°', -36000, 36000, 1)}
+      {plane ? null : field('skew', 'transform.skew', '°', -85, 85, 1)}
       {field('opacity', 'opt.opacity', '%', 0, 100, 0)}
+      {plane ? (
+        <span className="opt tf-field" data-tip={t('piece.shadeTip')}>
+          <span>{t('piece.shade')}</span>
+          <NumberField
+            className="num tf-num"
+            value={Math.round(info.shade)}
+            decimals={0}
+            min={0}
+            max={100}
+            label={t('piece.shade')}
+            onChange={(v) => {
+              const id = engine.anim.selectedId;
+              if (id) engine.anim.setShade(id, v / 100);
+            }}
+            onEnter={() => (document.activeElement as HTMLElement | null)?.blur()}
+          />
+          <span className="unit">%</span>
+        </span>
+      ) : null}
+      {plane ? (
+        <label className="opt">
+          <span>{t('piece.back')}</span>
+          <select
+            className="select"
+            aria-label={t('piece.back')}
+            value={info.back}
+            onChange={(e) => {
+              const id = engine.anim.selectedId;
+              if (id) engine.anim.setBack(id, e.target.value as Back);
+            }}
+          >
+            {BACKS.map((b) => (
+              <option key={b} value={b}>
+                {t(`back.${b}` as I18nKey)}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
       <label className="opt">
         <span>{t('piece.easing')}</span>
         <select className="select" aria-label={t('piece.easing')} value={info.easing} onChange={(e) => engine.anim.setFields({ easing: e.target.value as Easing })}>
@@ -541,6 +593,9 @@ export function OptionsBar() {
         ))}
         {toolId === 'transform' ? <TransformFields /> : null}
         {toolId === 'animate' ? <PieceFields /> : null}
+        {toolId === 'plane' ? <CameraField /> : null}
+        {toolId === 'plane' ? <LightFields /> : null}
+        {toolId === 'plane' ? <PieceFields plane /> : null}
         {tool.symmetry && !simple ? <SymmetryControl /> : null}
         <PathBar />
         {toolId === 'move' && shapeLayer ? <SelectedShapeParams /> : null}

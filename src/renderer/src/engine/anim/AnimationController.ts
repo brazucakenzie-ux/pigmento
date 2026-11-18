@@ -6,6 +6,8 @@ import type { Command, History } from '../history/History';
 import type { ImageBuf } from '../raster/transform';
 import type { I18nKey, I18nParams } from '../../i18n';
 import { movePivot, type Easing } from './interpolate';
+import { movePivot3D } from './planeEdit';
+import { MAX_STRENGTH, MIN_STRENGTH, type Camera, type Light } from './space';
 import { MAX_PIXELS } from '../io/protocol';
 import {
   clonePiece,
@@ -22,6 +24,7 @@ import {
   pieceStateAt,
   type KeyChange,
   type Piece,
+  type Back,
   type Repeat,
 } from './piece';
 import { advance, clampFps, clampFrame, clampLength, type LoopMode, type PlayState, type Timeline } from './timeline';
@@ -57,6 +60,10 @@ export interface AnimationInfo {
   cels: Record<string, number[]>;
   /** Painting tools paint on the selected piece instead of the active layer. */
   paintOnPiece: boolean;
+  /** The camera 3D pieces are seen through. */
+  camera: Camera;
+  /** The light shaded pieces are lit by. */
+  light: Light;
 }
 
 /** A piece's values as the options bar shows them (degrees and percent). */
@@ -73,6 +80,16 @@ export interface PieceFields {
   /** How far its tiles have slid, in its own pixels (a repeating piece). */
   scrollX: number;
   scrollY: number;
+  /** In 3D: pixels behind the canvas, and degrees of tilt and turn. */
+  depth: number;
+  tilt: number;
+  turn: number;
+  /** What shows when it's turned round (not keyframed). */
+  back: Back;
+  /** Shading by the light, in percent (0 = off; not keyframed). */
+  shade: number;
+  /** Tilted or turned at this frame (the Animate tool's flat handles don't apply). */
+  in3d: boolean;
   /** Easing from this frame's keyframe (or the one before it) to the next. */
   easing: Easing;
   /** There's a keyframe at this frame. */
@@ -91,11 +108,15 @@ export interface AnimSnapshot {
   fps: number;
   length: number;
   loop: LoopMode;
+  /** The camera 3D pieces are seen through. */
+  camera: Camera;
+  /** The light shaded pieces are lit by. */
+  light: Light;
 }
 
 export function captureAnim(doc: PaintDocument): AnimSnapshot {
   const t = doc.timeline;
-  return { pieces: doc.pieces.map(clonePiece), fps: t.fps, length: t.length, loop: t.loop };
+  return { pieces: doc.pieces.map(clonePiece), fps: t.fps, length: t.length, loop: t.loop, camera: { ...doc.camera }, light: { ...doc.light } };
 }
 
 export function restoreAnim(doc: PaintDocument, s: AnimSnapshot): void {
@@ -104,6 +125,8 @@ export function restoreAnim(doc: PaintDocument, s: AnimSnapshot): void {
   doc.timeline.length = s.length;
   doc.timeline.loop = s.loop;
   doc.timeline.frame = clampFrame(doc.timeline.frame, s.length);
+  doc.camera = { ...s.camera };
+  doc.light = { ...s.light };
   doc.showFrame(doc.timeline.frame);
 }
 
@@ -219,6 +242,8 @@ export class AnimationController {
       cels: Object.fromEntries(this.doc.rasterLayers().flatMap((l) => (l.cels ? [[l.id, l.cels.map((c) => c.start)]] : []))),
       pieces: this.doc.pieces.map((p) => ({ id: p.id, name: p.name, layerId: p.layerId, keys: p.keyframes.map((k) => ({ frame: k.frame, easing: k.easing })) })),
       paintOnPiece: this.paintOn,
+      camera: { ...this.doc.camera },
+      light: { ...this.doc.light },
     };
   }
 
@@ -240,6 +265,12 @@ export class AnimationController {
       opacity: s.opacity * 100,
       scrollX: s.scrollX,
       scrollY: s.scrollY,
+      depth: s.depth,
+      tilt: s.tilt * DEG,
+      turn: s.turn * DEG,
+      back: p.back,
+      shade: p.shade * 100,
+      in3d: s.tilt !== 0 || s.turn !== 0 || s.depth !== 0,
       easing: (at ?? before).easing,
       keyed: at !== undefined,
       curved: at !== undefined && (at.in !== null || at.out !== null),
@@ -248,7 +279,7 @@ export class AnimationController {
   }
 
   /** Set the selected piece's values at the current frame (auto-key), in the options bar's units. */
-  setFields(change: Partial<Omit<PieceFields, 'keyed' | 'curved' | 'repeat'>>): boolean {
+  setFields(change: Partial<Omit<PieceFields, 'keyed' | 'curved' | 'repeat' | 'back' | 'in3d' | 'shade'>>): boolean {
     const p = this.selected;
     if (!p) return false;
     const k: KeyChange = {};
@@ -261,8 +292,66 @@ export class AnimationController {
     if (change.opacity !== undefined) k.opacity = Math.max(0, Math.min(100, change.opacity)) / 100;
     if (change.scrollX !== undefined) k.scrollX = clampScroll(change.scrollX);
     if (change.scrollY !== undefined) k.scrollY = clampScroll(change.scrollY);
+    if (change.tilt !== undefined) k.tilt = change.tilt / DEG;
+    if (change.turn !== undefined) k.turn = change.turn / DEG;
+    // Never at or past the camera.
+    if (change.depth !== undefined) k.depth = Math.max(-this.doc.space.f * 0.99, Math.min(1e6, change.depth));
     if (change.easing !== undefined) k.easing = change.easing;
     return this.setKey(p.id, this.frame, k);
+  }
+
+  /** What shows when a piece is turned round in 3D (one undo step; not keyframed). */
+  setBack(id: string, back: Back): boolean {
+    const p = this.piece(id);
+    if (!p || p.back === back) return false;
+    return this.change('history.pieceBack', () => {
+      p.back = back;
+      return true;
+    });
+  }
+
+  /** The camera with `change`, kept sensible (strength 1–100 %, a finite vanishing point). */
+  private cameraWith(change: Partial<Camera>): Camera {
+    const c = { ...this.doc.camera, ...change };
+    const fin = (v: number, d: number) => (Number.isFinite(v) ? Math.max(-1e6, Math.min(1e6, v)) : d);
+    return { x: fin(c.x, this.doc.width / 2), y: fin(c.y, this.doc.height / 2), strength: Math.min(MAX_STRENGTH, Math.max(MIN_STRENGTH, Number.isFinite(c.strength) ? c.strength : 50)) };
+  }
+
+  /** Move the vanishing point or change the perspective's strength (one undo step). */
+  setCamera(change: Partial<Camera>): boolean {
+    const next = this.cameraWith(change);
+    return this.change('history.camera', () => {
+      this.doc.camera = next;
+      return true;
+    });
+  }
+
+  /** Change the camera live during a drag (no undo step yet). */
+  previewCamera(change: Partial<Camera>): void {
+    if (!this.drag) return;
+    this.doc.camera = this.cameraWith(change);
+    this.host.animationChanged(null);
+  }
+
+  /** Where the light comes from (degrees round the view from above, and its height: 0 … 90). One undo step. */
+  setLight(change: Partial<Light>): boolean {
+    const l = { ...this.doc.light, ...change };
+    const next = { angle: Number.isFinite(l.angle) ? ((((l.angle + 180) % 360) + 360) % 360) - 180 : -30, height: Math.min(90, Math.max(0, Number.isFinite(l.height) ? l.height : 45)) };
+    return this.change('history.light', () => {
+      this.doc.light = next;
+      return true;
+    });
+  }
+
+  /** How strongly a piece is shaded by the light in 3D (0 … 1, 0 = off; one undo step, not keyframed). */
+  setShade(id: string, shade: number): boolean {
+    const p = this.piece(id);
+    const v = Math.min(1, Math.max(0, Number.isFinite(shade) ? shade : 0));
+    if (!p || p.shade === v) return false;
+    return this.change('history.pieceShade', () => {
+      p.shade = v;
+      return true;
+    });
   }
 
   /** Which way copies of a piece tile on (one undo step; not keyframed). */
@@ -644,7 +733,9 @@ export class AnimationController {
     const p = this.piece(id);
     if (!p || (pivot.x === p.pivot.x && pivot.y === p.pivot.y)) return false;
     return this.change('history.pivot', () => {
-      p.keyframes = movePivot(p.keyframes, p.pivot, pivot);
+      // In 3D the piece stays put too (a flat piece's keyframes come out as movePivot's).
+      const in3d = p.keyframes.some((k) => k.depth !== 0 || k.tilt !== 0 || k.turn !== 0);
+      p.keyframes = in3d ? movePivot3D(p.keyframes, p.pivot, pivot, this.doc.space) : movePivot(p.keyframes, p.pivot, pivot);
       p.pivot = { ...pivot };
       return true;
     });
@@ -690,6 +781,8 @@ export class AnimationController {
 /** Two snapshots hold the same animation (pixels are compared by identity). */
 function sameAnim(a: AnimSnapshot, b: AnimSnapshot): boolean {
   if (a.fps !== b.fps || a.length !== b.length || a.loop !== b.loop || a.pieces.length !== b.pieces.length) return false;
+  if (a.camera.x !== b.camera.x || a.camera.y !== b.camera.y || a.camera.strength !== b.camera.strength) return false;
+  if (a.light.angle !== b.light.angle || a.light.height !== b.light.height) return false;
   if (a.pieces.some((p, i) => p.src !== b.pieces[i].src)) return false;
   return JSON.stringify(a.pieces.map(strip)) === JSON.stringify(b.pieces.map(strip));
 }

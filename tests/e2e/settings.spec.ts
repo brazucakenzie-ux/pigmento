@@ -21,6 +21,7 @@ const saved = (): { shortcuts?: Record<string, string[]>; ui?: { scale: number; 
 };
 
 test('changes the interface size and the keyboard shortcuts, clashes and all', async () => {
+  // F8 isn't used by anything (every letter is a tool or a colour shortcut since the Perspective plane tool took M).
   h = await launchApp();
   const { page } = h;
   await ready(page);
@@ -47,39 +48,39 @@ test('changes the interface size and the keyboard shortcuts, clashes and all', a
   await expect(dlg).toBeVisible();
   await expect(brush).not.toContainText('Press the keys');
   await brush.getByRole('button', { name: 'Add a shortcut for Brush' }).click();
-  await page.keyboard.press('m');
-  await expect(brush.locator('kbd')).toHaveText(['B', 'M']);
+  await page.keyboard.press('F8');
+  await expect(brush.locator('kbd')).toHaveText(['B', 'F8']);
 
   // The same key for the Pencil clashes; taking it moves it over.
   const pencil = dlg.getByRole('group', { name: 'Pencil', exact: true });
   await pencil.getByRole('button', { name: 'Add a shortcut for Pencil' }).click();
-  await page.keyboard.press('m');
-  await expect(dlg.getByRole('alert')).toHaveText(/M is already used by Brush\./);
+  await page.keyboard.press('F8');
+  await expect(dlg.getByRole('alert')).toHaveText(/F8 is already used by Brush\./);
   await expect(dlg.getByRole('button', { name: 'Share it (switches between them)' })).toBeVisible();
   await dlg.getByRole('button', { name: 'Use it here instead' }).click();
-  await expect(pencil.locator('kbd')).toHaveText(['P', 'M']);
+  await expect(pencil.locator('kbd')).toHaveText(['P', 'F8']);
   await expect(brush.locator('kbd')).toHaveText(['B']);
   // Keys that keep their meaning can't be taken.
   await pencil.getByRole('button', { name: 'Add a shortcut for Pencil' }).click();
   await page.keyboard.press('Tab');
-  await expect(pencil.locator('kbd')).toHaveText(['P', 'M']);
+  await expect(pencil.locator('kbd')).toHaveText(['P', 'F8']);
   await page.keyboard.press('Escape');
   await dlg.getByRole('button', { name: 'Close', exact: true }).last().click();
 
   await page.keyboard.press('b');
-  await page.keyboard.press('m');
+  await page.keyboard.press('F8');
   expect(await tool()).toBe('pencil');
-  await expect.poll(() => saved().shortcuts).toEqual({ 'tool.pencil': ['P', 'M'] });
+  await expect.poll(() => saved().shortcuts).toEqual({ 'tool.pencil': ['P', 'F8'] });
   // The cheat sheet shows it too.
   await page.keyboard.press('F1');
   const sheet = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
-  await expect(sheet.locator('.shortcut-row', { hasText: /^Pencil/ })).toContainText('M');
+  await expect(sheet.locator('.shortcut-row', { hasText: /^Pencil/ })).toContainText('F8');
   await page.keyboard.press('Escape');
 
   // Remove one, then reset everything.
   await page.keyboard.press('Control+Alt+s');
   await dlg.getByRole('tab', { name: 'Keyboard shortcuts' }).click();
-  await pencil.getByRole('button', { name: 'Remove M from Pencil' }).click();
+  await pencil.getByRole('button', { name: 'Remove F8 from Pencil' }).click();
   await expect(pencil.locator('kbd')).toHaveText(['P']);
   await pencil.getByRole('button', { name: 'Remove P from Pencil' }).click();
   await expect(pencil.locator('kbd')).toHaveCount(0);

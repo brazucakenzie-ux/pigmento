@@ -12,7 +12,7 @@ import { frameExtras } from './anim/pieceRaster';
 import { pieceBounds, pieceStateAt, type Piece } from './anim/piece';
 import { docToPixel } from './anim/pieceEdit';
 import { PiecePixelsCommand } from './anim/piecePaint';
-import { transformPieces } from './anim/pieceTransform';
+import { keepsDepth, transformCamera, transformPieces } from './anim/pieceTransform';
 import { celAt } from './anim/cels';
 import { clampFrame } from './anim/timeline';
 import { Selection, type SelectionMode, type SelectionModify } from './doc/Selection';
@@ -228,6 +228,8 @@ export interface ViewOptions {
   snapObjects: boolean;
   /** Show the parts of pieces beyond the canvas (faded), and let the view reach them. */
   piecesOutside: boolean;
+  /** The perspective grid guide (view only, never exported). */
+  perspectiveGrid: boolean;
 }
 
 /** How far outside the canvas the view reaches for pieces (keeps a stray typed number sane). */
@@ -325,6 +327,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     snapCanvas: true,
     snapObjects: true,
     piecesOutside: true,
+    perspectiveGrid: false,
   };
 
   get viewSettings(): Readonly<ViewOptions> {
@@ -455,6 +458,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     const ov = this.overlay;
     ov.begin();
     if (this.viewOptions.gridlines) ov.gridlines(this.viewOptions.gridSize);
+    if (this.viewOptions.perspectiveGrid) ov.perspectiveGrid(this.doc.camera, this.doc.width, this.doc.height);
     const gp = this.guidePreview;
     if (this.viewOptions.showGuides) for (const g of this.doc.guides) if (g.id !== gp?.id) ov.guide(g.axis, g.pos);
     if (gp) ov.guide(gp.axis, gp.pos, true);
@@ -504,8 +508,9 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     let r: Rect | null = null;
     if (this.viewOptions.piecesOutside && this.doc.pieces.length) {
       const frame = this.doc.timeline.frame;
+      const space = this.doc.space;
       for (const p of this.doc.pieces) {
-        if (this.doc.layerById(p.layerId)?.kind === 'raster' && this.doc.isEffectivelyVisible(p.layerId)) r = rectUnion(r, pieceBounds(p, frame));
+        if (this.doc.layerById(p.layerId)?.kind === 'raster' && this.doc.isEffectivelyVisible(p.layerId)) r = rectUnion(r, pieceBounds(p, frame, space));
       }
       if (r) {
         const x0 = Math.max(-MAX_REACH, r.x);
@@ -1262,7 +1267,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
    */
   private async fillPiece(piece: Piece, x: number, y: number, paint: RGBA | FillPattern, tolerance: number, contiguous: boolean): Promise<void> {
     if (this.fillBusy || !this.anim.canPaint(piece)) return;
-    const q = docToPixel(piece, pieceStateAt(piece, this.doc.timeline.frame), { x, y });
+    const q = docToPixel(piece, pieceStateAt(piece, this.doc.timeline.frame), { x, y }, this.doc.space);
     const s = piece.src;
     const { width: w, height: h } = s;
     const px = q ? Math.floor(q.x) : -1;
@@ -2014,6 +2019,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       l.setObjects(l.objects.map((n) => transformNode(n, m)));
     }
     this.doc.pieces = transformPieces(this.doc.pieces, m);
+    this.doc.camera = transformCamera(this.doc.camera, m, this.doc.width, this.doc.height, w, h);
   }
 
   /** Area a shape layer's objects cover, outlines included. */
@@ -2594,6 +2600,11 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       const warpedMask = mask ? affineTransform(mask, matChain(matTranslate(mask.x, mask.y), around), true) : null;
       f.resetTo(warped, outline, warpedMask);
       this.refreshFloat(f, before);
+      return;
+    }
+    // A skewed perspective isn't anything a camera sees: tilted or turned pieces would come out wrong.
+    if (!keepsDepth(m) && this.doc.pieces.some((p) => p.keyframes.some((k) => k.tilt !== 0 || k.turn !== 0))) {
+      this.notify('info', 'notice.skew3d');
       return;
     }
     this.transformWholeImage('history.skew', m);

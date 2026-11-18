@@ -26,11 +26,11 @@ describe('painting on a piece maps the canvas onto its own pixels', () => {
     p.keyframes = setKey(p.keyframes, 0, { x: 300, y: 300, sx: 2, sy: 2, angle: Math.PI / 2 });
     const map = piecePaintMap(p, pieceStateAt(p, 0))!;
     // The pivot (the middle) is now at (300, 300).
-    const mid = map.toPiece({ x: 300, y: 300 });
+    const mid = map.toPiece({ x: 300, y: 300 })!;
     expect(mid.x).toBeCloseTo(25, 9);
     expect(mid.y).toBeCloseTo(10, 9);
     for (const q of [{ x: 0, y: 0 }, { x: 13.5, y: 7.25 }, { x: 50, y: 20 }]) {
-      const back = map.toPiece(map.toDoc(q));
+      const back = map.toPiece(map.toDoc(q)!)!;
       expect(back.x).toBeCloseTo(q.x, 9);
       expect(back.y).toBeCloseTo(q.y, 9);
     }

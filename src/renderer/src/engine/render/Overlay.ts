@@ -343,6 +343,51 @@ export class Overlay {
     c.restore();
   }
 
+  /**
+   * A perspective guide on the canvas (view only): the horizon through vanishing point vp, and
+   * lines running from it out to the canvas's edges, as the edges of a floor, walls and ceiling
+   * would. Everything is in document pixels.
+   */
+  perspectiveGrid(vp: Point, w: number, h: number): void {
+    const v = this.view;
+    const c = this.ctx;
+    const n = 12;
+    const ends: Point[] = [];
+    for (let i = 0; i <= n; i++) {
+      ends.push({ x: (w * i) / n, y: 0 }, { x: (w * i) / n, y: h });
+      if (i > 0 && i < n) ends.push({ x: 0, y: (h * i) / n }, { x: w, y: (h * i) / n });
+    }
+    c.save();
+    c.beginPath();
+    // Only on the canvas: the guide is about what's in the picture.
+    const tl = v.toScreen(0, 0);
+    const tr = v.toScreen(w, 0);
+    const br = v.toScreen(w, h);
+    const bl = v.toScreen(0, h);
+    c.moveTo(tl.x, tl.y);
+    c.lineTo(tr.x, tr.y);
+    c.lineTo(br.x, br.y);
+    c.lineTo(bl.x, bl.y);
+    c.closePath();
+    c.clip();
+    c.beginPath();
+    const o = v.toScreen(vp.x, vp.y);
+    for (const e of ends) {
+      const s = v.toScreen(e.x, e.y);
+      c.moveTo(o.x, o.y);
+      c.lineTo(s.x, s.y);
+    }
+    const hl = v.toScreen(Math.min(0, vp.x) - w, vp.y);
+    const hr = v.toScreen(Math.max(w, vp.x) + w, vp.y);
+    c.moveTo(hl.x, hl.y);
+    c.lineTo(hr.x, hr.y);
+    c.lineWidth = 1;
+    c.strokeStyle = this.theme.grid;
+    c.setLineDash([4, 4]);
+    c.stroke();
+    c.restore();
+  }
+
   /** User gridlines every `spacing` document pixels within the visible doc area. */
   gridlines(spacing: number): void {
     const v = this.view;

@@ -132,6 +132,22 @@ describe('projects with what 1.2 adds to pieces (version 3)', () => {
     expect(versionFor(doc)).toBe(3);
   });
 
+  it('keeps a piece’s depth, tilt, turn and back in version 3', async () => {
+    const doc = animatedDoc();
+    const [p] = doc.pieces;
+    p.back = 'hide';
+    p.keyframes = setKey(p.keyframes, 12, { depth: 250, tilt: 0.75, turn: -7 });
+    expect(versionFor(doc)).toBe(3);
+    const back = await loadProject(await saveProject(doc, rawCodec), rawCodec);
+    expect(back.pieces[0].back).toBe('hide');
+    expect(back.pieces[0].keyframes).toEqual(p.keyframes);
+    // Out of range is refused, like every other number.
+    const bad = await rewrite(await saveProject(doc, rawCodec), (j) => {
+      (j.animation as { pieces: { keyframes: { depth: number }[] }[] }).pieces[0].keyframes[0].depth = 1e9;
+    });
+    await expect(loadProject(bad, rawCodec)).rejects.toMatchObject({ key: 'error.projectInvalid' });
+  });
+
   it('writes version 2 exactly as 1.1 did: no repeat, no scroll fields', async () => {
     const files = unzipSync(await saveProject(animatedDoc(), rawCodec));
     const json = JSON.parse(strFromU8(files['document.json'])) as { animation: { pieces: Record<string, unknown>[] } };

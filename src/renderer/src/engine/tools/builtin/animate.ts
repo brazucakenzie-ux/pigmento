@@ -2,7 +2,7 @@ import type { Point } from '../../core/geometry';
 import { walkLayers } from '../../doc/Document';
 import { handleCursor, ROTATE_HANDLE_OFFSET } from '../../live/BoxGeom';
 import { movePivot, type Keyframe, type PieceState } from '../../anim/interpolate';
-import { cloneKeyframe, pieceStateAt, setKey, type Piece } from '../../anim/piece';
+import { cloneKeyframe, pieceCorners, pieceStateAt, setKey, type Piece } from '../../anim/piece';
 import {
   docToLocal,
   handleLocal,
@@ -100,6 +100,12 @@ function geometry(ctx: ToolContext, p: Piece): ScreenGeom {
 
 const near = (a: Point, b: Point, px = HIT_PX): boolean => Math.abs(a.x - b.x) <= px && Math.abs(a.y - b.y) <= px;
 
+/** The piece has depth, tilt or turn at the frame shown. */
+function in3d(ctx: ToolContext, p: Piece): boolean {
+  const s = pieceStateAt(p, ctx.anim.frame);
+  return s.depth !== 0 || s.tilt !== 0 || s.turn !== 0;
+}
+
 function hitSelected(ctx: ToolContext, p: Piece, e: ToolPointerEvent): Hit | null {
   const g = geometry(ctx, p);
   const sp = { x: e.sx, y: e.sy };
@@ -114,11 +120,14 @@ function hitSelected(ctx: ToolContext, p: Piece, e: ToolPointerEvent): Hit | nul
     }
   }
   if (e.alt) for (const k of keys) if (near(sp, dot(k))) return { kind: 'pull', frame: k.frame };
-  if (near(sp, g.pivot)) return { kind: 'pivot' };
-  for (const h of PIECE_HANDLES) if (near(sp, g.handles[h])) return { kind: 'handle', handle: h };
-  if (near(sp, g.rotate)) return { kind: 'rotate' };
+  // A piece in 3D is moved here, and shaped with the Perspective plane tool (its box isn't flat).
+  if (!in3d(ctx, p)) {
+    if (near(sp, g.pivot)) return { kind: 'pivot' };
+    for (const h of PIECE_HANDLES) if (near(sp, g.handles[h])) return { kind: 'handle', handle: h };
+    if (near(sp, g.rotate)) return { kind: 'rotate' };
+  }
   for (const k of keys) if (k.frame !== frame && near(sp, dot(k))) return { kind: 'key', frame: k.frame };
-  if (insidePiece(p, frame, e)) return { kind: 'body' };
+  if (insidePiece(p, frame, e, ctx.doc.space)) return { kind: 'body' };
   return null;
 }
 
@@ -182,7 +191,7 @@ export default registerTool({
     let hit = piece ? hitSelected(ctx, piece, e) : null;
     // A repeating piece's copies reach everywhere: a piece showing on top of them is picked instead.
     if (piece && hit?.kind === 'body' && piece.repeat !== 'none') {
-      const top = pieceAt(visiblePieces(ctx), ctx.anim.frame, e);
+      const top = pieceAt(visiblePieces(ctx), ctx.anim.frame, e, ctx.doc.space);
       if (top && top.id !== piece.id) hit = null;
     }
     // Double-click a keyframe's dot: a straight path there again.
@@ -191,7 +200,7 @@ export default registerTool({
       if (ctx.anim.straighten(piece.id, frame)) return;
     }
     if (!hit) {
-      piece = pieceAt(visiblePieces(ctx), ctx.anim.frame, e);
+      piece = pieceAt(visiblePieces(ctx), ctx.anim.frame, e, ctx.doc.space);
       ctx.anim.select(piece?.id ?? null);
       if (!piece) return;
       hit = { kind: 'body' };
@@ -285,7 +294,7 @@ export default registerTool({
   hover(ctx, e) {
     const sel = ctx.anim.selected;
     const hit = sel ? hitSelected(ctx, sel, e) : null;
-    const over = hit ? null : pieceAt(visiblePieces(ctx), ctx.anim.frame, e);
+    const over = hit ? null : pieceAt(visiblePieces(ctx), ctx.anim.frame, e, ctx.doc.space);
     const id = over?.id ?? null;
     if (id !== hovered) {
       hovered = id;
@@ -322,17 +331,18 @@ export default registerTool({
   },
   drawOverlay(ctx, ov) {
     const sel = ctx.anim.selected;
+    // The outline as it's drawn (in 3D, the sheet seen in perspective).
+    const outline = (p: Piece) => pieceCorners(p, ctx.anim.frame, ctx.doc.space).map((q) => ctx.view.toScreen(q.x, q.y));
     for (const p of visiblePieces(ctx)) {
       if (p === sel) continue;
       // Unselected pieces show a faint outline, so they can be found and clicked.
-      const g = geometry(ctx, p);
-      if (p.id === hovered) ov.outlineScreen(g.corners, true, false);
-      else ov.outlineScreen(g.corners, true, true);
+      ov.outlineScreen(outline(p), true, p.id !== hovered);
     }
     if (!sel || !ctx.doc.isEffectivelyVisible(sel.layerId)) return;
     drawPath(ctx, ov, sel);
+    ov.outlineScreen(outline(sel), true, false);
+    if (in3d(ctx, sel)) return;
     const g = geometry(ctx, sel);
-    ov.outlineScreen(g.corners, true, false);
     const active = drag?.hit;
     for (const h of PIECE_HANDLES) ov.handle(g.handles[h], 'square', active?.kind === 'handle' && active.handle === h);
     ov.line(g.topMid, g.rotate);
