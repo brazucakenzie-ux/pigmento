@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { PaintDocument, RasterLayer } from '@engine/doc/Document';
-import { loadProject, PROJECT_VERSION, saveProject, type PngCodec } from '@engine/io/project';
+import { loadProject, PROJECT_VERSION, saveProject, versionFor, type PngCodec } from '@engine/io/project';
 import { Surface } from '@engine/raster/Surface';
 import { makePiece, setKey } from '@engine/anim/piece';
 
@@ -46,7 +46,8 @@ describe('projects with animation (version 2)', () => {
     const doc = animatedDoc();
     const bytes = await saveProject(doc, rawCodec);
     const json = JSON.parse(strFromU8(unzipSync(bytes)['document.json'])) as { version: number };
-    expect(json.version).toBe(PROJECT_VERSION);
+    // Nothing from 1.2 in it, so Pigmento 1.1 can open it.
+    expect(json.version).toBe(2);
     const back = await loadProject(bytes, rawCodec);
     expect(back.timeline).toEqual({ fps: 24, length: 30, loop: 'pingpong', frame: 7 });
     expect(back.pieces).toHaveLength(1);
@@ -106,6 +107,63 @@ describe('projects with animation (version 2)', () => {
   });
 });
 
+describe('projects with what 1.2 adds to pieces (version 3)', () => {
+  /** The animated picture with its piece repeating across and scrolling. */
+  function scrollingDoc(): PaintDocument {
+    const doc = animatedDoc();
+    const [p] = doc.pieces;
+    p.repeat = 'x';
+    p.keyframes = setKey(p.keyframes, 12, { scrollX: -37.5 });
+    return doc;
+  }
+
+  it('writes version 3 for a repeating or scrolling piece, and keeps both', async () => {
+    const doc = scrollingDoc();
+    const bytes = await saveProject(doc, rawCodec);
+    const json = JSON.parse(strFromU8(unzipSync(bytes)['document.json'])) as { version: number };
+    expect(json.version).toBe(PROJECT_VERSION);
+    expect(PROJECT_VERSION).toBe(3);
+    const back = await loadProject(bytes, rawCodec);
+    expect(back.pieces[0].repeat).toBe('x');
+    expect(back.pieces[0].keyframes).toEqual(doc.pieces[0].keyframes);
+    expect(back.pieces[0].keyframes.find((k) => k.frame === 12)?.scrollX).toBe(-37.5);
+    // A scroll alone (repeat turned off again) still needs version 3 to come back the same.
+    doc.pieces[0].repeat = 'none';
+    expect(versionFor(doc)).toBe(3);
+  });
+
+  it('writes version 2 exactly as 1.1 did: no repeat, no scroll fields', async () => {
+    const files = unzipSync(await saveProject(animatedDoc(), rawCodec));
+    const json = JSON.parse(strFromU8(files['document.json'])) as { animation: { pieces: Record<string, unknown>[] } };
+    const [piece] = json.animation.pieces;
+    expect(piece).not.toHaveProperty('repeat');
+    for (const k of piece.keyframes as Record<string, unknown>[]) {
+      expect(k).not.toHaveProperty('scrollX');
+      expect(k).not.toHaveProperty('scrollY');
+    }
+  });
+
+  it('opens 1.1’s version 2 pieces as not repeating and not scrolled', async () => {
+    const back = await loadProject(await saveProject(animatedDoc(), rawCodec), rawCodec);
+    expect(back.pieces[0].repeat).toBe('none');
+    expect(back.pieces[0].keyframes.every((k) => k.scrollX === 0 && k.scrollY === 0)).toBe(true);
+  });
+
+  it('refuses version 3 values out of range, and a newer version than it knows', async () => {
+    const base = await saveProject(scrollingDoc(), rawCodec);
+    for (const edit of [
+      (a: { pieces: { repeat: string }[] }) => (a.pieces[0].repeat = 'diagonal'),
+      (a: { pieces: { keyframes: { scrollX: number }[] }[] }) => (a.pieces[0].keyframes[0].scrollX = 1e12),
+      (a: { pieces: { keyframes: { scrollY: unknown }[] }[] }) => (a.pieces[0].keyframes[0].scrollY = 'far'),
+    ]) {
+      const bytes = await rewrite(base, (j) => edit(j.animation as never));
+      await expect(loadProject(bytes, rawCodec)).rejects.toMatchObject({ key: 'error.projectInvalid' });
+    }
+    const newer = await rewrite(base, (j) => (j.version = PROJECT_VERSION + 1));
+    await expect(loadProject(newer, rawCodec)).rejects.toMatchObject({ key: 'error.projectNewer' });
+  });
+});
+
 describe('projects with frame-by-frame drawings', () => {
   function celDoc(): PaintDocument {
     const fill = (r: number) => {
@@ -129,7 +187,7 @@ describe('projects with frame-by-frame drawings', () => {
     const bytes = await saveProject(celDoc(), rawCodec);
     const files = unzipSync(bytes);
     const json = JSON.parse(strFromU8(files['document.json'])) as { version: number; layers: { cels: { start: number; image: unknown }[] }[] };
-    expect(json.version).toBe(PROJECT_VERSION);
+    expect(json.version).toBe(2);
     // The blank drawing stores no picture.
     expect(json.layers[0].cels.map((c) => [c.start, c.image === null])).toEqual([
       [0, false],

@@ -42,8 +42,18 @@ import { MAX_CELS, type Cel } from '../anim/cels';
  * and one PNG per raster layer, cropped to the layer's content. See docs/project-format.md.
  */
 export const PROJECT_MAGIC = 'pigmento-project';
-/** Version 2 adds animation; a picture without any is still written as version 1, which 1.0 opens. */
-export const PROJECT_VERSION = 2;
+/**
+ * Version 2 adds animation, version 3 what 1.2 adds to pieces (repeat and scroll so far). A
+ * picture is written as the oldest version that holds everything in it, so older Pigmentos open
+ * whatever they can show correctly: 1 without animation, 2 with 1.1's animation only.
+ */
+export const PROJECT_VERSION = 3;
+
+/** The oldest version that holds everything in `doc`. */
+export function versionFor(doc: PaintDocument): 1 | 2 | 3 {
+  if (doc.pieces.some((p) => p.repeat !== 'none' || p.keyframes.some((k) => k.scrollX !== 0 || k.scrollY !== 0))) return 3;
+  return doc.pieces.length || doc.hasCels ? 2 : 1;
+}
 
 const MAX_LAYERS = 2000;
 const MAX_DEPTH = 64;
@@ -428,7 +438,9 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
   }
   // Animated pieces on pixel layers that are still there.
   const rasterIds = new Set(doc.rasterLayers().map((l) => l.id));
-  const pieces: NonNullable<DocumentJson['animation']>['pieces'] = [];
+  const pieces: z.input<typeof PieceJson>[] = [];
+  // A version 2 file is written exactly as 1.1 wrote it, without the fields 1.2 added.
+  const v3 = versionFor(doc) >= 3;
   for (const p of doc.pieces) {
     if (!rasterIds.has(p.layerId)) continue;
     const file = `pieces/${String(pieces.length + 1).padStart(4, '0')}.png`;
@@ -440,15 +452,21 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
       image: { file, w: p.src.width, h: p.src.height },
       home: { ...p.home },
       pivot: { ...p.pivot },
-      keyframes: p.keyframes.map((k) => ({ ...k, in: k.in && { ...k.in }, out: k.out && { ...k.out } })),
-      repeat: p.repeat,
+      keyframes: p.keyframes.map(({ scrollX, scrollY, ...k }) => ({
+        ...k,
+        in: k.in && { ...k.in },
+        out: k.out && { ...k.out },
+        ...(v3 ? { scrollX, scrollY } : {}),
+      })),
+      ...(v3 ? { repeat: p.repeat } : {}),
     });
   }
   const t = doc.timeline;
   const animation = pieces.length || doc.hasCels ? { fps: t.fps, length: t.length, loop: t.loop, frame: t.frame, pieces } : null;
-  const json: DocumentJson = {
+  // What is written: fields with defaults may be left out (older versions don't have them).
+  const json: z.input<typeof DocumentJsonSchema> = {
     format: PROJECT_MAGIC,
-    version: animation ? PROJECT_VERSION : 1,
+    version: animation ? versionFor(doc) : 1,
     width: doc.width,
     height: doc.height,
     dpi: doc.dpi,
