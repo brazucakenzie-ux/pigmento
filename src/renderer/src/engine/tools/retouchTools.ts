@@ -1,6 +1,6 @@
 import type { I18nKey } from '../../i18n';
 import type { DabOp } from '../brush/retouch';
-import { brushOf, BRUSH_OPTION, createBrushTool, SMOOTHING_OPTION, type BrushToolConfig, type DirectPaint } from './brushTool';
+import { brushOf, BRUSH_OPTION, createBrushTool, drawBrushCursor, SMOOTHING_OPTION, type BrushToolConfig, type DirectPaint } from './brushTool';
 import type { OptionSpec, Tool, ToolContext } from './Tool';
 
 /** A strength slider (0–100 %) for retouching tools. */
@@ -51,7 +51,11 @@ export function createRetouchTool(cfg: RetouchConfig): Tool {
     direct: { begin: (ctx, s) => cfg.op(ctx, ctx.options(cfg.id), s) },
     altClick: cfg.altClick,
     overlay: (ctx, ov, hover) => {
-      ov.brushCursor(ov.toScreen(hover), (Number(ctx.options(cfg.id).size ?? 30) / 2) * ctx.view.zoom);
+      const o = ctx.options(cfg.id);
+      const size = Number(o.size ?? 30);
+      // On a piece the circle follows its transform; on a layer it's the plain circle.
+      if (ctx.anim.paintTarget) drawBrushCursor(ctx, ov, hover, { ...brushOf(o, fallback).settings, roundness: 1, angle: 0 }, size);
+      else ov.brushCursor(ov.toScreen(hover), (size / 2) * ctx.view.zoom);
       cfg.overlay?.(ctx, ov, hover);
     },
   });

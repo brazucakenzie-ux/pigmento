@@ -209,7 +209,7 @@ export function installTestHook(): void {
     anim: () => engine.anim.info(),
     animateSelection: (keepOriginal = false) => engine.animateSelection(keepOriginal),
     setFrame: (frame: number) => engine.anim.setFrame(frame),
-    setPieceKey: (id: string, frame: number, change: Partial<Record<'x' | 'y' | 'sx' | 'sy' | 'angle' | 'skew' | 'opacity', number>>) =>
+    setPieceKey: (id: string, frame: number, change: Partial<Record<'x' | 'y' | 'sx' | 'sy' | 'angle' | 'skew' | 'opacity' | 'scrollX' | 'scrollY', number>>) =>
       engine.anim.setKey(id, frame, change),
     celMirrors: () => engine.renderer.celMirrorCount,
     setTimeline: (change: { fps?: number; length?: number }) => engine.anim.setTimeline(change),
@@ -237,5 +237,15 @@ export function installTestHook(): void {
       const p = engine.anim.piece(id);
       return p ? pieceStateAt(p, frame) : null;
     },
+    /** A piece's own size and where it came from (or was placed). */
+    pieceInfo: (id: string) => {
+      const p = engine.anim.piece(id);
+      return p ? { w: p.src.width, h: p.src.height, home: { ...p.home }, layerId: p.layerId } : null;
+    },
+    /** A pixel of a piece's own pixels. */
+    piecePixel: (id: string, x: number, y: number) => engine.anim.piece(id)?.src.getPixel(x, y) ?? null,
+    pieceFromLayer: (keepOriginal = false) => engine.pieceFromLayer(keepOriginal),
+    setPieceRepeat: (id: string, repeat: 'none' | 'x' | 'y' | 'both') => engine.anim.setRepeat(id, repeat),
+    selectPiece: (id: string | null) => engine.anim.select(id),
   };
 }

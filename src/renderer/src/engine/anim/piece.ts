@@ -1,25 +1,37 @@
 import { boundsOfPoints, type Point, type Rect } from '../core/geometry';
 import { matApplyPoints, type Mat } from '../core/matrix';
+import { Surface } from '../raster/Surface';
 import type { ImageBuf } from '../raster/transform';
 import { identityState, stateAt, stateMatrix, STATE_KEYS, type Easing, type Keyframe, type PieceState } from './interpolate';
 
 /**
- * Pixels lifted from a selection on a pixel layer and animated with keyframes. It's drawn just
- * above its layer's pixels, inside the layer. `src` never changes once the piece is made, so
- * undo snapshots share it.
+ * Pixels with their own size, belonging to a pixel layer and animated with keyframes. It's
+ * drawn just above its layer's pixels, inside the layer, and may sit partly or wholly outside
+ * the canvas. `src` is only ever written inside a surface edit (so a tile is copied before it
+ * changes), which lets undo snapshots and copies share its tiles.
  */
 export interface Piece {
   readonly id: string;
   /** User content ('' = unnamed; the UI shows a localised default). */
   name: string;
   layerId: string;
-  readonly src: ImageBuf;
+  readonly src: Surface;
   /** Where the pixels were lifted from, in document pixels. */
   readonly home: Rect;
   /** The point it turns and scales around, in source pixels. */
   pivot: Point;
   /** Sorted by frame, one per frame, never empty. */
   keyframes: Keyframe[];
+  /** Copies of it tile on along its own axes: across, down, or both (an endless plane). */
+  repeat: Repeat;
+}
+
+export type Repeat = 'none' | 'x' | 'y' | 'both';
+export const REPEATS: readonly Repeat[] = ['none', 'x', 'y', 'both'];
+
+/** Which of a piece's own axes it repeats along. */
+export function repeatAxes(r: Repeat): { x: boolean; y: boolean } {
+  return { x: r === 'x' || r === 'both', y: r === 'y' || r === 'both' };
 }
 
 /** What a keyframe change can set. */
@@ -34,22 +46,44 @@ export function newPieceId(): string {
 
 export const MAX_PIECES = 500;
 export const MAX_KEYFRAMES = 2000;
+/** Longest side a piece can have (what graphics cards take as one texture). */
+export const MAX_PIECE_SIDE = 16384;
+/** Most a repeating piece's scroll can be either way (far more than any loop needs). */
+export const MAX_SCROLL = 1e6;
 
-export function makePiece(id: string, name: string, layerId: string, src: ImageBuf, home: Rect, frame: number): Piece {
-  const pivot = { x: src.w / 2, y: src.h / 2 };
+/** The pixels as a piece's surface (an image is copied into a new one). */
+export function pieceSurface(src: ImageBuf | Surface): Surface {
+  return src instanceof Surface ? src : Surface.fromRGBA(Math.max(1, src.w), Math.max(1, src.h), src.data);
+}
+
+/** A piece's size in its own pixels. */
+export function pieceSize(p: Pick<Piece, 'src'>): { w: number; h: number } {
+  return { w: p.src.width, h: p.src.height };
+}
+
+export function makePiece(id: string, name: string, layerId: string, src: ImageBuf | Surface, home: Rect, frame: number): Piece {
+  const surface = pieceSurface(src);
+  const pivot = { x: surface.width / 2, y: surface.height / 2 };
   return {
     id,
     name,
     layerId,
-    src,
+    src: surface,
     home: { ...home },
     pivot,
     keyframes: [{ ...identityState(home.x + pivot.x, home.y + pivot.y), frame, easing: 'linear', in: null, out: null }],
+    repeat: 'none',
   };
 }
 
+/** The same piece (for undo snapshots: the pixels are shared, not copied). */
 export function clonePiece(p: Piece): Piece {
   return { ...p, home: { ...p.home }, pivot: { ...p.pivot }, keyframes: p.keyframes.map(cloneKeyframe) };
+}
+
+/** A separate copy with its own id: its pixels share tiles until either is painted on. */
+export function copyPiece(p: Piece, id: string, layerId: string): Piece {
+  return { ...clonePiece(p), id, layerId, src: p.src.snapshot() };
 }
 
 export function cloneKeyframe(k: Keyframe): Keyframe {
@@ -67,20 +101,31 @@ export function pieceMatrixAt(p: Piece, frame: number): Mat {
 
 /** The piece's four corners at `frame`, in document pixels. */
 export function pieceCorners(p: Piece, frame: number): Point[] {
+  const { w, h } = pieceSize(p);
   return matApplyPoints(pieceMatrixAt(p, frame), [
     { x: 0, y: 0 },
-    { x: p.src.w, y: 0 },
-    { x: p.src.w, y: p.src.h },
-    { x: 0, y: p.src.h },
+    { x: w, y: 0 },
+    { x: w, y: h },
+    { x: 0, y: h },
   ]);
 }
 
-/** Area the piece covers at `frame` (rounded out to whole pixels, plus one for smoothing). */
+/**
+ * Area the piece's own box covers at `frame` (rounded out to whole pixels, plus one for
+ * smoothing). A repeating piece draws beyond it: see `pieceTouches`.
+ */
 export function pieceBounds(p: Piece, frame: number): Rect {
   const b = boundsOfPoints(pieceCorners(p, frame)) ?? { x: 0, y: 0, w: 0, h: 0 };
   const x = Math.floor(b.x) - 1;
   const y = Math.floor(b.y) - 1;
   return { x, y, w: Math.ceil(b.x + b.w) + 1 - x, h: Math.ceil(b.y + b.h) + 1 - y };
+}
+
+/** The piece may draw something inside r at `frame` (a repeating one reaches everywhere). */
+export function pieceTouches(p: Piece, frame: number, r: Rect): boolean {
+  if (p.repeat !== 'none') return true;
+  const b = pieceBounds(p, frame);
+  return b.x < r.x + r.w && b.x + b.w > r.x && b.y < r.y + r.h && b.y + b.h > r.y;
 }
 
 export function keyframeIndex(keys: readonly Keyframe[], frame: number): number {

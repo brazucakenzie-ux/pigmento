@@ -8,7 +8,7 @@ A `.pigm` file is a ZIP archive. It holds everything needed to reopen an image w
 | `layers/0001.png` … | One PNG per raster layer, cropped to the layer's non-transparent pixels |
 | `selections/0001.png` … | One greyscale PNG per saved selection (white = selected, grey = partly selected) |
 | `assets/0001.png` … | Pictures used by image-filled shapes, one per picture |
-| `pieces/0001.png` … | Version 2: the pixels of each animated piece, at their own size |
+| `pieces/0001.png` … | Version 2: the pixels of each animated piece, at their own size (which may be bigger than the canvas) |
 | `cels/0001.png` … | Version 2: frame-by-frame drawings, each cropped like a layer |
 | `thumbnail.png` | Optional preview of the flattened image (up to 256 px) |
 
@@ -174,6 +174,30 @@ A picture with animated pieces or frame-by-frame drawings is written as version 
 
   On opening, drawings that start on the same frame keep the last one listed, and the first one is moved to frame 0 if it isn't there already.
 - **Between keyframes:** a piece is scaled about its pivot, then skewed, turned, and moved to its position. Before its first keyframe it holds the first one's values; after its last, the last one's.
+
+## Pieces in 1.2 (version 3)
+
+Pigmento 1.2 writes the oldest version that holds everything in the picture: version 1 without animation, version 2 when the animation only uses what 1.1 had (and then exactly as 1.1 wrote it), and version 3 when a piece uses something new. Pigmento 1.1 refuses a version 3 file with its "made with a newer Pigmento" message rather than showing it wrongly. Versions 1 and 2 open as before.
+
+Pieces in 1.2 can be bigger than the canvas and sit anywhere, partly or wholly outside it. They're also made from a whole layer, a placed picture file or the clipboard. None of that needs new fields: `image` and `home` already hold any size and place. Version 3 adds:
+
+```json
+{
+  "id": "piece-2-lx9", "name": "Hills", "layerId": "layer-1-lx1",
+  "image": { "file": "pieces/0002.png", "w": 3200, "h": 400 },
+  "home": { "x": -1200, "y": 200, "w": 3200, "h": 400 },
+  "pivot": { "x": 1600, "y": 200 },
+  "repeat": "x",
+  "keyframes": [
+    { "frame": 0, "x": 400, "y": 400, "sx": 1, "sy": 1, "angle": 0, "skew": 0, "opacity": 1, "scrollX": 0, "scrollY": 0, "easing": "linear", "in": null, "out": null },
+    { "frame": 23, "x": 400, "y": 400, "sx": 1, "sy": 1, "angle": 0, "skew": 0, "opacity": 1, "scrollX": -3066.6667, "scrollY": 0, "easing": "linear", "in": null, "out": null }
+  ]
+}
+```
+
+- **`repeat`:** `none`, `x` (copies tile on across, along the piece's own horizontal axis), `y` (down) or `both` (an endless plane). Left out, it's `none`.
+- **`scrollX`, `scrollY`** (on each keyframe): how far the tiles have slid along the piece's own axes, in its own pixels, from −1,000,000 to 1,000,000. Only the axes it repeats along count. They aren't wrapped, so a long scroll keeps its speed between keyframes. Left out, they're 0.
+- A repeating piece draws its copies wherever its plane reaches. The pixel at piece point (u, v) shows the piece's own pixel ((u − scrollX) mod width, (v − scrollY) mod height) on the axes it repeats along. Smoothing blends across the seams between copies.
 
 ## Limits and safety
 - Width and height are at most 30,000 px each and 250 megapixels in total. Files may hold at most 2,000 layers, nested at most 64 deep, 200 saved selections and 256 pictures (each at most 4096 × 4096 px; bigger pictures are scaled down when chosen).

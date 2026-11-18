@@ -51,6 +51,7 @@ export const SettingsSchema = z.object({
       snapGuides: z.boolean().default(true),
       snapCanvas: z.boolean().default(true),
       snapObjects: z.boolean().default(true),
+      piecesOutside: z.boolean().default(true),
     })
     .default({
       rulers: false,
@@ -65,6 +66,7 @@ export const SettingsSchema = z.object({
       snapGuides: true,
       snapCanvas: true,
       snapObjects: true,
+      piecesOutside: true,
     }),
   colors: z
     .object({

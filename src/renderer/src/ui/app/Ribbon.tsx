@@ -55,6 +55,7 @@ function FileMenu() {
         <ActionMenuItem id="newWindow" close={close} />
         <ActionMenuItem id="open" close={close} label={t('file.open')} />
         <ActionMenuItem id="importSvg" close={close} />
+        <ActionMenuItem id="placeImage" close={close} />
         <SubMenu label={t('file.recent')} icon="history">
           {(closeAll) => (
             <>
@@ -284,6 +285,11 @@ function AnimateTab() {
       <RibbonGroup label={t('group.pieces')}>
         <ActionButton id="tool.animate" label={t('ribbon.animateTool')} />
         <ActionButton id="animateSelection" />
+        <div className="rb-stack">
+          <ActionButton id="pieceFromLayer" variant="small" />
+          <ActionButton id="placeImage" variant="small" />
+          <ActionButton id="pasteAsPiece" variant="small" />
+        </div>
         <div className="rb-stack">
           <ActionButton id="animKeepOriginal" variant="small" />
         </div>
@@ -525,6 +531,11 @@ function ViewTab() {
             )}
           </MenuButton>
         </div>
+        {simple ? null : (
+          <div className="rb-stack">
+            <ActionButton id="piecesOutside" variant="small" />
+          </div>
+        )}
       </RibbonGroup>
       <RibbonGroup label={t('group.panels')}>
         <ActionButton id="panels" />

@@ -6,11 +6,14 @@ import type { Command, History } from '../history/History';
 import type { ImageBuf } from '../raster/transform';
 import type { I18nKey, I18nParams } from '../../i18n';
 import { movePivot, type Easing } from './interpolate';
+import { MAX_PIXELS } from '../io/protocol';
 import {
   clonePiece,
   makePiece,
   MAX_KEYFRAMES,
+  MAX_PIECE_SIDE,
   MAX_PIECES,
+  MAX_SCROLL,
   moveKey,
   newPieceId,
   piecesBytes,
@@ -19,6 +22,7 @@ import {
   pieceStateAt,
   type KeyChange,
   type Piece,
+  type Repeat,
 } from './piece';
 import { advance, clampFps, clampFrame, clampLength, type LoopMode, type PlayState, type Timeline } from './timeline';
 
@@ -51,6 +55,8 @@ export interface AnimationInfo {
   playing: boolean;
   /** Frame-by-frame layers: where each drawing starts (layers not listed are still). */
   cels: Record<string, number[]>;
+  /** Painting tools paint on the selected piece instead of the active layer. */
+  paintOnPiece: boolean;
 }
 
 /** A piece's values as the options bar shows them (degrees and percent). */
@@ -64,12 +70,17 @@ export interface PieceFields {
   angle: number;
   skew: number;
   opacity: number;
+  /** How far its tiles have slid, in its own pixels (a repeating piece). */
+  scrollX: number;
+  scrollY: number;
   /** Easing from this frame's keyframe (or the one before it) to the next. */
   easing: Easing;
   /** There's a keyframe at this frame. */
   keyed: boolean;
   /** That keyframe bends the motion path. */
   curved: boolean;
+  /** Which way copies of it tile on (not keyframed). */
+  repeat: Repeat;
 }
 
 const DEG = 180 / Math.PI;
@@ -111,8 +122,8 @@ export class AnimationCommand implements Command {
     const a = ids(before);
     const b = ids(after);
     let src = 0;
-    for (const img of a) if (!b.has(img)) src += img.data.byteLength;
-    for (const img of b) if (!a.has(img)) src += img.data.byteLength;
+    for (const s of a) if (!b.has(s)) src += s.bytes;
+    for (const s of b) if (!a.has(s)) src += s.bytes;
     this.bytes = piecesBytes(before.pieces) + piecesBytes(after.pieces) + src;
   }
 
@@ -136,6 +147,8 @@ export class AnimationController {
   /** Default names for new pieces, supplied by the UI (the engine never stores English text). */
   namer: (n: number) => string = () => '';
   private drag: AnimSnapshot | null = null;
+  /** Paint on piece: painting tools paint the selected piece's own pixels (view state, not undoable). */
+  private paintOn = false;
 
   constructor(private readonly host: AnimHost) {}
 
@@ -164,6 +177,35 @@ export class AnimationController {
     return this.doc.pieces.length > 0 || this.doc.hasCels;
   }
 
+  get paintOnPiece(): boolean {
+    return this.paintOn;
+  }
+
+  setPaintOnPiece(on: boolean): void {
+    if (on === this.paintOn) return;
+    this.paintOn = on;
+    this.host.animationChanged(null);
+  }
+
+  /** The piece painting tools paint on (Paint on piece is on and a piece is selected), or null. */
+  get paintTarget(): Piece | null {
+    return this.paintOn ? this.selected : null;
+  }
+
+  /** True if `p` can be painted on (its layer is showing and unlocked); says why not otherwise. */
+  canPaint(p: Piece): boolean {
+    const layer = this.doc.layerById(p.layerId);
+    if (!layer || layer.locked) {
+      this.host.notify('info', 'notice.layerLocked');
+      return false;
+    }
+    if (!this.doc.isEffectivelyVisible(layer.id) || pieceStateAt(p, this.frame).opacity <= 0) {
+      this.host.notify('info', 'notice.pieceHidden');
+      return false;
+    }
+    return true;
+  }
+
   info(): AnimationInfo {
     const t = this.doc.timeline;
     return {
@@ -176,6 +218,7 @@ export class AnimationController {
       playing: this.playing,
       cels: Object.fromEntries(this.doc.rasterLayers().flatMap((l) => (l.cels ? [[l.id, l.cels.map((c) => c.start)]] : []))),
       pieces: this.doc.pieces.map((p) => ({ id: p.id, name: p.name, layerId: p.layerId, keys: p.keyframes.map((k) => ({ frame: k.frame, easing: k.easing })) })),
+      paintOnPiece: this.paintOn,
     };
   }
 
@@ -195,14 +238,17 @@ export class AnimationController {
       angle: s.angle * DEG,
       skew: s.skew * DEG,
       opacity: s.opacity * 100,
+      scrollX: s.scrollX,
+      scrollY: s.scrollY,
       easing: (at ?? before).easing,
       keyed: at !== undefined,
       curved: at !== undefined && (at.in !== null || at.out !== null),
+      repeat: p.repeat,
     };
   }
 
   /** Set the selected piece's values at the current frame (auto-key), in the options bar's units. */
-  setFields(change: Partial<Omit<PieceFields, 'keyed' | 'curved'>>): boolean {
+  setFields(change: Partial<Omit<PieceFields, 'keyed' | 'curved' | 'repeat'>>): boolean {
     const p = this.selected;
     if (!p) return false;
     const k: KeyChange = {};
@@ -213,8 +259,53 @@ export class AnimationController {
     if (change.angle !== undefined) k.angle = change.angle / DEG;
     if (change.skew !== undefined) k.skew = Math.max(-85, Math.min(85, change.skew)) / DEG;
     if (change.opacity !== undefined) k.opacity = Math.max(0, Math.min(100, change.opacity)) / 100;
+    if (change.scrollX !== undefined) k.scrollX = clampScroll(change.scrollX);
+    if (change.scrollY !== undefined) k.scrollY = clampScroll(change.scrollY);
     if (change.easing !== undefined) k.easing = change.easing;
     return this.setKey(p.id, this.frame, k);
+  }
+
+  /** Which way copies of a piece tile on (one undo step; not keyframed). */
+  setRepeat(id: string, repeat: Repeat): boolean {
+    const p = this.piece(id);
+    if (!p || p.repeat === repeat) return false;
+    return this.change('history.pieceRepeat', () => {
+      p.repeat = repeat;
+      return true;
+    });
+  }
+
+  /**
+   * Scroll a repeating piece by exactly one tile over the timeline (leftwards, or upwards when it
+   * repeats only down), so the last frame leads seamlessly back into the first. Every keyframe
+   * gets the scroll that steady motion has at its frame; the first and last frames get keyframes.
+   */
+  loopScroll(id: string): boolean {
+    const p = this.piece(id);
+    if (!p) return false;
+    if (p.repeat === 'none') {
+      this.host.notify('info', 'notice.loopNeedsRepeat');
+      return false;
+    }
+    const n = this.doc.timeline.length;
+    if (n < 2) {
+      this.host.notify('info', 'notice.loopNeedsFrames');
+      return false;
+    }
+    const key = p.repeat === 'y' ? 'scrollY' : 'scrollX';
+    const tile = key === 'scrollY' ? p.src.height : p.src.width;
+    const start = pieceStateAt(p, 0)[key];
+    let keys = p.keyframes;
+    for (const f of [0, n - 1]) if (!keys.some((k) => k.frame === f)) keys = setKey(keys, f, {});
+    if (keys.length > MAX_KEYFRAMES) {
+      this.host.notify('error', 'notice.tooManyKeyframes', { max: MAX_KEYFRAMES });
+      return false;
+    }
+    const next = keys.map((k) => ({ ...k, [key]: start - (k.frame / n) * tile }));
+    return this.change('history.loopScroll', () => {
+      p.keyframes = next;
+      return true;
+    });
   }
 
   /** A new document was loaded (or the old one replaced). */
@@ -445,20 +536,34 @@ export class AnimationController {
     });
   }
 
-  /** Add a piece made from `src`, lifted from `home` on layer `layerId`, with a keyframe at the current frame. */
-/** False (and says so) when the picture already has the most pieces it can. */
+  /** False (and says so) when the picture already has the most pieces it can. */
   canAdd(): boolean {
     if (this.doc.pieces.length < MAX_PIECES) return true;
     this.host.notify('error', 'notice.tooManyPieces', { max: MAX_PIECES });
     return false;
   }
 
-  add(src: ImageBuf, home: Rect, layerId: string): Piece | null {
-    if (!this.canAdd()) return null;
+  /** False (and says so) when a w × h piece would be bigger than a piece can be. */
+  fits(w: number, h: number): boolean {
+    if (w <= MAX_PIECE_SIDE && h <= MAX_PIECE_SIDE && w * h <= MAX_PIXELS) return true;
+    this.host.notify('error', 'notice.pieceTooBig', { max: MAX_PIECE_SIDE });
+    return false;
+  }
+
+  /**
+   * Add a piece made from `src`, lifted from (or placed at) `home` on layer `layerId`, with a
+   * keyframe at the current frame. It goes on top of the layer's pieces, or under them with
+   * `atBottom` (a whole layer's pixels made a piece keep their place under its other pieces).
+   */
+  add(src: ImageBuf | Surface, home: Rect, layerId: string, label: I18nKey = 'history.animateSelection', atBottom = false): Piece | null {
+    const size = src instanceof Surface ? { w: src.width, h: src.height } : src;
+    if (!this.canAdd() || !this.fits(size.w, size.h)) return null;
     const n = this.doc.pieces.length + 1;
     const piece = makePiece(newPieceId(), this.namer(n), layerId, src, home, this.frame);
-    this.change('history.animateSelection', () => {
-      this.doc.pieces.push(piece);
+    this.change(label, () => {
+      const first = atBottom ? this.doc.pieces.findIndex((p) => p.layerId === layerId) : -1;
+      if (first >= 0) this.doc.pieces.splice(first, 0, piece);
+      else this.doc.pieces.push(piece);
       return true;
     });
     this.selectedId = piece.id;
@@ -593,6 +698,10 @@ function sameAnim(a: AnimSnapshot, b: AnimSnapshot): boolean {
 function strip(p: Piece): Omit<Piece, 'src'> {
   const { src: _src, ...rest } = p;
   return rest;
+}
+
+function clampScroll(v: number): number {
+  return Number.isFinite(v) ? Math.max(-MAX_SCROLL, Math.min(MAX_SCROLL, v)) : 0;
 }
 
 /** Scale can't be exactly zero (the piece would vanish and couldn't be grabbed again). */

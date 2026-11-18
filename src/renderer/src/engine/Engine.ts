@@ -9,6 +9,9 @@ import { LayerController, type LayersInfo } from './doc/LayerController';
 import { AnimationController, type AnimHost, type AnimationInfo } from './anim/AnimationController';
 import { compositeLayers } from './raster/blend';
 import { frameExtras } from './anim/pieceRaster';
+import { pieceBounds, pieceStateAt, type Piece } from './anim/piece';
+import { docToPixel } from './anim/pieceEdit';
+import { PiecePixelsCommand } from './anim/piecePaint';
 import { transformPieces } from './anim/pieceTransform';
 import { celAt } from './anim/cels';
 import { clampFrame } from './anim/timeline';
@@ -223,7 +226,12 @@ export interface ViewOptions {
   snapGuides: boolean;
   snapCanvas: boolean;
   snapObjects: boolean;
+  /** Show the parts of pieces beyond the canvas (faded), and let the view reach them. */
+  piecesOutside: boolean;
 }
+
+/** How far outside the canvas the view reaches for pieces (keeps a stray typed number sane). */
+const MAX_REACH = 4 * MAX_DIMENSION;
 
 /** How close (screen px) a point or edge must be to snap. */
 const SNAP_PX = 6;
@@ -316,6 +324,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     snapGuides: true,
     snapCanvas: true,
     snapObjects: true,
+    piecesOutside: true,
   };
 
   get viewSettings(): Readonly<ViewOptions> {
@@ -482,7 +491,33 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   setViewOptions(o: Partial<ViewOptions>): void {
     this.viewOptions = { ...this.viewOptions, ...o };
     this.renderer.showPixelGrid = this.viewOptions.pixelGrid;
+    this.renderer.piecesOutside = this.viewOptions.piecesOutside;
+    this.updateReach();
     this.requestRender();
+  }
+
+  /**
+   * Where pieces on showing layers reach beyond the canvas at the frame shown, for the view to
+   * pan and scroll to (only while they're shown outside it). The view itself doesn't move.
+   */
+  private updateReach(): void {
+    let r: Rect | null = null;
+    if (this.viewOptions.piecesOutside && this.doc.pieces.length) {
+      const frame = this.doc.timeline.frame;
+      for (const p of this.doc.pieces) {
+        if (this.doc.layerById(p.layerId)?.kind === 'raster' && this.doc.isEffectivelyVisible(p.layerId)) r = rectUnion(r, pieceBounds(p, frame));
+      }
+      if (r) {
+        const x0 = Math.max(-MAX_REACH, r.x);
+        const y0 = Math.max(-MAX_REACH, r.y);
+        r = { x: x0, y: y0, w: Math.min(MAX_REACH, r.x + r.w) - x0, h: Math.min(MAX_REACH, r.y + r.h) - y0 };
+        if (r.w <= 0 || r.h <= 0) r = null;
+      }
+    }
+    if (rectEquals(r, this.view.extent)) return;
+    this.view.extent = r;
+    // The scrollbars change; the view stays where it is.
+    this.emitView();
   }
 
   // ---- events ---------------------------------------------------------------------------
@@ -545,12 +580,14 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     // Frame-by-frame layers may now show another drawing: upload the ones that changed.
     if (this.doc.hasCels) this.renderer.syncTree();
     this.renderer.invalidate(r);
+    this.updateReach();
     this.requestRender();
     this.emit('animation', this.anim.info());
     this.notifyPixels();
   }
 
   structureChanged(): void {
+    this.updateReach();
     this.view.setDocSize(this.doc.width, this.doc.height);
     this.renderer.resetDocument(this.doc);
     this.emit('doc', this.docInfo());
@@ -584,6 +621,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.emit('layers', this.layers.info());
     // Deleting, duplicating or merging layers changes their pieces.
     this.emit('animation', this.anim.info());
+    this.updateReach();
     this.requestRender();
     this.notifyPixels();
   }
@@ -949,6 +987,25 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.notifyPixels();
   }
 
+  pieceChanged(piece: Piece, r: Rect | null): void {
+    this.renderer.pieceChanged(piece.src, r ?? piece.src.bounds);
+    // Where it shows on the canvas depends on its transform (and copies, if it repeats): redraw it all.
+    this.renderer.invalidate(null);
+    this.requestRender();
+    this.notifyPixels();
+  }
+
+  pushPiecePixels(label: I18nKey, piece: Piece, delta: TileDelta | null): void {
+    if (delta) this.history.push(new PiecePixelsCommand(label, this, piece, delta));
+  }
+
+  /** Undo or redo swapped a piece's tiles (its GPU copy picks up the new tiles when drawn). */
+  piecePixelsChanged(_piece: Piece): void {
+    this.renderer.invalidate(null);
+    this.requestRender();
+    this.notifyPixels();
+  }
+
   // ---- history --------------------------------------------------------------------------
 
   pushPixels(
@@ -1046,6 +1103,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.history.reset(initial);
     this.view.setDocSize(doc.width, doc.height);
     this.renderer.resetDocument(doc);
+    this.updateReach();
+    // Opening fits the canvas itself (View → Fit also takes in pieces outside it).
     this.view.fit();
     this.activeTool.activate?.(this);
     this.emit('doc', this.docInfo());
@@ -1156,6 +1215,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   }
 
   async floodFill(x: number, y: number, paint: RGBA | FillPattern, tolerance: number, contiguous: boolean): Promise<void> {
+    const piece = this.anim.paintTarget;
+    if (piece) return this.fillPiece(piece, x, y, paint, tolerance, contiguous);
     if (this.fillBusy || !this.canPaint()) return;
     const px = Math.floor(x);
     const py = Math.floor(y);
@@ -1190,6 +1251,40 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
         this.pushPixels('history.fill', layer, s.endEdit());
       }
       this.layerChanged(layer, bounds);
+    } finally {
+      this.fillBusy = false;
+    }
+  }
+
+  /**
+   * Fill on a piece's own pixels (Paint on piece): from the pixel under the pointer, through its
+   * transform and folded onto its tile if it repeats. The selection doesn't apply on a piece.
+   */
+  private async fillPiece(piece: Piece, x: number, y: number, paint: RGBA | FillPattern, tolerance: number, contiguous: boolean): Promise<void> {
+    if (this.fillBusy || !this.anim.canPaint(piece)) return;
+    const q = docToPixel(piece, pieceStateAt(piece, this.doc.timeline.frame), { x, y });
+    const s = piece.src;
+    const { width: w, height: h } = s;
+    const px = q ? Math.floor(q.x) : -1;
+    const py = q ? Math.floor(q.y) : -1;
+    if (px < 0 || py < 0 || px >= w || py >= h) return;
+    this.fillBusy = true;
+    try {
+      const { mask, bounds } = await this.codecs.fill(s.toRGBA(), w, h, px, py, tolerance, contiguous, null);
+      if (!bounds || !this.doc.pieces.includes(piece)) return;
+      const area = { data: mask, stride: w, ox: 0, oy: 0, w, h };
+      s.beginEdit();
+      if ('pattern' in paint) {
+        const tile = this.patternTile(paint);
+        if (!tile) {
+          s.abortEdit();
+          return;
+        }
+        const src = tileInto(tile, bounds);
+        s.compositeImage(bounds, { data: src.data, stride: bounds.w, ox: bounds.x, oy: bounds.y }, 'over', 1, area);
+      } else s.compositeColor(bounds, paint, area, 'over', 1);
+      this.pushPiecePixels('pattern' in paint ? 'history.patternFill' : 'history.fill', piece, s.endEdit());
+      this.pieceChanged(piece, bounds);
     } finally {
       this.fillBusy = false;
     }
@@ -1271,8 +1366,10 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.afterViewChange();
   }
 
+  /** View → Fit: the canvas, and pieces shown outside it. */
   fit(): void {
-    this.view.fit(true);
+    this.updateReach();
+    this.view.fitAll(true);
     this.afterViewChange();
   }
 
@@ -1358,6 +1455,65 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       return piece !== null;
     });
     return added;
+  }
+
+  /**
+   * Make everything on the active pixel layer a piece on that layer, under its other pieces so
+   * the picture looks the same. The layer is emptied unless `keepOriginal`. One undo step.
+   */
+  pieceFromLayer(keepOriginal: boolean): boolean {
+    this.commitLive(true);
+    const layer = this.doc.activeLayer;
+    if (layer.kind !== 'raster') {
+      this.notify('error', 'notice.animatePixelsOnly');
+      return false;
+    }
+    if (layer.locked) {
+      this.notify('error', 'notice.animateLocked');
+      return false;
+    }
+    // A frame-by-frame layer has a drawing per frame, and a piece holds one picture.
+    if (layer.cels) {
+      this.notify('info', 'notice.pieceFromCels');
+      return false;
+    }
+    const b = layer.surface.contentBounds();
+    if (!b) {
+      this.notify('info', 'notice.pieceLayerEmpty');
+      return false;
+    }
+    if (!this.anim.canAdd() || !this.anim.fits(b.w, b.h)) return false;
+    const src: ImageBuf = { w: b.w, h: b.h, data: layer.surface.readRect(b) };
+    return this.history.group('history.pieceFromLayer', () => {
+      if (!keepOriginal) {
+        const s = layer.surface;
+        s.beginEdit();
+        s.clearRect(b);
+        this.pushPixels('history.pieceFromLayer', layer, s.endEdit());
+        this.layerChanged(layer, b);
+      }
+      return this.anim.add(src, b, layer.id, 'history.pieceFromLayer', true) !== null;
+    });
+  }
+
+  /**
+   * A piece from a whole picture (a placed image file or the clipboard): centred on the canvas
+   * and free to hang off it, on the active pixel layer, or on a new pixel layer when the active
+   * layer is a shape layer or a group. One undo step.
+   */
+  addPieceImage(img: ImageBuf, label: 'history.placeImage' | 'history.pasteAsPiece'): boolean {
+    this.commitLive(true);
+    const active = this.doc.activeLayer;
+    if (active.kind === 'raster' && active.locked) {
+      this.notify('error', 'notice.animateLocked');
+      return false;
+    }
+    if (!this.anim.canAdd() || !this.anim.fits(img.w, img.h)) return false;
+    const home = { x: Math.round((this.doc.width - img.w) / 2), y: Math.round((this.doc.height - img.h) / 2), w: img.w, h: img.h };
+    return this.history.group(label, () => {
+      const layerId = active.kind === 'raster' ? active.id : this.layers.add();
+      return this.anim.add(img, home, layerId, label) !== null;
+    });
   }
 
   liftSelection(copy: boolean): FloatObject | null {

@@ -6,7 +6,9 @@ import { isFlatNib, nibAngleOf, nibEnds } from '../brush/nib';
 import type { DabOp } from '../brush/retouch';
 import { stabilize, symmetryAxes, symmetryCenter, symmetryCopies } from '../brush/symmetry';
 import type { BrushSettings } from '../brush/types';
-import type { RasterLayer } from '../doc/Document';
+import { RasterLayer } from '../doc/Document';
+import { pieceStateAt, type Piece } from '../anim/piece';
+import { piecePaintMap, type PiecePaintMap } from '../anim/piecePaint';
 import { applyImage, type MaskView, type PixelView } from '../raster/pixels';
 import { Surface } from '../raster/Surface';
 import type { Overlay } from '../render/Overlay';
@@ -34,7 +36,11 @@ export interface ToolBrush {
  * refuse the stroke, e.g. a clone with no source yet).
  */
 export interface DirectPaint {
-  begin(ctx: ToolContext, s: { layer: RasterLayer; start: Point; shape: DabShape; clip: MaskView | null; copy: number }): DabOp | null;
+  /**
+   * `layer` holds the pixels painted (a stand-in holding a piece's own pixels when painting on a
+   * piece), `start` is in those pixels, and `toTarget` carries a canvas point into them.
+   */
+  begin(ctx: ToolContext, s: { layer: RasterLayer; start: Point; shape: DabShape; clip: MaskView | null; copy: number; toTarget: (p: Point) => Point }): DabOp | null;
 }
 
 export interface BrushToolConfig {
@@ -75,12 +81,43 @@ export function brushOptionsFor(def: BrushDef): ToolOptions {
   return { brushId: def.id, size: Math.max(1, Math.round(s.size)), opacity: Math.round(s.opacity * 100), flow: Math.round(s.flow * 100), hardness: Math.round(s.hardness * 100), ...nib };
 }
 
-/** The brush's outline under the pointer: a circle, or a line across a flat nib at its angle. */
+/**
+ * The brush's outline under the pointer: a circle, or a line across a flat nib at its angle.
+ * Painting on a piece, it's the brush as it lands on the piece, seen through its transform (a
+ * stretched or skewed piece turns the circle into an ellipse).
+ */
 export function drawBrushCursor(ctx: ToolContext, ov: Overlay, hover: Point, settings: BrushSettings, size: number): void {
+  const piece = ctx.anim.paintTarget;
+  const map = piece ? piecePaintMap(piece, pieceStateAt(piece, ctx.anim.frame)) : null;
+  if (map) {
+    const s = forPiece({ settings, size, opacity: 1, pressure: false, smoothing: 0 }, map);
+    const c = map.toPiece(hover);
+    const toScreen = (p: Point) => ov.toScreen(map.toDoc(p));
+    if (isFlatNib(s.settings)) {
+      const [a, b] = nibEnds(c, s.size, s.settings.angle);
+      ov.nibCursor(toScreen(a), toScreen(b));
+      return;
+    }
+    const r = Math.max(0.5, s.size / 2);
+    const pts: Point[] = [];
+    for (let i = 0; i < 48; i++) pts.push(toScreen({ x: c.x + r * Math.cos((i / 48) * Math.PI * 2), y: c.y + r * Math.sin((i / 48) * Math.PI * 2) }));
+    ov.shapeCursor(pts);
+    return;
+  }
   if (isFlatNib(settings)) {
     const [a, b] = nibEnds(hover, size, settings.angle);
     ov.nibCursor(ov.toScreen(a), ov.toScreen(b));
   } else ov.brushCursor(ov.toScreen(hover), (size / 2) * ctx.view.zoom);
+}
+
+/**
+ * A brush as it paints on a piece: as wide on the canvas as it is set to be (so smaller in a
+ * piece that's scaled up), and a fixed nib angle kept as it looks on the canvas.
+ */
+export function forPiece(b: ToolBrush, map: PiecePaintMap): ToolBrush {
+  const DEG = 180 / Math.PI;
+  const settings = b.settings.followStroke ? b.settings : { ...b.settings, angle: map.angle(b.settings.angle / DEG) * DEG };
+  return { ...b, size: b.size / map.scale, settings };
 }
 
 /** The longest the stabiliser's string gets, in screen px. */
@@ -98,6 +135,11 @@ interface StrokeState {
   /** Stroke-layer tools paint here; direct tools paint straight into the layer. */
   surface: Surface | null;
   layer: RasterLayer;
+  /** Painting on a piece (Paint on piece): `layer` stands in for its own pixels, mapped by `map`. */
+  piece: Piece | null;
+  map: PiecePaintMap | null;
+  /** A stroke-layer stroke on a piece: its pixels as they were, to show the stroke over them live. */
+  orig: Surface | null;
   /** One stroke per symmetry copy. */
   strokes: BrushStroke[];
   copies: ((p: Point) => Point)[];
@@ -174,24 +216,61 @@ export function createBrushTool(cfg: BrushToolConfig): Tool {
     });
   };
 
+  /** Symmetry copies of a canvas point, carried into the pixels painted (a piece's own, when painting on one). */
+  const copiesFor = (ctx: ToolContext, map: PiecePaintMap | null): ((p: Point) => Point)[] => {
+    const copies = symmetryCopies(ctx.symmetry, ctx.doc.width, ctx.doc.height);
+    return map ? copies.map((f) => (p: Point) => map.toPiece(f(p))) : copies;
+  };
+
   /**
    * Strokes for every symmetry copy (same seed, so mirrored copies match). Null when a direct
-   * tool refuses to start.
+   * tool refuses to start. On a repeating piece every dab is folded onto its tile.
    */
-  const strokesFor = (ctx: ToolContext, s: Pick<StrokeState, 'surface' | 'layer' | 'brush' | 'color' | 'clip'>, start: Point, seed: number): BrushStroke[] | null => {
-    const copies = symmetryCopies(ctx.symmetry, ctx.doc.width, ctx.doc.height);
+  const strokesFor = (ctx: ToolContext, s: Pick<StrokeState, 'surface' | 'layer' | 'brush' | 'color' | 'clip' | 'map'>, start: Point, seed: number): BrushStroke[] | null => {
+    const copies = copiesFor(ctx, s.map);
     const shape = dabShapeOf(s.brush.settings);
+    const map = s.map;
+    const fold = (emit: (d: Dab) => Rect | null) =>
+      map
+        ? (d: Dab): Rect | null => {
+            let r: Rect | null = null;
+            for (const q of map.fold(d)) r = rectUnion(r, emit(q));
+            return r;
+          }
+        : emit;
     if (cfg.direct) {
       const ops: DabOp[] = [];
+      const toTarget = map ? (p: Point) => map.toPiece(p) : (p: Point) => p;
       for (let i = 0; i < copies.length; i++) {
-        const op = cfg.direct.begin(ctx, { layer: s.layer, start: copies[i](start), shape, clip: s.clip, copy: i });
+        const op = cfg.direct.begin(ctx, { layer: s.layer, start: copies[i](start), shape, clip: s.clip, copy: i, toTarget });
         if (!op) return null;
         ops.push(op);
       }
-      return ops.map((op) => newStroke(s.layer, s.brush, s.color, seed, op));
+      return ops.map((op) => newStroke(s.layer, s.brush, s.color, seed, fold(op)));
     }
     const surface = s.surface!;
-    return copies.map(() => newStroke(s.layer, s.brush, s.color, seed, (d) => paintDabInto(surface, d, shape)));
+    return copies.map(() => newStroke(s.layer, s.brush, s.color, seed, fold((d) => paintDabInto(surface, d, shape))));
+  };
+
+  /**
+   * Show what a stroke changed inside r (in the pixels painted). On a layer, re-upload it (a
+   * stroke-layer stroke shows through its display filter). On a piece, a stroke-layer stroke is
+   * laid over the piece's pixels as they were, right there, so the piece shows it everywhere it's drawn.
+   */
+  const show = (ctx: ToolContext, s: StrokeState, r: Rect | null): void => {
+    if (!r) return;
+    if (!s.piece) {
+      ctx.syncActiveLayer(r);
+      return;
+    }
+    const src = s.piece.src;
+    const area = rectIntersect(r, src.bounds);
+    if (!area) return;
+    if (s.orig && s.surface) {
+      src.writeRect(area, { data: s.orig.readRect(area), stride: area.w, ox: area.x, oy: area.y });
+      s.surface.forEachTile(area, (sv, sub) => src.compositeImage(sub, sv, cfg.op, s.brush.opacity, null), false, true);
+    }
+    ctx.pieceChanged(s.piece, area);
   };
 
   const at = (p: StrokeSample, f: (q: Point) => Point): StrokeSample => ({ ...p, ...f(p) });
@@ -230,6 +309,7 @@ export function createBrushTool(cfg: BrushToolConfig): Tool {
     order: cfg.order,
     options: cfg.options,
     paints: true,
+    paintsPieces: true,
     symmetry: true,
     strokeBrush: cfg.direct
       ? undefined
@@ -247,34 +327,53 @@ export function createBrushTool(cfg: BrushToolConfig): Tool {
         return;
       }
       if (e.alt && cfg.altClick?.(ctx, e)) return;
-      if (!ctx.canPaint()) return;
       const doc = ctx.doc;
-      const layer = doc.activeRaster;
-      if (!layer) return;
-      const brush = cfg.brush(ctx);
+      // Paint on piece: the selected piece's own pixels, through its transform at this frame.
+      const piece = ctx.anim.paintTarget;
+      let layer: RasterLayer;
+      let map: PiecePaintMap | null = null;
+      if (piece) {
+        if (!ctx.anim.canPaint(piece)) return;
+        map = piecePaintMap(piece, pieceStateAt(piece, ctx.anim.frame));
+        if (!map) return;
+        // Stands in for a layer, so strokes and retouching read and write the piece's pixels.
+        layer = new RasterLayer('', piece.src);
+      } else {
+        if (!ctx.canPaint()) return;
+        const active = doc.activeRaster;
+        if (!active) return;
+        layer = active;
+      }
+      const brush = map ? forPiece(cfg.brush(ctx), map) : cfg.brush(ctx);
       const color = e.button === 2 ? ctx.secondary : ctx.primary;
-      const clip = doc.selection?.maskView() ?? null;
+      // Painting on a piece ignores the selection (it's drawn on the canvas, not on the piece).
+      const clip = piece ? null : (doc.selection?.maskView() ?? null);
       const start = sampleOf(e, 0, brush.pressure);
-      const surface = cfg.direct ? null : new Surface(doc.width, doc.height);
-      const base = { surface, layer, brush, color, clip };
-      if (cfg.direct) layer.surface.beginEdit();
+      const surface = cfg.direct ? null : new Surface(layer.surface.width, layer.surface.height);
+      const orig = piece && !cfg.direct ? piece.src.snapshot() : null;
+      const base = { surface, layer, brush, color, clip, map };
+      // A piece shows the stroke in its own pixels as it goes, so they're edited from the start.
+      if (cfg.direct || piece) layer.surface.beginEdit();
       const strokes = strokesFor(ctx, base, start, strokeSeed(e.x, e.y));
       if (!strokes) {
         layer.surface.abortEdit();
         return;
       }
-      const filter = cfg.direct
-        ? null
-        : (view: PixelView, r: Rect) => {
-            const s = st;
-            const area = s?.bounds ? rectIntersect(r, s.bounds) : null;
-            if (s?.surface && area) compositeStroke(view, area, s.surface, cfg.op, s.brush.opacity, clip);
-          };
+      const filter =
+        cfg.direct || piece
+          ? null
+          : (view: PixelView, r: Rect) => {
+              const s = st;
+              const area = s?.bounds ? rectIntersect(r, s.bounds) : null;
+              if (s?.surface && area) compositeStroke(view, area, s.surface, cfg.op, s.brush.opacity, clip);
+            };
       // The strokes report what they paint through st, so st is set before the first dab.
       st = {
         ...base,
+        piece,
+        orig,
         strokes,
-        copies: symmetryCopies(ctx.symmetry, doc.width, doc.height),
+        copies: copiesFor(ctx, map),
         bounds: null,
         start,
         last: e,
@@ -287,7 +386,7 @@ export function createBrushTool(cfg: BrushToolConfig): Tool {
         timer: null,
       };
       if (filter) ctx.addLayerFilter(filter);
-      ctx.syncActiveLayer(begin(st, start));
+      show(ctx, st, begin(st, start));
       if (brush.settings.airbrush) {
         // Holding still keeps spraying (at most every 30 ms).
         st.timer = window.setInterval(() => {
@@ -299,7 +398,7 @@ export function createBrushTool(cfg: BrushToolConfig): Tool {
           }
           let dirty: Rect | null = null;
           for (const k of s.strokes) dirty = rectUnion(dirty, k.hold());
-          if (dirty) ctx.syncActiveLayer(dirty);
+          show(ctx, s, dirty);
         }, 30);
       }
     },
@@ -325,7 +424,7 @@ export function createBrushTool(cfg: BrushToolConfig): Tool {
           // Direct tools changed the layer: put it back before drawing the line again.
           s.layer.surface.abortEdit();
           s.layer.surface.beginEdit();
-        } else s.surface = new Surface(ctx.doc.width, ctx.doc.height);
+        } else s.surface = new Surface(s.layer.surface.width, s.layer.surface.height);
         s.bounds = null;
         s.straight = true;
         const strokes = strokesFor(ctx, s, s.start, strokeSeed(s.start.x, s.start.y));
@@ -333,7 +432,7 @@ export function createBrushTool(cfg: BrushToolConfig): Tool {
         s.strokes = strokes;
         begin(s, s.start);
         to(s, sample);
-        ctx.syncActiveLayer(rectUnion(old, s.bounds));
+        show(ctx, s, rectUnion(old, s.bounds));
         return;
       }
       if (s.straight) return;
@@ -350,7 +449,7 @@ export function createBrushTool(cfg: BrushToolConfig): Tool {
       }
       const dirty = to(s, p);
       ctx.invalidateOverlay();
-      if (dirty) ctx.syncActiveLayer(dirty);
+      show(ctx, s, dirty);
     },
 
     pointerUp(ctx) {
@@ -362,15 +461,18 @@ export function createBrushTool(cfg: BrushToolConfig): Tool {
       const s = st;
       if (!s) return;
       // A stabilised stroke still ends where the pointer was let go.
-      if (s.brush.smoothing > 0 && !s.straight) {
-        const dirty = to(s, s.latest);
-        if (dirty) ctx.syncActiveLayer(dirty);
-      }
+      if (s.brush.smoothing > 0 && !s.straight) show(ctx, s, to(s, s.latest));
       st = null;
       if (s.filter) ctx.removeLayerFilter(s.filter);
       ctx.invalidateOverlay();
       const b = s.bounds;
       const surf = s.layer.surface;
+      if (s.piece) {
+        // The piece already shows the stroke in its own pixels: record it.
+        ctx.pushPiecePixels(cfg.historyLabel, s.piece, surf.endEdit());
+        ctx.pieceChanged(s.piece, b);
+        return;
+      }
       if (cfg.direct) {
         // The layer already shows the stroke: record it.
         const delta = surf.endEdit();

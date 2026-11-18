@@ -4,6 +4,7 @@ import type { KeyChange } from '@engine/anim/piece';
 import { LOOP_MODES, MAX_FPS, MAX_FRAMES, MIN_FPS, type LoopMode } from '@engine/anim/timeline';
 import type { PieceInfo } from '@engine/anim/AnimationController';
 import type { LayerNode } from '@engine/doc/LayerController';
+import { toolRegistry } from '@engine/tools/ToolRegistry';
 import { t, type I18nKey } from '../../i18n';
 import { Icon } from '../icons/Icon';
 import { NumberField } from '../components/Controls';
@@ -210,6 +211,35 @@ function PieceRow({ piece, index, selected, frame }: { piece: PieceInfo; index: 
   );
 }
 
+/**
+ * Paint on piece from the piece's row: selects it and has painting tools paint its own pixels
+ * (picking the Brush if the tool in use can't paint a piece). Pressed while that's happening.
+ */
+function PaintToggle({ piece, name, selected }: { piece: PieceInfo; name: string; selected: boolean }) {
+  const on = useUi((s) => s.animation.paintOnPiece) && selected;
+  const label = t('piece.paintOn', { piece: name });
+  return (
+    <button
+      type="button"
+      className="icon-btn tl-piece-paint"
+      aria-pressed={on}
+      aria-label={label}
+      data-tip={label}
+      onClick={() => {
+        if (on) {
+          engine.anim.setPaintOnPiece(false);
+          return;
+        }
+        engine.anim.select(piece.id);
+        engine.anim.setPaintOnPiece(true);
+        if (!toolRegistry.get(useUi.getState().tool)?.paintsPieces) engine.setTool('brush');
+      }}
+    >
+      <Icon name="brush" size={14} />
+    </button>
+  );
+}
+
 /** A piece's name in the left column: click to select it, double-click (or F2) to rename it. */
 function PieceName({ piece, index, selected, layer }: { piece: PieceInfo; index: number; selected: boolean; layer: string }) {
   const [renaming, setRenaming] = useState(false);
@@ -269,6 +299,7 @@ function PieceName({ piece, index, selected, layer }: { piece: PieceInfo; index:
       >
         <span className="tl-name-text">{name}</span>
       </button>
+      <PaintToggle piece={piece} name={name} selected={selected} />
       {menu ? (
         <Menu anchor={anchor} open onClose={() => setMenu(false)} label={t('timeline.pieceMenu')}>
           <MenuItem label={t('timeline.rename')} icon="text" close={() => setMenu(false)} onSelect={() => setRenaming(true)} />

@@ -425,6 +425,31 @@ export async function pasteFromFile(): Promise<void> {
   }
 }
 
+/** File → Place image…: a picture file as a new piece, centred on the canvas (it may hang off it). */
+export async function placeImage(): Promise<boolean> {
+  const path = await window.pigmento.files.showOpenDialog();
+  if (!path) return false;
+  const name = path.split(/[\\/]/).pop() ?? path;
+  let img: ImageBuf | null;
+  try {
+    const { bytes } = await window.pigmento.files.read(path);
+    const d = await decode(bytes, name);
+    img = d && { w: d.w, h: d.h, data: d.data };
+  } catch {
+    showToast({ kind: 'error', key: 'error.open', params: { name } });
+    return false;
+  }
+  if (!img || !(await hasMemoryFor(img.w, img.h))) return false;
+  return engine.addPieceImage(img, 'history.placeImage');
+}
+
+/** The clipboard's picture as a new piece, centred on the canvas. */
+export async function pasteAsPiece(): Promise<boolean> {
+  const img = await readClipboard();
+  if (!img || !(await hasMemoryFor(img.w, img.h))) return false;
+  return engine.addPieceImage(img, 'history.pasteAsPiece');
+}
+
 export async function openDroppedFile(file: File): Promise<void> {
   const path = await window.pigmento.files.pathForDroppedFile(file);
   if (!path) {

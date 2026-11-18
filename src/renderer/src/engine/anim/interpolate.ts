@@ -19,6 +19,12 @@ export interface PieceState {
   skew: number;
   /** 0 (invisible) … 1. */
   opacity: number;
+  /**
+   * How far a repeating piece's tiles have slid along its own axes, in its own pixels (only the
+   * axes it repeats on count). Not wrapped, so a long scroll keeps its speed between keyframes.
+   */
+  scrollX: number;
+  scrollY: number;
 }
 
 export interface Keyframe extends PieceState {
@@ -34,10 +40,10 @@ export interface Keyframe extends PieceState {
   in: Point | null;
 }
 
-export const STATE_KEYS = ['x', 'y', 'sx', 'sy', 'angle', 'skew', 'opacity'] as const;
+export const STATE_KEYS = ['x', 'y', 'sx', 'sy', 'angle', 'skew', 'opacity', 'scrollX', 'scrollY'] as const;
 
 export function identityState(x: number, y: number): PieceState {
-  return { x, y, sx: 1, sy: 1, angle: 0, skew: 0, opacity: 1 };
+  return { x, y, sx: 1, sy: 1, angle: 0, skew: 0, opacity: 1, scrollX: 0, scrollY: 0 };
 }
 
 /** Eased progress (0 … 1) for linear progress u (0 … 1). */
@@ -114,11 +120,13 @@ export function blendStates(a: Keyframe, b: Keyframe, e: number): PieceState {
     angle: lerp(a.angle, b.angle, e),
     skew: lerp(a.skew, b.skew, e),
     opacity: Math.min(1, Math.max(0, lerp(a.opacity, b.opacity, e))),
+    scrollX: lerp(a.scrollX, b.scrollX, e),
+    scrollY: lerp(a.scrollY, b.scrollY, e),
   };
 }
 
 function stateOf(k: Keyframe): PieceState {
-  return { x: k.x, y: k.y, sx: k.sx, sy: k.sy, angle: k.angle, skew: k.skew, opacity: k.opacity };
+  return { x: k.x, y: k.y, sx: k.sx, sy: k.sy, angle: k.angle, skew: k.skew, opacity: k.opacity, scrollX: k.scrollX, scrollY: k.scrollY };
 }
 
 /**

@@ -46,6 +46,7 @@ export interface PigmentoTestHook {
     current: { x: number; y: number; w: number; h: number; angle: number; skew: number; opacity: number; easing: string; keyed: boolean; curved: boolean } | null;
     playing: boolean;
     cels: Record<string, number[]>;
+    paintOnPiece: boolean;
   };
   animateSelection(keepOriginal?: boolean): boolean;
   celMirrors(): number;
@@ -53,9 +54,14 @@ export interface PigmentoTestHook {
   renderTimes(frames: number[]): number[];
   encodeAnimation(format: 'gif' | 'mp4', count: number): Promise<{ ms: number; bytes: number }>;
   pieceKeys(id: string): { frame: number; x: number; y: number; in: { x: number; y: number } | null; out: { x: number; y: number } | null; easing: string }[];
-  pieceAt(id: string, frame: number): { x: number; y: number; sx: number; sy: number; angle: number; skew: number; opacity: number } | null;
+  pieceAt(id: string, frame: number): { x: number; y: number; sx: number; sy: number; angle: number; skew: number; opacity: number; scrollX: number; scrollY: number } | null;
   setFrame(frame: number): void;
-  setPieceKey(id: string, frame: number, change: Partial<Record<'x' | 'y' | 'sx' | 'sy' | 'angle' | 'skew' | 'opacity', number>>): boolean;
+  setPieceKey(id: string, frame: number, change: Partial<Record<'x' | 'y' | 'sx' | 'sy' | 'angle' | 'skew' | 'opacity' | 'scrollX' | 'scrollY', number>>): boolean;
+  pieceInfo(id: string): { w: number; h: number; home: { x: number; y: number; w: number; h: number }; layerId: string } | null;
+  piecePixel(id: string, x: number, y: number): { r: number; g: number; b: number; a: number } | null;
+  pieceFromLayer(keepOriginal?: boolean): boolean;
+  setPieceRepeat(id: string, repeat: 'none' | 'x' | 'y' | 'both'): boolean;
+  selectPiece(id: string | null): void;
   addLayer(): string;
   groupLayers(ids: string[]): string | null;
   setLayerProps(id: string, p: Record<string, unknown>): void;

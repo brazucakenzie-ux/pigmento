@@ -1,4 +1,5 @@
 import type { AnimationController } from '../anim/AnimationController';
+import type { Piece } from '../anim/piece';
 import type { BrushSettings } from '../brush/types';
 
 /** A picture to draw from, shown over the canvas; never saved or exported. */
@@ -151,6 +152,10 @@ export interface ToolContext {
   pushPixels(label: I18nKey, layer: Layer, delta: TileDelta | null, selBefore?: Selection | null, selAfter?: Selection | null): void;
   /** True if the active layer can be painted (visible and unlocked); notifies otherwise. */
   canPaint(): boolean;
+  /** A piece's own pixels changed inside r (its pixels; null = all) during a stroke: show it. */
+  pieceChanged(piece: Piece, r: Rect | null): void;
+  /** Record a change to a piece's own pixels as an undoable step. */
+  pushPiecePixels(label: I18nKey, piece: Piece, delta: TileDelta | null): void;
   /** Show a short message (a toast). */
   notify(kind: 'info' | 'error', key: I18nKey): void;
   /** Show a selection without recording it (e.g. while a new one is being drawn). */
@@ -242,6 +247,8 @@ export interface Tool {
   readonly options: OptionSpec[];
   /** Tool records a history step and benefits from the pen's eraser end override. */
   readonly paints?: boolean;
+  /** Can paint a piece's own pixels (Paint on piece): the brush-engine tools and Fill. */
+  readonly paintsPieces?: boolean;
   /**
    * The brush this tool lays paint with, for stroking outlines and paths (Brush, Pencil,
    * Eraser). Tools that change pixels in place (Smudge, Blur…) have none.

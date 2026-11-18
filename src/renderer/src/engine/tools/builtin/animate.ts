@@ -84,7 +84,7 @@ function geometry(ctx: ToolContext, p: Piece): ScreenGeom {
   };
   const handles = {} as Record<PieceHandle, Point>;
   for (const h of PIECE_HANDLES) handles[h] = toScreen(handleLocal(p, h));
-  const centre = toScreen({ x: p.src.w / 2, y: p.src.h / 2 });
+  const centre = toScreen({ x: p.src.width / 2, y: p.src.height / 2 });
   const topMid = handles.n;
   const len = Math.hypot(topMid.x - centre.x, topMid.y - centre.y) || 1;
   const rotate = { x: topMid.x + ((topMid.x - centre.x) / len) * ROTATE_HANDLE_OFFSET, y: topMid.y + ((topMid.y - centre.y) / len) * ROTATE_HANDLE_OFFSET };
@@ -180,6 +180,11 @@ export default registerTool({
     if (e.button !== 0) return;
     let piece = ctx.anim.selected;
     let hit = piece ? hitSelected(ctx, piece, e) : null;
+    // A repeating piece's copies reach everywhere: a piece showing on top of them is picked instead.
+    if (piece && hit?.kind === 'body' && piece.repeat !== 'none') {
+      const top = pieceAt(visiblePieces(ctx), ctx.anim.frame, e);
+      if (top && top.id !== piece.id) hit = null;
+    }
     // Double-click a keyframe's dot: a straight path there again.
     if (piece && e.detail === 2 && (hit?.kind === 'key' || hit?.kind === 'pull' || hit?.kind === 'pivot')) {
       const frame = hit.kind === 'pivot' ? ctx.anim.frame : hit.frame;
@@ -248,7 +253,7 @@ export default registerTool({
       let next = docToLocal(d.s0, d.pivot0, p);
       if (!next) return;
       // Snap to the middle, where most pivots go back to.
-      const mid = { x: piece.src.w / 2, y: piece.src.h / 2 };
+      const mid = { x: piece.src.width / 2, y: piece.src.height / 2 };
       const midScreen = ctx.view.toScreen(localToDoc(d.s0, d.pivot0, mid).x, localToDoc(d.s0, d.pivot0, mid).y);
       if (near({ x: e.sx, y: e.sy }, midScreen, PIVOT_SNAP_PX)) next = mid;
       const pivot = next;

@@ -262,6 +262,24 @@ export class Overlay {
   }
 
   /** A flat nib's cursor: a line across the nib (screen points), with a crosshair while it's tiny. */
+  /** A brush outline of any shape (screen points), drawn like `brushCursor` so it shows on any colour. */
+  shapeCursor(points: readonly Point[], closed = true): void {
+    if (points.length < 2) return;
+    const c = this.ctx;
+    c.save();
+    c.beginPath();
+    points.forEach((p, i) => (i === 0 ? c.moveTo(p.x, p.y) : c.lineTo(p.x, p.y)));
+    if (closed) c.closePath();
+    c.lineJoin = 'round';
+    c.lineWidth = 2.5;
+    c.strokeStyle = 'rgba(255,255,255,0.85)';
+    c.stroke();
+    c.lineWidth = 1;
+    c.strokeStyle = 'rgba(0,0,0,0.85)';
+    c.stroke();
+    c.restore();
+  }
+
   nibCursor(a: Point, b: Point): void {
     const c = this.ctx;
     c.save();

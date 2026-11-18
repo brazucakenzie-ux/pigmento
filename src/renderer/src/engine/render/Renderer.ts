@@ -2,19 +2,23 @@ import { toCss } from '../core/color';
 import { rectIntersect, rectUnion, type Rect } from '../core/geometry';
 import { walkLayers, type GroupLayer, type Layer, type PaintDocument, type RasterLayer, type VectorLayer } from '../doc/Document';
 import { drawNodes } from '../vector/render';
-import type { Surface } from '../raster/Surface';
+import type { Surface, Tile } from '../raster/Surface';
 import { TILE_SIZE } from '../raster/Surface';
 import type { PixelView } from '../raster/pixels';
 import type { View } from './View';
-import type { ImageBuf } from '../raster/transform';
 import { stateMatrix } from '../anim/interpolate';
-import { pieceBounds, pieceStateAt, type Piece } from '../anim/piece';
+import { pieceBounds, pieceStateAt, pieceTouches, repeatAxes, type Piece, type Repeat } from '../anim/piece';
+import { matChain, matTranslate } from '../core/matrix';
 import { piecesByLayer } from '../anim/pieceRaster';
 import { celAt, celIndexAt } from '../anim/cels';
 
 /** Onion-skin tints: drawings before the one shown, and after it. */
 const ONION_BEFORE = '#ff6a14';
 const ONION_AFTER = '#1f6bff';
+/** How strongly pieces show outside the canvas (faded, so it's clear they aren't in the picture). */
+const OUTSIDE_ALPHA = 0.4;
+
+const PATTERN_REPEAT: Record<Exclude<Repeat, 'none'>, 'repeat' | 'repeat-x' | 'repeat-y'> = { x: 'repeat-x', y: 'repeat-y', both: 'repeat' };
 
 type Ctx2D = OffscreenCanvasRenderingContext2D;
 
@@ -26,6 +30,13 @@ interface Mirror {
   surface: Surface | null;
   /** Shape layers: the object version last drawn. */
   version: number;
+}
+
+/** A piece's GPU copy and the tiles it was last uploaded from. */
+interface PieceMirror {
+  canvas: OffscreenCanvas;
+  ctx: Ctx2D;
+  tiles: (Tile | null)[];
 }
 
 /** Off-screen canvas a group's children are composited into before it is blended as one. */
@@ -63,8 +74,8 @@ export class Renderer {
   private groups = new Map<string, GroupCanvas>();
   /** Layers with pieces and a blend mode or opacity are composed here first (isolated). */
   private isolated = new Map<string, GroupCanvas>();
-  /** GPU copies of piece pixels (a piece's pixels never change, so they're uploaded once). */
-  private pieceCanvases = new WeakMap<ImageBuf, OffscreenCanvas>();
+  /** GPU copies of piece pixels, brought up to date tile by tile when they're drawn. */
+  private pieceCanvases = new WeakMap<Surface, PieceMirror>();
   /**
    * GPU copies of frame-by-frame drawings, kept so moving between frames needs no upload. The
    * least recently shown go first once they'd take more than CEL_MIRROR_BYTES.
@@ -95,6 +106,8 @@ export class Renderer {
     pixelGrid: 'rgba(120, 120, 140, 0.45)',
   };
   showPixelGrid = true;
+  /** Show the parts of pieces beyond the canvas, faded (screen only). */
+  piecesOutside = true;
   activeFilters: LayerFilter[] = [];
   /** A reference image over the canvas (view only: not in the composite, never exported). */
   reference: { canvas: OffscreenCanvas; x: number; y: number; w: number; h: number; scale: number; opacity: number } | null = null;
@@ -209,29 +222,78 @@ export class Renderer {
     return g;
   }
 
-  private pieceCanvas(img: ImageBuf): OffscreenCanvas {
-    let c = this.pieceCanvases.get(img);
-    if (!c) {
-      c = new OffscreenCanvas(Math.max(1, img.w), Math.max(1, img.h));
-      ctx2d(c).putImageData(new ImageData(new Uint8ClampedArray(img.data), img.w, img.h), 0, 0);
-      this.pieceCanvases.set(img, c);
+  /**
+   * A piece's GPU copy. Painting, undo and redo give a changed tile a new array, so comparing
+   * the tiles with the ones last uploaded finds what to upload again; `pieceChanged` covers a
+   * stroke still writing into the same tiles.
+   */
+  private pieceCanvas(s: Surface): OffscreenCanvas {
+    let m = this.pieceCanvases.get(s);
+    if (!m) {
+      const canvas = new OffscreenCanvas(s.width, s.height);
+      // A new canvas is transparent, which is what empty tiles are.
+      m = { canvas, ctx: ctx2d(canvas), tiles: s.tiles.map(() => null) };
+      this.pieceCanvases.set(s, m);
     }
-    return c;
+    for (let i = 0; i < s.tiles.length; i++) if (m.tiles[i] !== s.tiles[i]) this.uploadPieceTile(m, s, i);
+    return m.canvas;
   }
 
-  /** Draw pieces as they are at the current frame (r = only those touching it; alpha scales them). */
-  private drawPieces(ctx: Ctx2D | CanvasRenderingContext2D, pieces: readonly Piece[], r: Rect | null, alpha = 1, frame = this.doc.timeline.frame): void {
+  private uploadPieceTile(m: PieceMirror, s: Surface, i: number): void {
+    const tile = s.tiles[i];
+    const r = s.tileRect(i);
+    m.tiles[i] = tile;
+    if (!tile) m.ctx.clearRect(r.x, r.y, r.w, r.h);
+    else m.ctx.putImageData(new ImageData(tile as Uint8ClampedArray<ArrayBuffer>, TILE_SIZE, TILE_SIZE), r.x, r.y, 0, 0, r.w, r.h);
+  }
+
+  /** A piece's pixels changed inside r (its own pixels) without new tiles (a stroke under way). */
+  pieceChanged(s: Surface, r: Rect): void {
+    const m = this.pieceCanvases.get(s);
+    if (!m) return;
+    const tx0 = Math.max(0, Math.floor(r.x / TILE_SIZE));
+    const ty0 = Math.max(0, Math.floor(r.y / TILE_SIZE));
+    const tx1 = Math.min(s.cols - 1, Math.floor((r.x + r.w - 1) / TILE_SIZE));
+    const ty1 = Math.min(s.rows - 1, Math.floor((r.y + r.h - 1) / TILE_SIZE));
+    for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) this.uploadPieceTile(m, s, ty * s.cols + tx);
+  }
+
+  /**
+   * Draw pieces as they are at the current frame (r = only those touching it; alpha scales
+   * them). A repeating piece fills r with its tiles (`area` when r is null: the whole picture
+   * unless the caller says what's showing).
+   */
+  private drawPieces(
+    ctx: Ctx2D | CanvasRenderingContext2D,
+    pieces: readonly Piece[],
+    r: Rect | null,
+    alpha = 1,
+    frame = this.doc.timeline.frame,
+    area: Rect = r ?? { x: 0, y: 0, w: this.doc.width, h: this.doc.height },
+  ): void {
     for (const p of pieces) {
       const st = pieceStateAt(p, frame);
-      if (st.opacity <= 0 || p.src.w === 0 || p.src.h === 0) continue;
-      if (r && !rectIntersect(pieceBounds(p, frame), r)) continue;
+      if (st.opacity <= 0) continue;
+      if (r && !pieceTouches(p, frame, r)) continue;
       const m = stateMatrix(st, p.pivot);
       ctx.save();
       ctx.globalAlpha = st.opacity * alpha;
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
-      ctx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
-      ctx.drawImage(this.pieceCanvas(p.src), 0, 0);
+      if (p.repeat === 'none') {
+        ctx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
+        ctx.drawImage(this.pieceCanvas(p.src), 0, 0);
+      } else {
+        // Tiles as a pattern in the piece's own space, slid by its scroll on the axes it repeats along.
+        const pat = ctx.createPattern(this.pieceCanvas(p.src), PATTERN_REPEAT[p.repeat]);
+        if (pat) {
+          const ax = repeatAxes(p.repeat);
+          const t = matChain(matTranslate(ax.x ? st.scrollX : 0, ax.y ? st.scrollY : 0), m);
+          pat.setTransform(new DOMMatrix([t[0], t[1], t[2], t[3], t[4], t[5]]));
+          ctx.fillStyle = pat;
+          ctx.fillRect(area.x, area.y, area.w, area.h);
+        }
+      }
       ctx.restore();
     }
   }
@@ -630,6 +692,8 @@ export class Renderer {
       }
     }
 
+    if (this.piecesOutside && this.doc.pieces.length) this.drawOutside(ctx, { x, y, w, h });
+
     const ref = this.reference;
     if (ref) {
       const z = view.zoom * dpr;
@@ -639,6 +703,46 @@ export class Renderer {
       ctx.drawImage(ref.canvas, d.x * dpr + ref.x * z, d.y * dpr + ref.y * z, ref.w * ref.scale * z, ref.h * ref.scale * z);
       ctx.restore();
     }
+  }
+
+  /**
+   * The parts of pieces beyond the canvas, faded, on the workspace around the page (`page` is
+   * where it's drawn on the view canvas), so they can be seen and grabbed there. Never exported.
+   */
+  private drawOutside(ctx: CanvasRenderingContext2D, page: Rect): void {
+    const frame = this.doc.timeline.frame;
+    const { width: dw, height: dh } = this.doc;
+    const out: Piece[] = [];
+    for (const layer of walkLayers(this.doc.layers)) {
+      if (layer.kind !== 'raster' || !this.doc.isEffectivelyVisible(layer.id)) continue;
+      for (const p of this.doc.pieces) {
+        if (p.layerId !== layer.id) continue;
+        const b = pieceBounds(p, frame);
+        if (p.repeat !== 'none' || b.x < 0 || b.y < 0 || b.x + b.w > dw || b.y + b.h > dh) out.push(p);
+      }
+    }
+    if (!out.length) return;
+    const z = this.view.zoom * this.dpr;
+    const d = this.view.docRectOnScreen();
+    ctx.save();
+    // Everywhere but the page.
+    const far = 1e7;
+    ctx.beginPath();
+    ctx.rect(-far, -far, 2 * far, 2 * far);
+    ctx.rect(page.x, page.y, page.w, page.h);
+    ctx.clip('evenodd');
+    ctx.transform(z, 0, 0, z, d.x * this.dpr, d.y * this.dpr);
+    this.drawPieces(ctx, out, null, OUTSIDE_ALPHA, frame, this.viewportInDoc());
+    ctx.restore();
+  }
+
+  /** The viewport in document pixels (what a repeating piece needs to fill), turned view included. */
+  private viewportInDoc(): Rect {
+    const v = this.view;
+    const c = [v.toDoc(0, 0), v.toDoc(v.width, 0), v.toDoc(0, v.height), v.toDoc(v.width, v.height)];
+    const x0 = Math.floor(Math.min(...c.map((p) => p.x))) - 1;
+    const y0 = Math.floor(Math.min(...c.map((p) => p.y))) - 1;
+    return { x: x0, y: y0, w: Math.ceil(Math.max(...c.map((p) => p.x))) + 1 - x0, h: Math.ceil(Math.max(...c.map((p) => p.y))) + 1 - y0 };
   }
 
   /** Scaled snapshot of the composite for the navigator. */

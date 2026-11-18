@@ -16,6 +16,7 @@ import { GradientButton, PatternPicker } from './PaintOptions';
 import { SelectedShapeParams, ShapeOption, ShapeToolParams } from './ShapeGallery';
 import { BrushPicker } from './BrushPicker';
 import { EASINGS, type Easing } from '@engine/anim/interpolate';
+import { REPEATS, repeatAxes, type Repeat } from '@engine/anim/piece';
 
 const FALLBACK_FONTS = ['Segoe UI', 'Arial', 'Calibri', 'Cambria', 'Comic Sans MS', 'Consolas', 'Georgia', 'Impact', 'Segoe Print', 'Times New Roman', 'Trebuchet MS', 'Verdana'];
 
@@ -374,7 +375,8 @@ function PieceFields() {
   const info = useUi((s) => s.animation.current);
   const keys = useUi((s) => s.animation.pieces.find((p) => p.id === s.animation.selectedId)?.keys.length ?? 0);
   if (!info) return <span className="opt-hint">{t('piece.noneSelected')}</span>;
-  const field = (key: 'x' | 'y' | 'w' | 'h' | 'angle' | 'skew' | 'opacity', labelKey: I18nKey, unit: string, min: number, max: number, decimals: number) => {
+  const axes = repeatAxes(info.repeat);
+  const field = (key: 'x' | 'y' | 'w' | 'h' | 'angle' | 'skew' | 'opacity' | 'scrollX' | 'scrollY', labelKey: I18nKey, unit: string, min: number, max: number, decimals: number) => {
     const label = t(labelKey);
     return (
       <span className="opt tf-field">
@@ -454,7 +456,57 @@ function PieceFields() {
       <button type="button" className="icon-btn" aria-label={t('transform.flipV')} data-tip={t('transform.flipV')} onClick={() => engine.anim.setFields({ h: -info.h })}>
         <Icon name="flip-v" size={16} />
       </button>
+      <label className="opt">
+        <span>{t('piece.repeat')}</span>
+        <select
+          className="select"
+          aria-label={t('piece.repeat')}
+          value={info.repeat}
+          onChange={(e) => {
+            const id = engine.anim.selectedId;
+            if (id) engine.anim.setRepeat(id, e.target.value as Repeat);
+          }}
+        >
+          {REPEATS.map((r) => (
+            <option key={r} value={r}>
+              {t(`repeat.${r}` as I18nKey)}
+            </option>
+          ))}
+        </select>
+      </label>
+      {axes.x ? field('scrollX', 'piece.scrollX', 'px', -1e6, 1e6, 0) : null}
+      {axes.y ? field('scrollY', 'piece.scrollY', 'px', -1e6, 1e6, 0) : null}
+      {info.repeat !== 'none' ? (
+        <button
+          type="button"
+          className="icon-btn"
+          aria-label={t('piece.loopScroll')}
+          data-tip={t('piece.loopScroll')}
+          onClick={() => {
+            const id = engine.anim.selectedId;
+            if (id) engine.anim.loopScroll(id);
+          }}
+        >
+          <Icon name="loop" size={16} />
+        </button>
+      ) : null}
     </>
+  );
+}
+
+/** Paint on piece, for the tools that can paint a piece's own pixels, while a piece is selected. */
+function PaintOnPiece() {
+  const pieces = useUi((s) => s.animation.pieces);
+  const selectedId = useUi((s) => s.animation.selectedId);
+  const on = useUi((s) => s.animation.paintOnPiece);
+  const i = pieces.findIndex((p) => p.id === selectedId);
+  if (i < 0) return null;
+  const name = pieces[i].name || t('piece.defaultName', { n: i + 1 });
+  return (
+    <label className="check opt" data-tip={t('piece.paintOn', { piece: name })}>
+      <input type="checkbox" checked={on} onChange={() => engine.anim.setPaintOnPiece(!on)} />
+      {t('action.paintOnPiece')}
+    </label>
   );
 }
 
@@ -483,6 +535,7 @@ export function OptionsBar() {
             {t('action.transparentSelection')}
           </label>
         ) : null}
+        {tool.paintsPieces && !simple ? <PaintOnPiece /> : null}
         {visible.map((spec) => (
           <OptionControl key={spec.key} toolId={toolId} spec={spec} values={values} />
         ))}

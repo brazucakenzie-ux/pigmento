@@ -39,6 +39,11 @@ export class View {
   height = 1;
   docW = 1;
   docH = 1;
+  /**
+   * More to reach than the document, in document pixels (pieces outside the canvas): panning,
+   * the scrollbars and fitting everything cover it too. Changing it never moves the view.
+   */
+  extent: Rect | null = null;
   /** Radians. */
   private angle = 0;
   private cos = 1;
@@ -158,6 +163,25 @@ export class View {
     this.center();
   }
 
+  /** Fit the document and everything outside it (the extent) in the viewport. */
+  fitAll(allowUpscale = false): void {
+    const r = this.reach();
+    const z = Math.min((this.width - MARGIN * 2) / r.w, (this.height - MARGIN * 2) / r.h);
+    this.zoom = clamp(allowUpscale ? z : Math.min(1, z), MIN_ZOOM, MAX_ZOOM);
+    this.panX = (this.width - r.w * this.zoom) / 2 - r.x * this.zoom;
+    this.panY = (this.height - r.h * this.zoom) / 2 - r.y * this.zoom;
+    this.clampPan();
+  }
+
+  /** The document, and the extent around it. */
+  private reach(): Rect {
+    const e = this.extent;
+    if (!e) return { x: 0, y: 0, w: this.docW, h: this.docH };
+    const x0 = Math.min(0, e.x);
+    const y0 = Math.min(0, e.y);
+    return { x: x0, y: y0, w: Math.max(this.docW, e.x + e.w) - x0, h: Math.max(this.docH, e.y + e.h) - y0 };
+  }
+
   center(): void {
     this.panX = (this.width - this.docW * this.zoom) / 2;
     this.panY = (this.height - this.docH * this.zoom) / 2;
@@ -183,27 +207,40 @@ export class View {
 
   /** Scroll geometry for scrollbars along one axis. */
   scrollInfo(axis: 'x' | 'y'): { content: number; viewport: number; offset: number } {
-    const docSize = (axis === 'x' ? this.docW : this.docH) * this.zoom;
+    const r = this.reach();
+    const size = (axis === 'x' ? r.w : r.h) * this.zoom;
+    const start = (axis === 'x' ? r.x : r.y) * this.zoom;
     const viewport = axis === 'x' ? this.width : this.height;
     const pan = axis === 'x' ? this.panX : this.panY;
-    const content = Math.max(viewport, docSize + MARGIN * 2);
+    const content = Math.max(viewport, size + MARGIN * 2);
     // offset = how far the content's start is scrolled past the viewport start.
-    const offset = docSize + MARGIN * 2 <= viewport ? 0 : MARGIN - pan;
+    const offset = size + MARGIN * 2 <= viewport ? 0 : MARGIN - pan - start;
     return { content, viewport, offset };
   }
 
   scrollTo(axis: 'x' | 'y', offset: number): void {
-    if (axis === 'x') this.panX = MARGIN - offset;
-    else this.panY = MARGIN - offset;
+    const r = this.reach();
+    if (axis === 'x') this.panX = MARGIN - offset - r.x * this.zoom;
+    else this.panY = MARGIN - offset - r.y * this.zoom;
     this.clampPan();
   }
 
+  /**
+   * Keep what can be reached on screen. When it all fits, the document is centred (moved only
+   * as far as needed to keep the rest in view); otherwise it can be panned to its edges.
+   */
   private clampPan(): void {
-    const dw = this.docW * this.zoom;
-    const dh = this.docH * this.zoom;
-    if (dw + MARGIN * 2 <= this.width) this.panX = (this.width - dw) / 2;
-    else this.panX = clamp(this.panX, this.width - dw - MARGIN, MARGIN);
-    if (dh + MARGIN * 2 <= this.height) this.panY = (this.height - dh) / 2;
-    else this.panY = clamp(this.panY, this.height - dh - MARGIN, MARGIN);
+    const r = this.reach();
+    this.panX = this.clampAxis(this.panX, this.width, this.docW, r.x, r.w);
+    this.panY = this.clampAxis(this.panY, this.height, this.docH, r.y, r.h);
+  }
+
+  private clampAxis(pan: number, viewport: number, doc: number, start: number, size: number): number {
+    const z = this.zoom;
+    // Pan that puts the far end at the viewport's far margin, and the near end at its near one.
+    const far = viewport - MARGIN - (start + size) * z;
+    const near = MARGIN - start * z;
+    if (size * z + MARGIN * 2 <= viewport) return clamp((viewport - doc * z) / 2, near, far);
+    return clamp(pan, far, near);
   }
 }
