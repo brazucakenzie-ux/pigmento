@@ -22,6 +22,7 @@ import {
   pieceStateAt,
   type KeyChange,
   type Piece,
+  type Back,
   type Repeat,
 } from './piece';
 import { advance, clampFps, clampFrame, clampLength, type LoopMode, type PlayState, type Timeline } from './timeline';
@@ -263,6 +264,16 @@ export class AnimationController {
     if (change.scrollY !== undefined) k.scrollY = clampScroll(change.scrollY);
     if (change.easing !== undefined) k.easing = change.easing;
     return this.setKey(p.id, this.frame, k);
+  }
+
+  /** What shows when a piece is turned round in 3D (one undo step; not keyframed). */
+  setBack(id: string, back: Back): boolean {
+    const p = this.piece(id);
+    if (!p || p.back === back) return false;
+    return this.change('history.pieceBack', () => {
+      p.back = back;
+      return true;
+    });
   }
 
   /** Which way copies of a piece tile on (one undo step; not keyframed). */

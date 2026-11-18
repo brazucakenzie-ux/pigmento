@@ -3,7 +3,7 @@ import { matApplyPoints, type Mat } from '../core/matrix';
 import { Surface } from '../raster/Surface';
 import type { ImageBuf } from '../raster/transform';
 import { identityState, stateAt, stateMatrix, STATE_KEYS, type Easing, type Keyframe, type PieceState } from './interpolate';
-import { FLAT_SPACE, placementOf, type Placement, type Space } from './space';
+import { FLAT_SPACE, placementOf, placementOutline, type Placement, type Space } from './space';
 
 /**
  * Pixels with their own size, belonging to a pixel layer and animated with keyframes. It's
@@ -111,10 +111,15 @@ export function pieceMatrixAt(p: Piece, frame: number): Mat {
   return stateMatrix(pieceStateAt(p, frame), p.pivot);
 }
 
-/** The piece's four corners at `frame`, in document pixels. */
-export function pieceCorners(p: Piece, frame: number): Point[] {
+/**
+ * The piece's box at `frame` on the canvas, in document pixels: its four corners, or in 3D the
+ * outline of the part in front of the camera.
+ */
+export function pieceCorners(p: Piece, frame: number, space: Space = FLAT_SPACE): Point[] {
   const { w, h } = pieceSize(p);
-  return matApplyPoints(pieceMatrixAt(p, frame), [
+  const pl = piecePlacementAt(p, frame, space);
+  if (!pl.affine) return placementOutline(pl, w, h, space);
+  return matApplyPoints(pl.affine, [
     { x: 0, y: 0 },
     { x: w, y: 0 },
     { x: w, y: h },
@@ -126,18 +131,25 @@ export function pieceCorners(p: Piece, frame: number): Point[] {
  * Area the piece's own box covers at `frame` (rounded out to whole pixels, plus one for
  * smoothing). A repeating piece draws beyond it: see `pieceTouches`.
  */
-export function pieceBounds(p: Piece, frame: number): Rect {
-  const b = boundsOfPoints(pieceCorners(p, frame)) ?? { x: 0, y: 0, w: 0, h: 0 };
+export function pieceBounds(p: Piece, frame: number, space: Space = FLAT_SPACE): Rect {
+  const b = boundsOfPoints(pieceCorners(p, frame, space)) ?? { x: 0, y: 0, w: 0, h: 0 };
   const x = Math.floor(b.x) - 1;
   const y = Math.floor(b.y) - 1;
   return { x, y, w: Math.ceil(b.x + b.w) + 1 - x, h: Math.ceil(b.y + b.h) + 1 - y };
 }
 
 /** The piece may draw something inside r at `frame` (a repeating one reaches everywhere). */
-export function pieceTouches(p: Piece, frame: number, r: Rect): boolean {
+export function pieceTouches(p: Piece, frame: number, r: Rect, space: Space = FLAT_SPACE): boolean {
   if (p.repeat !== 'none') return true;
-  const b = pieceBounds(p, frame);
+  const b = pieceBounds(p, frame, space);
   return b.x < r.x + r.w && b.x + b.w > r.x && b.y < r.y + r.h && b.y + b.h > r.y;
+}
+
+/** A layer's pieces back to front: the furthest away first (by their middles), ties in list order. */
+export function backToFront(pieces: readonly Piece[], frame: number, space: Space = FLAT_SPACE): Piece[] {
+  const keyed = pieces.map((p, i) => ({ p, i, d: piecePlacementAt(p, frame, space).depth }));
+  if (keyed.every((k) => k.d === keyed[0]?.d)) return [...pieces];
+  return keyed.sort((a, b) => b.d - a.d || a.i - b.i).map((k) => k.p);
 }
 
 export function keyframeIndex(keys: readonly Keyframe[], frame: number): number {

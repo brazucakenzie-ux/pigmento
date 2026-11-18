@@ -149,6 +149,7 @@ export const animEn = {
   'piece.loopScroll': 'Loop the scroll: slide one whole tile over the timeline, so the end leads straight back into the start',
   'history.pieceRepeat': 'Repeat piece',
   'history.loopScroll': 'Loop scroll',
+  'history.pieceBack': 'Piece back',
   'notice.loopNeedsRepeat': 'Only a repeating piece can scroll round. Turn on Repeat first.',
   'notice.loopNeedsFrames': 'The timeline needs at least 2 frames to loop.',
   'notice.pieceHidden': 'This piece isn’t showing at this frame (its layer is hidden, or it’s see-through), so it can’t be painted on here.',

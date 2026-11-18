@@ -88,19 +88,25 @@ export function brushOptionsFor(def: BrushDef): ToolOptions {
  */
 export function drawBrushCursor(ctx: ToolContext, ov: Overlay, hover: Point, settings: BrushSettings, size: number): void {
   const piece = ctx.anim.paintTarget;
-  const map = piece ? piecePaintMap(piece, pieceStateAt(piece, ctx.anim.frame)) : null;
-  if (map) {
+  const map = piece ? piecePaintMap(piece, pieceStateAt(piece, ctx.anim.frame), ctx.doc.space, hover) : null;
+  const c = map?.toPiece(hover);
+  if (map && c) {
     const s = forPiece({ settings, size, opacity: 1, pressure: false, smoothing: 0 }, map);
-    const c = map.toPiece(hover);
-    const toScreen = (p: Point) => ov.toScreen(map.toDoc(p));
+    const toScreen = (p: Point): Point | null => {
+      const d = map.toDoc(p);
+      return d && ov.toScreen(d);
+    };
     if (isFlatNib(s.settings)) {
-      const [a, b] = nibEnds(c, s.size, s.settings.angle);
-      ov.nibCursor(toScreen(a), toScreen(b));
+      const [a, b] = nibEnds(c, s.size, s.settings.angle).map(toScreen);
+      if (a && b) ov.nibCursor(a, b);
       return;
     }
     const r = Math.max(0.5, s.size / 2);
     const pts: Point[] = [];
-    for (let i = 0; i < 48; i++) pts.push(toScreen({ x: c.x + r * Math.cos((i / 48) * Math.PI * 2), y: c.y + r * Math.sin((i / 48) * Math.PI * 2) }));
+    for (let i = 0; i < 48; i++) {
+      const p = toScreen({ x: c.x + r * Math.cos((i / 48) * Math.PI * 2), y: c.y + r * Math.sin((i / 48) * Math.PI * 2) });
+      if (p) pts.push(p);
+    }
     ov.shapeCursor(pts);
     return;
   }
@@ -219,7 +225,16 @@ export function createBrushTool(cfg: BrushToolConfig): Tool {
   /** Symmetry copies of a canvas point, carried into the pixels painted (a piece's own, when painting on one). */
   const copiesFor = (ctx: ToolContext, map: PiecePaintMap | null): ((p: Point) => Point)[] => {
     const copies = symmetryCopies(ctx.symmetry, ctx.doc.width, ctx.doc.height);
-    return map ? copies.map((f) => (p: Point) => map.toPiece(f(p))) : copies;
+    if (!map) return copies;
+    // Where the sheet isn't (past its horizon), a copy holds at the last place it was.
+    return copies.map((f) => {
+      let last: Point | null = null;
+      return (p: Point): Point => {
+        const q = map.toPiece(f(p));
+        if (q) last = q;
+        return q ?? last ?? { x: Number.NaN, y: Number.NaN };
+      };
+    });
   };
 
   /**
@@ -240,7 +255,7 @@ export function createBrushTool(cfg: BrushToolConfig): Tool {
         : emit;
     if (cfg.direct) {
       const ops: DabOp[] = [];
-      const toTarget = map ? (p: Point) => map.toPiece(p) : (p: Point) => p;
+      const toTarget = map ? (p: Point) => map.toPiece(p) ?? p : (p: Point) => p;
       for (let i = 0; i < copies.length; i++) {
         const op = cfg.direct.begin(ctx, { layer: s.layer, start: copies[i](start), shape, clip: s.clip, copy: i, toTarget });
         if (!op) return null;
@@ -334,8 +349,9 @@ export function createBrushTool(cfg: BrushToolConfig): Tool {
       let map: PiecePaintMap | null = null;
       if (piece) {
         if (!ctx.anim.canPaint(piece)) return;
-        map = piecePaintMap(piece, pieceStateAt(piece, ctx.anim.frame));
-        if (!map) return;
+        // Nothing is painted where the sheet is seen edge-on, or where the pointer isn't on its plane.
+        map = piecePaintMap(piece, pieceStateAt(piece, ctx.anim.frame), doc.space, { x: e.x, y: e.y });
+        if (!map || !map.toPiece({ x: e.x, y: e.y })) return;
         // Stands in for a layer, so strokes and retouching read and write the piece's pixels.
         layer = new RasterLayer('', piece.src);
       } else {

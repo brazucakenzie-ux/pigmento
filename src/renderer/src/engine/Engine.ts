@@ -504,8 +504,9 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     let r: Rect | null = null;
     if (this.viewOptions.piecesOutside && this.doc.pieces.length) {
       const frame = this.doc.timeline.frame;
+      const space = this.doc.space;
       for (const p of this.doc.pieces) {
-        if (this.doc.layerById(p.layerId)?.kind === 'raster' && this.doc.isEffectivelyVisible(p.layerId)) r = rectUnion(r, pieceBounds(p, frame));
+        if (this.doc.layerById(p.layerId)?.kind === 'raster' && this.doc.isEffectivelyVisible(p.layerId)) r = rectUnion(r, pieceBounds(p, frame, space));
       }
       if (r) {
         const x0 = Math.max(-MAX_REACH, r.x);
@@ -1262,7 +1263,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
    */
   private async fillPiece(piece: Piece, x: number, y: number, paint: RGBA | FillPattern, tolerance: number, contiguous: boolean): Promise<void> {
     if (this.fillBusy || !this.anim.canPaint(piece)) return;
-    const q = docToPixel(piece, pieceStateAt(piece, this.doc.timeline.frame), { x, y });
+    const q = docToPixel(piece, pieceStateAt(piece, this.doc.timeline.frame), { x, y }, this.doc.space);
     const s = piece.src;
     const { width: w, height: h } = s;
     const px = q ? Math.floor(q.x) : -1;

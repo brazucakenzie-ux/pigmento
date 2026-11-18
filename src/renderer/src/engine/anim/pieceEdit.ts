@@ -2,6 +2,7 @@ import type { Point } from '../core/geometry';
 import { matApply, matChain, matInvert, matRotate, type Mat } from '../core/matrix';
 import { stateMatrix, type PieceState } from './interpolate';
 import { pieceStateAt, repeatAxes, type Piece } from './piece';
+import { FLAT_SPACE, placementOf, unproject, type Space } from './space';
 
 /** The eight box handles of a piece, in its own (source pixel) frame. */
 export type PieceHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
@@ -139,8 +140,13 @@ const mod = (v: number, n: number): number => ((v % n) + n) % n;
  * Document point p in the piece's own pixels at state s, with a repeating piece's copies (and its
  * scroll) folded back onto the original tile. Null if the piece has no area.
  */
-export function docToPixel(piece: Piece, s: PieceState, p: Point): Point | null {
-  const q = docToLocal(s, piece.pivot, p);
+export function docToPixel(piece: Piece, s: PieceState, p: Point, space: Space = FLAT_SPACE): Point | null {
+  const pl = placementOf(s, piece.pivot, piece.src.width, piece.src.height, space);
+  let q: Point | null;
+  if (pl.affine) {
+    const inv = matInvert(pl.affine);
+    q = inv ? matApply(inv, p.x, p.y) : null;
+  } else q = unproject(pl, p);
   if (!q) return null;
   const ax = repeatAxes(piece.repeat);
   return {
@@ -150,12 +156,13 @@ export function docToPixel(piece: Piece, s: PieceState, p: Point): Point | null 
 }
 
 /** The piece on top at document point p at `frame` (only where it isn't see-through; any copy of a repeating one). */
-export function pieceAt(pieces: readonly Piece[], frame: number, p: Point): Piece | null {
+export function pieceAt(pieces: readonly Piece[], frame: number, p: Point, space: Space = FLAT_SPACE): Piece | null {
   for (let i = pieces.length - 1; i >= 0; i--) {
     const piece = pieces[i];
     const s = pieceStateAt(piece, frame);
     if (s.opacity <= 0) continue;
-    const q = docToPixel(piece, s, p);
+    if (piece.back === 'hide' && !placementOf(s, piece.pivot, piece.src.width, piece.src.height, space).front) continue;
+    const q = docToPixel(piece, s, p, space);
     if (!q) continue;
     const x = Math.floor(q.x);
     const y = Math.floor(q.y);
@@ -166,7 +173,7 @@ export function pieceAt(pieces: readonly Piece[], frame: number, p: Point): Piec
 }
 
 /** True if p is inside the piece's box at `frame` (transparent parts included; any copy of a repeating one). */
-export function insidePiece(piece: Piece, frame: number, p: Point): boolean {
-  const q = docToPixel(piece, pieceStateAt(piece, frame), p);
+export function insidePiece(piece: Piece, frame: number, p: Point, space: Space = FLAT_SPACE): boolean {
+  const q = docToPixel(piece, pieceStateAt(piece, frame), p, space);
   return !!q && q.x >= 0 && q.y >= 0 && q.x <= piece.src.width && q.y <= piece.src.height;
 }

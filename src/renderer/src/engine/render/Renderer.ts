@@ -6,9 +6,13 @@ import type { Surface, Tile } from '../raster/Surface';
 import { TILE_SIZE } from '../raster/Surface';
 import type { PixelView } from '../raster/pixels';
 import type { View } from './View';
-import { stateMatrix } from '../anim/interpolate';
-import { pieceBounds, pieceStateAt, pieceTouches, repeatAxes, type Piece, type Repeat } from '../anim/piece';
+import { backToFront, pieceBounds, pieceStateAt, pieceTouches, repeatAxes, type Piece, type Repeat } from '../anim/piece';
 import { matChain, matTranslate } from '../core/matrix';
+import { placementOf, type Placement } from '../anim/space';
+import { pieceTiling } from '../anim/pieceRaster';
+import { sampleProjective } from '../anim/pieceProject';
+import type { Tiling } from '../anim/pieceSample';
+import { PlaneRenderer } from './PlaneRenderer';
 import { piecesByLayer } from '../anim/pieceRaster';
 import { celAt, celIndexAt } from '../anim/cels';
 
@@ -76,6 +80,8 @@ export class Renderer {
   private isolated = new Map<string, GroupCanvas>();
   /** GPU copies of piece pixels, brought up to date tile by tile when they're drawn. */
   private pieceCanvases = new WeakMap<Surface, PieceMirror>();
+  /** Pieces tilted or turned in 3D (WebGL2). */
+  private planes = new PlaneRenderer();
   /**
    * GPU copies of frame-by-frame drawings, kept so moving between frames needs no upload. The
    * least recently shown go first once they'd take more than CEL_MIRROR_BYTES.
@@ -172,6 +178,8 @@ export class Renderer {
     for (const id of [...this.isolated.keys()]) if (!live.has(id)) this.isolated.delete(id);
     // Drawings no longer in the picture (deleted, cleared, or replaced by a resize) let their copies go.
     for (const s of [...this.celMirrors.keys()]) if (!liveCels.has(s)) this.celMirrors.delete(s);
+    // Textures of pieces that are gone (undo can bring a piece back: it's uploaded again then).
+    this.planes.retain(new Set(this.doc.pieces.map((p) => p.src)));
     this.invalidate(null);
   }
 
@@ -249,6 +257,7 @@ export class Renderer {
 
   /** A piece's pixels changed inside r (its own pixels) without new tiles (a stroke under way). */
   pieceChanged(s: Surface, r: Rect): void {
+    this.planes.touch(s, r);
     const m = this.pieceCanvases.get(s);
     if (!m) return;
     const tx0 = Math.max(0, Math.floor(r.x / TILE_SIZE));
@@ -271,15 +280,26 @@ export class Renderer {
     frame = this.doc.timeline.frame,
     area: Rect = r ?? { x: 0, y: 0, w: this.doc.width, h: this.doc.height },
   ): void {
-    for (const p of pieces) {
+    const space = this.doc.space;
+    for (const p of backToFront(pieces, frame, space)) {
       const st = pieceStateAt(p, frame);
       if (st.opacity <= 0) continue;
-      if (r && !pieceTouches(p, frame, r)) continue;
-      const m = stateMatrix(st, p.pivot);
+      if (r && !pieceTouches(p, frame, r, space)) continue;
+      const pl = placementOf(st, p.pivot, p.src.width, p.src.height, space);
+      if (!pl.front && p.back === 'hide') continue;
       ctx.save();
       ctx.globalAlpha = st.opacity * alpha;
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
+      if (!pl.affine) {
+        // Tilted or turned: a true perspective image needs the GPU (or the CPU path if it can't).
+        const tiling = pieceTiling(p, st);
+        const where = tiling ? area : rectIntersect(area, pieceBounds(p, frame, space));
+        if (where && !this.planes.draw(ctx, p.src, pl, tiling, where)) this.drawOnCpu(ctx, p, pl, tiling, where);
+        ctx.restore();
+        continue;
+      }
+      const m = pl.affine;
       if (p.repeat === 'none') {
         ctx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
         ctx.drawImage(this.pieceCanvas(p.src), 0, 0);
@@ -296,6 +316,20 @@ export class Renderer {
       }
       ctx.restore();
     }
+  }
+
+  /** A piece in 3D drawn by the CPU path when the GPU can't (no WebGL2, or the GPU reset). */
+  private drawOnCpu(ctx: Ctx2D | CanvasRenderingContext2D, p: Piece, pl: Placement, tiling: Tiling | null, where: Rect): void {
+    const img = sampleProjective(p.src, pl, where, tiling, tiling ? null : where);
+    if (img.w === 0 || img.h === 0) return;
+    const c = new OffscreenCanvas(img.w, img.h);
+    ctx2d(c).putImageData(new ImageData(img.data as Uint8ClampedArray<ArrayBuffer>, img.w, img.h), 0, 0);
+    ctx.drawImage(c, img.x, img.y);
+  }
+
+  /** True when pieces in 3D are drawn on the GPU (false: the CPU path stands in). */
+  get gpuPlanes(): boolean {
+    return this.planes.ready;
   }
 
   /** The GPU copy of one frame-by-frame drawing (made empty if it's new or was let go). */
@@ -717,7 +751,7 @@ export class Renderer {
       if (layer.kind !== 'raster' || !this.doc.isEffectivelyVisible(layer.id)) continue;
       for (const p of this.doc.pieces) {
         if (p.layerId !== layer.id) continue;
-        const b = pieceBounds(p, frame);
+        const b = pieceBounds(p, frame, this.doc.space);
         if (p.repeat !== 'none' || b.x < 0 || b.y < 0 || b.x + b.w > dw || b.y + b.h > dh) out.push(p);
       }
     }

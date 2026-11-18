@@ -209,7 +209,7 @@ export function installTestHook(): void {
     anim: () => engine.anim.info(),
     animateSelection: (keepOriginal = false) => engine.animateSelection(keepOriginal),
     setFrame: (frame: number) => engine.anim.setFrame(frame),
-    setPieceKey: (id: string, frame: number, change: Partial<Record<'x' | 'y' | 'sx' | 'sy' | 'angle' | 'skew' | 'opacity' | 'scrollX' | 'scrollY', number>>) =>
+    setPieceKey: (id: string, frame: number, change: Partial<Record<'x' | 'y' | 'sx' | 'sy' | 'angle' | 'skew' | 'opacity' | 'scrollX' | 'scrollY' | 'depth' | 'tilt' | 'turn', number>>) =>
       engine.anim.setKey(id, frame, change),
     celMirrors: () => engine.renderer.celMirrorCount,
     setTimeline: (change: { fps?: number; length?: number }) => engine.anim.setTimeline(change),
@@ -247,5 +247,7 @@ export function installTestHook(): void {
     pieceFromLayer: (keepOriginal = false) => engine.pieceFromLayer(keepOriginal),
     setPieceRepeat: (id: string, repeat: 'none' | 'x' | 'y' | 'both') => engine.anim.setRepeat(id, repeat),
     selectPiece: (id: string | null) => engine.anim.select(id),
+    setPieceBack: (id: string, back: 'mirror' | 'hide') => engine.anim.setBack(id, back),
+    gpuPlanes: () => engine.renderer.gpuPlanes,
   };
 }

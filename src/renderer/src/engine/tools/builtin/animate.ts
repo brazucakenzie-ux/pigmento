@@ -118,7 +118,7 @@ function hitSelected(ctx: ToolContext, p: Piece, e: ToolPointerEvent): Hit | nul
   for (const h of PIECE_HANDLES) if (near(sp, g.handles[h])) return { kind: 'handle', handle: h };
   if (near(sp, g.rotate)) return { kind: 'rotate' };
   for (const k of keys) if (k.frame !== frame && near(sp, dot(k))) return { kind: 'key', frame: k.frame };
-  if (insidePiece(p, frame, e)) return { kind: 'body' };
+  if (insidePiece(p, frame, e, ctx.doc.space)) return { kind: 'body' };
   return null;
 }
 
@@ -182,7 +182,7 @@ export default registerTool({
     let hit = piece ? hitSelected(ctx, piece, e) : null;
     // A repeating piece's copies reach everywhere: a piece showing on top of them is picked instead.
     if (piece && hit?.kind === 'body' && piece.repeat !== 'none') {
-      const top = pieceAt(visiblePieces(ctx), ctx.anim.frame, e);
+      const top = pieceAt(visiblePieces(ctx), ctx.anim.frame, e, ctx.doc.space);
       if (top && top.id !== piece.id) hit = null;
     }
     // Double-click a keyframe's dot: a straight path there again.
@@ -191,7 +191,7 @@ export default registerTool({
       if (ctx.anim.straighten(piece.id, frame)) return;
     }
     if (!hit) {
-      piece = pieceAt(visiblePieces(ctx), ctx.anim.frame, e);
+      piece = pieceAt(visiblePieces(ctx), ctx.anim.frame, e, ctx.doc.space);
       ctx.anim.select(piece?.id ?? null);
       if (!piece) return;
       hit = { kind: 'body' };
@@ -285,7 +285,7 @@ export default registerTool({
   hover(ctx, e) {
     const sel = ctx.anim.selected;
     const hit = sel ? hitSelected(ctx, sel, e) : null;
-    const over = hit ? null : pieceAt(visiblePieces(ctx), ctx.anim.frame, e);
+    const over = hit ? null : pieceAt(visiblePieces(ctx), ctx.anim.frame, e, ctx.doc.space);
     const id = over?.id ?? null;
     if (id !== hovered) {
       hovered = id;
