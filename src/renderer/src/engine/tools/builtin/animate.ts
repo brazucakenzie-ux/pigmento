@@ -180,6 +180,11 @@ export default registerTool({
     if (e.button !== 0) return;
     let piece = ctx.anim.selected;
     let hit = piece ? hitSelected(ctx, piece, e) : null;
+    // A repeating piece's copies reach everywhere: a piece showing on top of them is picked instead.
+    if (piece && hit?.kind === 'body' && piece.repeat !== 'none') {
+      const top = pieceAt(visiblePieces(ctx), ctx.anim.frame, e);
+      if (top && top.id !== piece.id) hit = null;
+    }
     // Double-click a keyframe's dot: a straight path there again.
     if (piece && e.detail === 2 && (hit?.kind === 'key' || hit?.kind === 'pull' || hit?.kind === 'pivot')) {
       const frame = hit.kind === 'pivot' ? ctx.anim.frame : hit.frame;

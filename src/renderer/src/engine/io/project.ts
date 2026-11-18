@@ -33,7 +33,7 @@ import {
 import { Surface } from '../raster/Surface';
 import { MAX_DIMENSION, MAX_PIXELS } from './protocol';
 import { EASINGS, type Easing, type Keyframe } from '../anim/interpolate';
-import { MAX_KEYFRAMES, MAX_PIECES, newPieceId, type Piece } from '../anim/piece';
+import { MAX_KEYFRAMES, MAX_PIECES, MAX_SCROLL, newPieceId, REPEATS, type Piece, type Repeat } from '../anim/piece';
 import { LOOP_MODES, MAX_FPS, MAX_FRAMES, MIN_FPS, clampFrame, type LoopMode } from '../anim/timeline';
 import { MAX_CELS, type Cel } from '../anim/cels';
 
@@ -293,6 +293,9 @@ const KeyframeJson = z.object({
   angle: z.number().min(-1e6).max(1e6),
   skew: z.number().min(-1.5).max(1.5),
   opacity: z.number().min(0).max(1),
+  /** Version 3: where a repeating piece's tiles have slid (version 2 has none). */
+  scrollX: z.number().min(-MAX_SCROLL).max(MAX_SCROLL).default(0),
+  scrollY: z.number().min(-MAX_SCROLL).max(MAX_SCROLL).default(0),
   easing: z.enum(EASINGS as [Easing, ...Easing[]]),
   in: PointJson.nullable(),
   out: PointJson.nullable(),
@@ -305,6 +308,8 @@ const PieceJson = z.object({
   home: z.object({ x: num, y: num, w: num, h: num }),
   pivot: PointJson,
   keyframes: z.array(KeyframeJson).min(1).max(MAX_KEYFRAMES),
+  /** Version 3: copies tiling on; version 2 pieces don't repeat. */
+  repeat: z.enum(REPEATS as [Repeat, ...Repeat[]]).default('none'),
 });
 const AnimationJson = z.object({
   fps: int.min(MIN_FPS).max(MAX_FPS),
@@ -436,6 +441,7 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
       home: { ...p.home },
       pivot: { ...p.pivot },
       keyframes: p.keyframes.map((k) => ({ ...k, in: k.in && { ...k.in }, out: k.out && { ...k.out } })),
+      repeat: p.repeat,
     });
   }
   const t = doc.timeline;
@@ -636,6 +642,7 @@ async function readAnimation(doc: PaintDocument, a: NonNullable<DocumentJson['an
       home: { ...p.home },
       pivot: { ...p.pivot },
       keyframes: [...byFrame.values()].sort((x, y) => x.frame - y.frame),
+      repeat: p.repeat,
     });
   }
   doc.pieces = pieces;

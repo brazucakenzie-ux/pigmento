@@ -2,9 +2,9 @@ import { rectIntersect, type Rect } from '../core/geometry';
 import type { Layer, PaintDocument } from '../doc/Document';
 import type { LayerExtras } from '../raster/blend';
 import { applyImage, type PixelView } from '../raster/pixels';
-import { stateMatrix } from './interpolate';
-import { sampleAffine } from './pieceSample';
-import { pieceBounds, pieceStateAt, type Piece } from './piece';
+import { stateMatrix, type PieceState } from './interpolate';
+import { sampleAffine, type Tiling } from './pieceSample';
+import { pieceBounds, pieceStateAt, pieceTouches, repeatAxes, type Piece } from './piece';
 import { celAt } from './cels';
 
 /** Pieces grouped by the layer they belong to, bottom to top. */
@@ -18,13 +18,20 @@ export function piecesByLayer(pieces: readonly Piece[]): Map<string, Piece[]> {
   return out;
 }
 
+/** How a piece tiles at state s (null when it doesn't repeat). */
+export function pieceTiling(p: Piece, s: PieceState): Tiling | null {
+  if (p.repeat === 'none') return null;
+  return { ...repeatAxes(p.repeat), scrollX: s.scrollX, scrollY: s.scrollY };
+}
+
 /** Draw one piece as it is at `frame` into view, inside r (bilinear, premultiplied, like the screen). */
 export function drawPiece(view: PixelView, r: Rect, p: Piece, frame: number): void {
   const s = pieceStateAt(p, frame);
   if (s.opacity <= 0) return;
-  const area = rectIntersect(pieceBounds(p, frame), r);
+  const tiling = pieceTiling(p, s);
+  const area = tiling ? r : rectIntersect(pieceBounds(p, frame), r);
   if (!area) return;
-  const img = sampleAffine(p.src, stateMatrix(s, p.pivot), area);
+  const img = sampleAffine(p.src, stateMatrix(s, p.pivot), area, tiling);
   if (img.w === 0 || img.h === 0) return;
   applyImage(view, { x: img.x, y: img.y, w: img.w, h: img.h }, { data: img.data, stride: img.w, ox: img.x, oy: img.y }, 'over', s.opacity);
 }
@@ -39,7 +46,7 @@ export function frameExtras(doc: PaintDocument, frame: number): LayerExtras | un
   if (!doc.pieces.length && !cels) return undefined;
   const byLayer = piecesByLayer(doc.pieces);
   const visibleIn = (layer: Layer, r: Rect): Piece[] =>
-    (byLayer.get(layer.id) ?? []).filter((p) => pieceStateAt(p, frame).opacity > 0 && rectIntersect(pieceBounds(p, frame), r) !== null);
+    (byLayer.get(layer.id) ?? []).filter((p) => pieceStateAt(p, frame).opacity > 0 && pieceTouches(p, frame, r));
   return {
     covers: (layer, r) => layer.kind === 'raster' && visibleIn(layer, r).length > 0,
     draw: (layer, r, view) => {

@@ -7,7 +7,8 @@ import { TILE_SIZE } from '../raster/Surface';
 import type { PixelView } from '../raster/pixels';
 import type { View } from './View';
 import { stateMatrix } from '../anim/interpolate';
-import { pieceBounds, pieceStateAt, type Piece } from '../anim/piece';
+import { pieceBounds, pieceStateAt, pieceTouches, repeatAxes, type Piece, type Repeat } from '../anim/piece';
+import { matChain, matTranslate } from '../core/matrix';
 import { piecesByLayer } from '../anim/pieceRaster';
 import { celAt, celIndexAt } from '../anim/cels';
 
@@ -16,6 +17,8 @@ const ONION_BEFORE = '#ff6a14';
 const ONION_AFTER = '#1f6bff';
 /** How strongly pieces show outside the canvas (faded, so it's clear they aren't in the picture). */
 const OUTSIDE_ALPHA = 0.4;
+
+const PATTERN_REPEAT: Record<Exclude<Repeat, 'none'>, 'repeat' | 'repeat-x' | 'repeat-y'> = { x: 'repeat-x', y: 'repeat-y', both: 'repeat' };
 
 type Ctx2D = OffscreenCanvasRenderingContext2D;
 
@@ -255,19 +258,42 @@ export class Renderer {
     for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) this.uploadPieceTile(m, s, ty * s.cols + tx);
   }
 
-  /** Draw pieces as they are at the current frame (r = only those touching it; alpha scales them). */
-  private drawPieces(ctx: Ctx2D | CanvasRenderingContext2D, pieces: readonly Piece[], r: Rect | null, alpha = 1, frame = this.doc.timeline.frame): void {
+  /**
+   * Draw pieces as they are at the current frame (r = only those touching it; alpha scales
+   * them). A repeating piece fills r with its tiles (`area` when r is null: the whole picture
+   * unless the caller says what's showing).
+   */
+  private drawPieces(
+    ctx: Ctx2D | CanvasRenderingContext2D,
+    pieces: readonly Piece[],
+    r: Rect | null,
+    alpha = 1,
+    frame = this.doc.timeline.frame,
+    area: Rect = r ?? { x: 0, y: 0, w: this.doc.width, h: this.doc.height },
+  ): void {
     for (const p of pieces) {
       const st = pieceStateAt(p, frame);
       if (st.opacity <= 0) continue;
-      if (r && !rectIntersect(pieceBounds(p, frame), r)) continue;
+      if (r && !pieceTouches(p, frame, r)) continue;
       const m = stateMatrix(st, p.pivot);
       ctx.save();
       ctx.globalAlpha = st.opacity * alpha;
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
-      ctx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
-      ctx.drawImage(this.pieceCanvas(p.src), 0, 0);
+      if (p.repeat === 'none') {
+        ctx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
+        ctx.drawImage(this.pieceCanvas(p.src), 0, 0);
+      } else {
+        // Tiles as a pattern in the piece's own space, slid by its scroll on the axes it repeats along.
+        const pat = ctx.createPattern(this.pieceCanvas(p.src), PATTERN_REPEAT[p.repeat]);
+        if (pat) {
+          const ax = repeatAxes(p.repeat);
+          const t = matChain(matTranslate(ax.x ? st.scrollX : 0, ax.y ? st.scrollY : 0), m);
+          pat.setTransform(new DOMMatrix([t[0], t[1], t[2], t[3], t[4], t[5]]));
+          ctx.fillStyle = pat;
+          ctx.fillRect(area.x, area.y, area.w, area.h);
+        }
+      }
       ctx.restore();
     }
   }
@@ -692,7 +718,7 @@ export class Renderer {
       for (const p of this.doc.pieces) {
         if (p.layerId !== layer.id) continue;
         const b = pieceBounds(p, frame);
-        if (b.x < 0 || b.y < 0 || b.x + b.w > dw || b.y + b.h > dh) out.push(p);
+        if (p.repeat !== 'none' || b.x < 0 || b.y < 0 || b.x + b.w > dw || b.y + b.h > dh) out.push(p);
       }
     }
     if (!out.length) return;
@@ -706,8 +732,17 @@ export class Renderer {
     ctx.rect(page.x, page.y, page.w, page.h);
     ctx.clip('evenodd');
     ctx.transform(z, 0, 0, z, d.x * this.dpr, d.y * this.dpr);
-    this.drawPieces(ctx, out, null, OUTSIDE_ALPHA, frame);
+    this.drawPieces(ctx, out, null, OUTSIDE_ALPHA, frame, this.viewportInDoc());
     ctx.restore();
+  }
+
+  /** The viewport in document pixels (what a repeating piece needs to fill), turned view included. */
+  private viewportInDoc(): Rect {
+    const v = this.view;
+    const c = [v.toDoc(0, 0), v.toDoc(v.width, 0), v.toDoc(0, v.height), v.toDoc(v.width, v.height)];
+    const x0 = Math.floor(Math.min(...c.map((p) => p.x))) - 1;
+    const y0 = Math.floor(Math.min(...c.map((p) => p.y))) - 1;
+    return { x: x0, y: y0, w: Math.ceil(Math.max(...c.map((p) => p.x))) + 1 - x0, h: Math.ceil(Math.max(...c.map((p) => p.y))) + 1 - y0 };
   }
 
   /** Scaled snapshot of the composite for the navigator. */

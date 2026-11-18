@@ -22,6 +22,16 @@ export interface Piece {
   pivot: Point;
   /** Sorted by frame, one per frame, never empty. */
   keyframes: Keyframe[];
+  /** Copies of it tile on along its own axes: across, down, or both (an endless plane). */
+  repeat: Repeat;
+}
+
+export type Repeat = 'none' | 'x' | 'y' | 'both';
+export const REPEATS: readonly Repeat[] = ['none', 'x', 'y', 'both'];
+
+/** Which of a piece's own axes it repeats along. */
+export function repeatAxes(r: Repeat): { x: boolean; y: boolean } {
+  return { x: r === 'x' || r === 'both', y: r === 'y' || r === 'both' };
 }
 
 /** What a keyframe change can set. */
@@ -38,6 +48,8 @@ export const MAX_PIECES = 500;
 export const MAX_KEYFRAMES = 2000;
 /** Longest side a piece can have (what graphics cards take as one texture). */
 export const MAX_PIECE_SIDE = 16384;
+/** Most a repeating piece's scroll can be either way (far more than any loop needs). */
+export const MAX_SCROLL = 1e6;
 
 /** The pixels as a piece's surface (an image is copied into a new one). */
 export function pieceSurface(src: ImageBuf | Surface): Surface {
@@ -60,6 +72,7 @@ export function makePiece(id: string, name: string, layerId: string, src: ImageB
     home: { ...home },
     pivot,
     keyframes: [{ ...identityState(home.x + pivot.x, home.y + pivot.y), frame, easing: 'linear', in: null, out: null }],
+    repeat: 'none',
   };
 }
 
@@ -97,12 +110,22 @@ export function pieceCorners(p: Piece, frame: number): Point[] {
   ]);
 }
 
-/** Area the piece covers at `frame` (rounded out to whole pixels, plus one for smoothing). */
+/**
+ * Area the piece's own box covers at `frame` (rounded out to whole pixels, plus one for
+ * smoothing). A repeating piece draws beyond it: see `pieceTouches`.
+ */
 export function pieceBounds(p: Piece, frame: number): Rect {
   const b = boundsOfPoints(pieceCorners(p, frame)) ?? { x: 0, y: 0, w: 0, h: 0 };
   const x = Math.floor(b.x) - 1;
   const y = Math.floor(b.y) - 1;
   return { x, y, w: Math.ceil(b.x + b.w) + 1 - x, h: Math.ceil(b.y + b.h) + 1 - y };
+}
+
+/** The piece may draw something inside r at `frame` (a repeating one reaches everywhere). */
+export function pieceTouches(p: Piece, frame: number, r: Rect): boolean {
+  if (p.repeat !== 'none') return true;
+  const b = pieceBounds(p, frame);
+  return b.x < r.x + r.w && b.x + b.w > r.x && b.y < r.y + r.h && b.y + b.h > r.y;
 }
 
 export function keyframeIndex(keys: readonly Keyframe[], frame: number): number {

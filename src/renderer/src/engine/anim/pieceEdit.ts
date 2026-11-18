@@ -1,7 +1,7 @@
 import type { Point } from '../core/geometry';
 import { matApply, matChain, matInvert, matRotate, type Mat } from '../core/matrix';
 import { stateMatrix, type PieceState } from './interpolate';
-import { pieceStateAt, type Piece } from './piece';
+import { pieceStateAt, repeatAxes, type Piece } from './piece';
 
 /** The eight box handles of a piece, in its own (source pixel) frame. */
 export type PieceHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
@@ -133,13 +133,29 @@ export function skewState(s0: PieceState, piece: Pick<Piece, 'src' | 'pivot'>, h
   return { ...next, x: fixed.x - b.x, y: fixed.y - b.y };
 }
 
-/** The piece on top at document point p at `frame` (only where it isn't see-through). */
+const mod = (v: number, n: number): number => ((v % n) + n) % n;
+
+/**
+ * Document point p in the piece's own pixels at state s, with a repeating piece's copies (and its
+ * scroll) folded back onto the original tile. Null if the piece has no area.
+ */
+export function docToPixel(piece: Piece, s: PieceState, p: Point): Point | null {
+  const q = docToLocal(s, piece.pivot, p);
+  if (!q) return null;
+  const ax = repeatAxes(piece.repeat);
+  return {
+    x: ax.x ? mod(q.x - s.scrollX, piece.src.width) : q.x,
+    y: ax.y ? mod(q.y - s.scrollY, piece.src.height) : q.y,
+  };
+}
+
+/** The piece on top at document point p at `frame` (only where it isn't see-through; any copy of a repeating one). */
 export function pieceAt(pieces: readonly Piece[], frame: number, p: Point): Piece | null {
   for (let i = pieces.length - 1; i >= 0; i--) {
     const piece = pieces[i];
     const s = pieceStateAt(piece, frame);
     if (s.opacity <= 0) continue;
-    const q = docToLocal(s, piece.pivot, p);
+    const q = docToPixel(piece, s, p);
     if (!q) continue;
     const x = Math.floor(q.x);
     const y = Math.floor(q.y);
@@ -149,8 +165,8 @@ export function pieceAt(pieces: readonly Piece[], frame: number, p: Point): Piec
   return null;
 }
 
-/** True if p is inside the piece's box at `frame` (transparent parts included). */
+/** True if p is inside the piece's box at `frame` (transparent parts included; any copy of a repeating one). */
 export function insidePiece(piece: Piece, frame: number, p: Point): boolean {
-  const q = docToLocal(pieceStateAt(piece, frame), piece.pivot, p);
+  const q = docToPixel(piece, pieceStateAt(piece, frame), p);
   return !!q && q.x >= 0 && q.y >= 0 && q.x <= piece.src.width && q.y <= piece.src.height;
 }

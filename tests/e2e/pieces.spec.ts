@@ -112,6 +112,36 @@ test('pieces outside the canvas show faded around it, Fit takes them in, and the
   expect(after.y - before.y).toBeCloseTo(20, 0);
 });
 
+test('a repeating piece tiles across the canvas, scrolls, and looks the same on screen as in the picture', async () => {
+  const { page } = h;
+  const { width: W } = await page.evaluate(() => window.__pigmentoTest!.doc());
+  const layerId = await page.evaluate(() => window.__pigmentoTest!.layers().activeId);
+  await page.evaluate((lid) => window.__pigmentoTest!.fillLayer(lid, { r: 220, g: 0, b: 0, a: 255 }, { x: 100, y: 50, w: 20, h: 20 }), layerId);
+  await page.evaluate((lid) => window.__pigmentoTest!.fillLayer(lid, { r: 0, g: 0, b: 220, a: 255 }, { x: 120, y: 50, w: 20, h: 20 }), layerId);
+  await page.evaluate(() => window.__pigmentoTest!.selectRect(100, 50, 40, 20));
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  await page.locator('.ribbon').getByRole('button', { name: 'Animate selection' }).click();
+  const id = await page.evaluate(() => window.__pigmentoTest!.anim().selectedId!);
+  // Repeat across from the options bar; the Scroll X field appears with it.
+  await page.getByRole('combobox', { name: 'Repeat' }).selectOption({ label: 'Across' });
+  await expect(page.getByRole('textbox', { name: 'Scroll X', exact: true })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Scroll Y', exact: true })).toHaveCount(0);
+  await page.evaluate((pid) => window.__pigmentoTest!.setPieceKey(pid, 0, { scrollX: 7.5 }), id);
+  // Copies all the way across, red and blue in turn, slid 7.5 px right; the same on screen.
+  const xs = [3, 27.5, 101, 118, 133, W - 4].map(Math.floor);
+  for (const x of xs) {
+    const js = await pixel(page, x, 60);
+    const gpu = await page.evaluate(([px, py]) => window.__pigmentoTest!.screenPixel(px, py), [x, 60] as const);
+    for (const k of ['r', 'g', 'b', 'a'] as const) expect(Math.abs(js[k] - gpu[k])).toBeLessThanOrEqual(3);
+    // Piece pixel (x - 100 - 7.5) mod 40: the first half is red.
+    const local = (((x + 0.5 - 100 - 7.5) % 40) + 40) % 40;
+    if (local > 1 && local < 19) expect(js.r).toBeGreaterThan(200);
+    if (local > 21 && local < 39) expect(js.b).toBeGreaterThan(200);
+  }
+  // Above and below the strip there's nothing but the paper.
+  expect(await pixel(page, 5, 40)).toEqual(await pixel(page, 5, 10));
+});
+
 test('Piece from layer lifts the whole layer under the pieces already on it', async () => {
   const { page } = h;
   const layerId = await page.evaluate(() => window.__pigmentoTest!.layers().activeId);
