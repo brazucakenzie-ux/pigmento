@@ -1,6 +1,6 @@
 // Pieces in 1.2.0: made from a layer, a picture file or the clipboard, any size, anywhere.
 import { expect, test, type Page } from '@playwright/test';
-import { writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { clickDoc, docToScreen, drag, launchApp, pixel, ready, settle, tempFile, type AppHandle } from './harness';
 
 let h: AppHandle;
@@ -199,6 +199,101 @@ test('Paint on piece paints a scaled piece’s own pixels under the brush, as on
     [40, 20],
   ]);
   expect((await pixel(page, 30, 20)).g).toBeLessThan(100);
+});
+
+/** Decode a GIF in the page and read some pixels (frame, x, y). */
+async function gifPixels(page: Page, file: string, probes: { frame: number; x: number; y: number }[]): Promise<{ frames: number; pixels: number[][] }> {
+  const b64 = readFileSync(file).toString('base64');
+  return page.evaluate(
+    async ({ b64, probes }) => {
+      const dec = new ImageDecoder({ data: Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)), type: 'image/gif' });
+      await dec.tracks.ready;
+      await dec.completed;
+      const pixels: number[][] = [];
+      for (const p of probes) {
+        const { image } = await dec.decode({ frameIndex: p.frame });
+        const c = new OffscreenCanvas(image.displayWidth, image.displayHeight);
+        const ctx = c.getContext('2d')!;
+        ctx.drawImage(image, 0, 0);
+        pixels.push(Array.from(ctx.getImageData(p.x, p.y, 1, 1).data));
+        image.close();
+      }
+      return { frames: dec.tracks.selectedTrack!.frameCount, pixels };
+    },
+    { b64, probes },
+  );
+}
+
+test('a scrolling background: placed twice as wide, looped, painted off the canvas, saved, reopened and exported', async () => {
+  const { page } = h;
+  const { width: W, height: H } = await page.evaluate(() => window.__pigmentoTest!.doc());
+  await stubOpen(await twoColourPng(page, W * 2, 40));
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  await page.locator('.ribbon').getByRole('button', { name: 'Place image…' }).click();
+  await expect.poll(() => page.evaluate(() => window.__pigmentoTest!.anim().pieces.length)).toBe(1);
+  const id = await page.evaluate(() => window.__pigmentoTest!.anim().pieces[0].id);
+  const n = await page.evaluate(() => window.__pigmentoTest!.anim().length);
+  // Repeat across, then loop the scroll: one whole tile (two canvases) over the timeline.
+  await page.getByRole('combobox', { name: 'Repeat' }).selectOption({ label: 'Across' });
+  await page.getByRole('button', { name: /^Loop the scroll/ }).click();
+  expect((await page.evaluate((pid) => window.__pigmentoTest!.pieceKeys(pid), id)).map((k) => k.frame)).toEqual([0, n - 1]);
+  const half = Math.floor(n / 2);
+  expect((await page.evaluate(([pid, f]) => window.__pigmentoTest!.pieceAt(pid, f), [id, half] as const))!.scrollX).toBeCloseTo((-half * 2 * W) / n, 6);
+
+  // At frame 0 the left quarter of the picture hangs off the canvas: paint a dash on it there.
+  const y = Math.round((H - 40) / 2) + 20;
+  await page.keyboard.press('Control+0');
+  await settle(page);
+  await page.getByRole('tab', { name: 'Home' }).click();
+  await page.keyboard.press('b');
+  await page.getByRole('checkbox', { name: 'Paint on piece' }).check();
+  await drag(page, [
+    [-W / 4 - 20, y],
+    [-W / 4, y],
+    [-W / 4 + 20, y],
+  ]);
+  const dark = (c: { r: number; g: number; b: number }) => c.r < 80 && c.g < 80 && c.b < 80;
+  // Picture x −W/4 is the piece's own pixel W/4 (it was placed half a canvas left of the canvas).
+  expect(dark((await page.evaluate(([pid, px]) => window.__pigmentoTest!.piecePixel(pid, px, 20), [id, W / 4] as const))!)).toBe(true);
+  // Nothing on the canvas changed at frame 0…
+  expect(dark(await pixel(page, W / 4, y))).toBe(false);
+  // …but as the background scrolls left by one canvas, the dash comes in three quarters of the way across.
+  await page.evaluate((f) => window.__pigmentoTest!.setFrame(f), half);
+  const at = Math.round(-W / 4 - (half * 2 * W) / n + 2 * W);
+  expect(dark(await pixel(page, at, y))).toBe(true);
+
+  // Saved and opened again, it's all there.
+  const project = tempFile('scroll.pigm');
+  await h.app.evaluate(({ dialog }, fp) => {
+    dialog.showSaveDialog = (async () => ({ canceled: false, filePath: fp })) as typeof dialog.showSaveDialog;
+  }, project);
+  await page.keyboard.press('Control+Shift+s');
+  await expect.poll(() => existsSync(project)).toBe(true);
+  await page.evaluate((p) => window.__pigmentoTest!.openPath(p), project);
+  await expect.poll(() => page.evaluate(() => window.__pigmentoTest!.history().length)).toBe(0);
+  const back = await page.evaluate(() => window.__pigmentoTest!.anim().pieces[0].id);
+  expect(await page.evaluate((pid) => window.__pigmentoTest!.pieceInfo(pid), back)).toMatchObject({ w: W * 2, h: 40 });
+  expect((await page.evaluate((pid) => window.__pigmentoTest!.pieceKeys(pid), back)).map((k) => k.frame)).toEqual([0, n - 1]);
+  await page.evaluate((f) => window.__pigmentoTest!.setFrame(f), half);
+  expect(dark(await pixel(page, at, y))).toBe(true);
+
+  // An animated GIF shows the dash coming in.
+  const gif = tempFile('scroll.gif');
+  await h.app.evaluate(({ dialog }, fp) => {
+    dialog.showSaveDialog = (async () => ({ canceled: false, filePath: fp })) as typeof dialog.showSaveDialog;
+  }, gif);
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  await page.locator('.ribbon').getByRole('button', { name: 'Export', exact: true }).click();
+  const dlg = page.getByRole('dialog', { name: 'Export animation' });
+  await dlg.getByRole('button', { name: 'Export…' }).click();
+  await expect(dlg).toBeHidden({ timeout: 60_000 });
+  const out = await gifPixels(page, gif, [
+    { frame: 0, x: at, y },
+    { frame: half, x: at, y },
+  ]);
+  expect(out.frames).toBe(n);
+  expect(out.pixels[0][0] > 80 || out.pixels[0][2] > 80).toBe(true);
+  expect(out.pixels[1].slice(0, 3).every((v) => v < 80)).toBe(true);
 });
 
 test('Piece from layer lifts the whole layer under the pieces already on it', async () => {
