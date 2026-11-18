@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { identityState, stateMatrix, type PieceState } from '@engine/anim/interpolate';
-import { defaultCamera, FLAT_SPACE, placementBounds, placementOf, placementOutline, project, spaceOf, unproject, type Space } from '@engine/anim/space';
+import { defaultCamera, FLAT_SPACE, placementBounds, placementOf, placementOutline, project, shadeOf, spaceOf, unproject, type Space } from '@engine/anim/space';
 import { matApply } from '@engine/core/matrix';
 import { PaintDocument } from '@engine/doc/Document';
 
@@ -126,5 +126,31 @@ describe('placing a piece in 3D', () => {
     expect(project(leaning, { x: 50, y: -1e9 })!.y).toBeCloseTo(300 - 1000 / Math.tan(1.5), 1);
     // With no camera to speak of, depth changes nothing.
     expect(placementOf(at({ depth: 1000 }), pivot, W, H, FLAT_SPACE).affine![0]).toBeCloseTo(1, 6);
+  });
+});
+
+describe('shading by the light', () => {
+  const overhead = { angle: 0, height: 45 };
+  it('leaves flat pieces, unshaded pieces and faces towards the light as they are', () => {
+    expect(shadeOf(at({}), true, overhead, 1)).toBe(1);
+    expect(shadeOf(at({ tilt: -1.4 }), true, overhead, 0)).toBe(1);
+    // A floor below the eye: the camera sees its top, which faces the light above.
+    const floor = at({ tilt: Math.PI / 2, y: 500 });
+    const plFloor = placementOf(floor, pivot, W, H, space);
+    expect(plFloor.front).toBe(true);
+    expect(shadeOf(floor, plFloor.front, overhead, 1)).toBeCloseTo(1, 9);
+  });
+
+  it('darkens a face turned away from the light, by its strength', () => {
+    // A ceiling above the eye: the camera sees its underside, away from the light above.
+    const ceiling = at({ tilt: -Math.PI / 2, y: 100 });
+    const pl = placementOf(ceiling, pivot, W, H, space);
+    expect(shadeOf(ceiling, pl.front, overhead, 1)).toBeCloseTo(0, 9);
+    expect(shadeOf(ceiling, pl.front, overhead, 0.4)).toBeCloseTo(0.6, 9);
+    // Turned partly towards the light from the left, partly away: brighter one way than the other.
+    const fromLeft = { angle: -90, height: 30 };
+    const left = shadeOf(at({ turn: 0.8 }), true, fromLeft, 1);
+    const right = shadeOf(at({ turn: -0.8 }), true, fromLeft, 1);
+    expect(left).not.toBeCloseTo(right, 3);
   });
 });

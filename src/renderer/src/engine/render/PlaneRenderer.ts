@@ -27,9 +27,11 @@ precision highp float;
 in vec2 vQ;
 uniform sampler2D uTex;
 uniform vec2 uSize;
+uniform float uShade;
 out vec4 outColor;
 void main() {
-  outColor = texture(uTex, vQ / uSize);
+  vec4 c = texture(uTex, vQ / uSize);
+  outColor = vec4(c.rgb * uShade, c.a);
 }`;
 
 /** A repeating plane: every pixel of the chunk finds its piece point through the inverse homography. */
@@ -47,6 +49,7 @@ uniform sampler2D uTex;
 uniform vec2 uSize;
 uniform vec2 uScroll;
 uniform vec2 uWrap;
+uniform float uShade;
 out vec4 outColor;
 void main() {
   // Device pixel (top-left origin) of this fragment.
@@ -63,7 +66,8 @@ void main() {
     }
   }
   if (cover <= 0.0) discard;
-  outColor = texture(uTex, (p - uScroll) / uSize) * cover;
+  vec4 c = texture(uTex, (p - uScroll) / uSize) * cover;
+  outColor = vec4(c.rgb * uShade, c.a);
 }`;
 
 interface Program {
@@ -143,8 +147,8 @@ export class PlaneRenderer {
       });
       this.canvas = canvas;
       this.gl = gl;
-      this.sheet = this.program(gl, SHEET_VS, SHEET_FS, ['uH', 'uView', 'uTex', 'uSize']);
-      this.plane = this.program(gl, PLANE_VS, PLANE_FS, ['uInv', 'uView', 'uTex', 'uSize', 'uScroll', 'uWrap']);
+      this.sheet = this.program(gl, SHEET_VS, SHEET_FS, ['uH', 'uView', 'uTex', 'uSize', 'uShade']);
+      this.plane = this.program(gl, PLANE_VS, PLANE_FS, ['uInv', 'uView', 'uTex', 'uSize', 'uScroll', 'uWrap', 'uShade']);
       this.quad = gl.createBuffer();
       this.screenQuad = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, this.screenQuad);
@@ -255,7 +259,7 @@ export class PlaneRenderer {
    * `area` (document pixels), with the target's own transform, clip and alpha. False when the GPU
    * can't (no WebGL2, a reset, a piece too big for a texture): then nothing was drawn.
    */
-  draw(target: Ctx2D, src: Surface, pl: Placement, tiling: Tiling | null, area: Rect): boolean {
+  draw(target: Ctx2D, src: Surface, pl: Placement, tiling: Tiling | null, area: Rect, shade = 1): boolean {
     const gl = this.init();
     if (!gl || !this.canvas || !this.sheet || !this.plane || gl.isContextLost()) return false;
     if (src.width > this.maxTexture || src.height > this.maxTexture) return false;
@@ -299,8 +303,8 @@ export class PlaneRenderer {
         gl.clear(gl.COLOR_BUFFER_BIT);
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, tex);
-        if (tiling && inv) this.drawPlane(gl, normalised(inv), { x: cx, y: cy, w, h: hh }, src, tiling);
-        else this.drawSheet(gl, normalised(h), { x: cx, y: cy, w, h: hh }, src);
+        if (tiling && inv) this.drawPlane(gl, normalised(inv), { x: cx, y: cy, w, h: hh }, src, tiling, shade);
+        else this.drawSheet(gl, normalised(h), { x: cx, y: cy, w, h: hh }, src, shade);
         gl.disable(gl.SCISSOR_TEST);
         target.save();
         target.setTransform(1, 0, 0, 1, 0, 0);
@@ -311,9 +315,10 @@ export class PlaneRenderer {
     return true;
   }
 
-  private drawSheet(gl: WebGL2RenderingContext, h: Homography, view: Rect, src: Surface): void {
+  private drawSheet(gl: WebGL2RenderingContext, h: Homography, view: Rect, src: Surface, shade: number): void {
     const p = this.sheet!;
     gl.useProgram(p.prog);
+    gl.uniform1f(p.loc.uShade, shade);
     gl.uniformMatrix3fv(p.loc.uH, false, glMat3(h));
     gl.uniform4f(p.loc.uView, view.x, view.y, view.w, view.h);
     gl.uniform1i(p.loc.uTex, 0);
@@ -325,9 +330,10 @@ export class PlaneRenderer {
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 
-  private drawPlane(gl: WebGL2RenderingContext, inv: Homography, view: Rect, src: Surface, tiling: Tiling): void {
+  private drawPlane(gl: WebGL2RenderingContext, inv: Homography, view: Rect, src: Surface, tiling: Tiling, shade: number): void {
     const p = this.plane!;
     gl.useProgram(p.prog);
+    gl.uniform1f(p.loc.uShade, shade);
     gl.uniformMatrix3fv(p.loc.uInv, false, glMat3(inv));
     // gl_FragCoord counts up from the canvas's bottom and the chunk is its top-left w × h, so a
     // fragment's device y is the chunk's top plus (canvas height − gl_FragCoord.y).

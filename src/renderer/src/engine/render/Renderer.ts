@@ -8,7 +8,7 @@ import type { PixelView } from '../raster/pixels';
 import type { View } from './View';
 import { backToFront, pieceBounds, pieceStateAt, pieceTouches, repeatAxes, type Piece, type Repeat } from '../anim/piece';
 import { matChain, matTranslate } from '../core/matrix';
-import { placementOf, type Placement } from '../anim/space';
+import { placementOf, shadeOf, type Placement } from '../anim/space';
 import { pieceTiling } from '../anim/pieceRaster';
 import { sampleProjective } from '../anim/pieceProject';
 import type { Tiling } from '../anim/pieceSample';
@@ -295,7 +295,8 @@ export class Renderer {
         // Tilted or turned: a true perspective image needs the GPU (or the CPU path if it can't).
         const tiling = pieceTiling(p, st);
         const where = tiling ? area : rectIntersect(area, pieceBounds(p, frame, space));
-        if (where && !this.planes.draw(ctx, p.src, pl, tiling, where)) this.drawOnCpu(ctx, p, pl, tiling, where);
+        const shade = shadeOf(st, pl.front, this.doc.light, p.shade);
+        if (where && !this.planes.draw(ctx, p.src, pl, tiling, where, shade)) this.drawOnCpu(ctx, p, pl, tiling, where, shade);
         ctx.restore();
         continue;
       }
@@ -319,8 +320,8 @@ export class Renderer {
   }
 
   /** A piece in 3D drawn by the CPU path when the GPU can't (no WebGL2, or the GPU reset). */
-  private drawOnCpu(ctx: Ctx2D | CanvasRenderingContext2D, p: Piece, pl: Placement, tiling: Tiling | null, where: Rect): void {
-    const img = sampleProjective(p.src, pl, where, tiling, tiling ? null : where);
+  private drawOnCpu(ctx: Ctx2D | CanvasRenderingContext2D, p: Piece, pl: Placement, tiling: Tiling | null, where: Rect, shade: number): void {
+    const img = sampleProjective(p.src, pl, where, tiling, tiling ? null : where, shade);
     if (img.w === 0 || img.h === 0) return;
     const c = new OffscreenCanvas(img.w, img.h);
     ctx2d(c).putImageData(new ImageData(img.data as Uint8ClampedArray<ArrayBuffer>, img.w, img.h), 0, 0);

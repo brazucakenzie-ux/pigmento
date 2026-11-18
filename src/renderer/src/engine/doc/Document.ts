@@ -3,7 +3,7 @@ import { Surface } from '../raster/Surface';
 import { defaultTimeline, type Timeline } from '../anim/timeline';
 import { clonePiece, type Piece } from '../anim/piece';
 import { celAt, celSurfaces, type Cel } from '../anim/cels';
-import { defaultCamera, spaceOf, type Camera, type Space } from '../anim/space';
+import { defaultCamera, defaultLight, spaceOf, type Camera, type Light, type Space } from '../anim/space';
 import type { Selection } from './Selection';
 import type { Guide } from './guides';
 import type { VectorNode } from '../vector/model';
@@ -235,6 +235,8 @@ export class PaintDocument {
   pieces: Piece[] = [];
   /** The camera 3D pieces are seen through (saved in projects). */
   camera: Camera;
+  /** The light shaded pieces are lit by (saved in projects). */
+  light: Light = defaultLight();
 
   constructor(init: DocumentInit, layers?: Layer[]) {
     this.width = init.width;

@@ -34,7 +34,7 @@ import { Surface } from '../raster/Surface';
 import { MAX_DIMENSION, MAX_PIXELS } from './protocol';
 import { EASINGS, type Easing, type Keyframe } from '../anim/interpolate';
 import { BACKS, MAX_KEYFRAMES, MAX_PIECES, MAX_SCROLL, newPieceId, REPEATS, type Back, type Piece, type Repeat } from '../anim/piece';
-import { defaultCamera, MAX_STRENGTH, MIN_STRENGTH } from '../anim/space';
+import { defaultCamera, defaultLight, MAX_STRENGTH, MIN_STRENGTH } from '../anim/space';
 import { LOOP_MODES, MAX_FPS, MAX_FRAMES, MIN_FPS, clampFrame, type LoopMode } from '../anim/timeline';
 import { MAX_CELS, type Cel } from '../anim/cels';
 
@@ -59,12 +59,18 @@ function cameraMoved(doc: PaintDocument): boolean {
   return doc.camera.x !== d.x || doc.camera.y !== d.y || doc.camera.strength !== d.strength;
 }
 
+/** The light isn't the one a new picture gets. */
+function lightMoved(doc: PaintDocument): boolean {
+  const d = defaultLight();
+  return doc.light.angle !== d.angle || doc.light.height !== d.height;
+}
+
 /** The oldest version that holds everything in `doc`. */
 export function versionFor(doc: PaintDocument): 1 | 2 | 3 {
   const v3 = doc.pieces.some(
-    (p) => p.repeat !== 'none' || p.back !== 'mirror' || p.keyframes.some((k) => k.scrollX !== 0 || k.scrollY !== 0 || k.depth !== 0 || k.tilt !== 0 || k.turn !== 0),
+    (p) => p.repeat !== 'none' || p.back !== 'mirror' || p.shade !== 0 || p.keyframes.some((k) => k.scrollX !== 0 || k.scrollY !== 0 || k.depth !== 0 || k.tilt !== 0 || k.turn !== 0),
   );
-  if (v3 || cameraMoved(doc)) return 3;
+  if (v3 || cameraMoved(doc) || lightMoved(doc)) return 3;
   return doc.pieces.length || doc.hasCels ? 2 : 1;
 }
 
@@ -339,6 +345,8 @@ const PieceJson = z.object({
   repeat: z.enum(REPEATS as [Repeat, ...Repeat[]]).default('none'),
   /** Version 3: what shows when it's turned round (its pixels mirrored, like paper, or nothing). */
   back: z.enum(BACKS as [Back, ...Back[]]).default('mirror'),
+  /** Version 3: shading by the picture's light, 0 (off) … 1. */
+  shade: z.number().min(0).max(1).default(0),
 });
 const AnimationJson = z.object({
   fps: int.min(MIN_FPS).max(MAX_FPS),
@@ -373,6 +381,8 @@ export const DocumentJsonSchema = z.object({
   animation: AnimationJson.optional(),
   /** Version 3: the camera 3D pieces are seen through (left out while it's the default one). */
   camera: z.object({ x: z.number().min(-1e6).max(1e6), y: z.number().min(-1e6).max(1e6), strength: z.number().min(MIN_STRENGTH).max(MAX_STRENGTH) }).optional(),
+  /** Version 3: the light shaded pieces are lit by (left out while it's the default one). */
+  light: z.object({ angle: z.number().min(-360).max(360), height: z.number().min(0).max(90) }).optional(),
 });
 
 export type DocumentJson = z.infer<typeof DocumentJsonSchema>;
@@ -479,7 +489,7 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
         out: k.out && { ...k.out },
         ...(v3 ? { scrollX, scrollY, depth, tilt, turn } : {}),
       })),
-      ...(v3 ? { repeat: p.repeat, back: p.back } : {}),
+      ...(v3 ? { repeat: p.repeat, back: p.back, shade: p.shade } : {}),
     });
   }
   const t = doc.timeline;
@@ -499,6 +509,7 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
     ...(doc.guides.length ? { guides: doc.guides.map((g) => ({ axis: g.axis, pos: g.pos })) } : {}),
     ...(animation ? { animation } : {}),
     ...(cameraMoved(doc) ? { camera: { ...doc.camera } } : {}),
+    ...(lightMoved(doc) ? { light: { ...doc.light } } : {}),
   };
   files['document.json'] = [strToU8(JSON.stringify(json, null, 1)), { level: 6 }];
   if (thumbnail) files['thumbnail.png'] = [thumbnail, { level: 0 }];
@@ -649,6 +660,7 @@ export async function loadProject(bytes: Uint8Array, codec: PngCodec): Promise<P
   doc.guides = (json.guides ?? []).map((g) => guide(g.axis, g.pos));
   if (json.animation) await readAnimation(doc, json.animation, files, codec);
   if (json.camera) doc.camera = { ...json.camera };
+  if (json.light) doc.light = { ...json.light };
   // Frame-by-frame layers show the drawing for the frame the file was saved at.
   doc.showFrame(doc.timeline.frame);
   return doc;
@@ -685,6 +697,7 @@ async function readAnimation(doc: PaintDocument, a: NonNullable<DocumentJson['an
       keyframes: [...byFrame.values()].sort((x, y) => x.frame - y.frame),
       repeat: p.repeat,
       back: p.back,
+      shade: p.shade,
     });
   }
   doc.pieces = pieces;

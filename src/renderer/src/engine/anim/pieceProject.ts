@@ -184,7 +184,8 @@ function sampleLevel(l: MipLevel, fx: number, fy: number, wrapX: boolean, wrapY:
  * `src` drawn through placement `pl` inside `area` (document pixels). With `tiling`, copies go
  * on along the repeated axes, out to the horizon; otherwise it's the sheet's own box.
  */
-export function sampleProjective(src: Surface, pl: Placement, area: Rect, tiling: Tiling | null = null, bounds: Rect | null = null): TransformedImage {
+/** `shade` multiplies its colours (shading by the light, 1 = as it is). */
+export function sampleProjective(src: Surface, pl: Placement, area: Rect, tiling: Tiling | null = null, bounds: Rect | null = null, shade = 1): TransformedImage {
   const r = bounds && !tiling ? rectIntersect(area, bounds) : area;
   const inv = pl.inv;
   if (!r || !inv) return { x: area.x, y: area.y, w: 0, h: 0, data: new Uint8ClampedArray(0) };
@@ -272,7 +273,7 @@ export function sampleProjective(src: Surface, pl: Placement, area: Rect, tiling
       if (a <= 0) continue;
       const di = (oy * ow + ox) * 4;
       // Back from premultiplied (the colour is the sheet's; coverage scales only its alpha).
-      const k = 255 / acc[3];
+      const k = (255 * shade) / acc[3];
       out[di] = acc[0] * k;
       out[di + 1] = acc[1] * k;
       out[di + 2] = acc[2] * k;

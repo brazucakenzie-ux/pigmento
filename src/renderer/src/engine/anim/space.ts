@@ -141,6 +141,45 @@ export function worldOf(s: PieceState, pivot: Point, q: Point, space: Space): { 
   };
 }
 
+/**
+ * The picture's light for shading pieces in 3D: which way it comes from round the view (degrees
+ * clockwise from straight above) and how high it is (degrees: 0 grazes the canvas, 90 shines
+ * straight from the camera).
+ */
+export interface Light {
+  angle: number;
+  height: number;
+}
+
+export function defaultLight(): Light {
+  return { angle: -30, height: 45 };
+}
+
+/** Pointing from a surface towards the light (z away from the viewer, so a light in front has z < 0). */
+function lightVector(l: Light): [number, number, number] {
+  const a = (l.angle * Math.PI) / 180;
+  const h = (Math.min(90, Math.max(0, l.height)) * Math.PI) / 180;
+  return [Math.sin(a) * Math.cos(h), -Math.cos(a) * Math.cos(h), -Math.sin(h)];
+}
+
+/**
+ * How bright a shaded piece's face is at state s (0 … 1, multiplying its colours): a face that
+ * faces the camera keeps its colours, and one turned away from the light darkens, by `strength`
+ * (0 … 1) at most. Flat pieces aren't shaded.
+ */
+export function shadeOf(s: PieceState, front: boolean, light: Light, strength: number): number {
+  if (strength <= 0 || (s.tilt === 0 && s.turn === 0)) return 1;
+  const { c0, c1 } = rotation(s.tilt, s.turn);
+  // The normal of the side the camera sees (c0 × c1 points away from it while the front faces it).
+  const k = front ? -1 : 1;
+  const n = [k * (c0[1] * c1[2] - c0[2] * c1[1]), k * (c0[2] * c1[0] - c0[0] * c1[2]), k * (c0[0] * c1[1] - c0[1] * c1[0])];
+  const L = lightVector(light);
+  const lit = Math.max(0, n[0] * L[0] + n[1] * L[1] + n[2] * L[2]);
+  // Facing the camera square on counts as fully lit.
+  const ref = Math.max(1e-6, -L[2]);
+  return 1 - Math.min(1, strength) * (1 - Math.min(1, lit / ref));
+}
+
 /** A piece point on the canvas, or null behind the camera. */
 export function project(pl: Placement, q: Point): Point | null {
   const [h0, h1, h2, h3, h4, h5, h6, h7, h8] = pl.h;

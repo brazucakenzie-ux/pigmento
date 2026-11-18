@@ -25,6 +25,8 @@ export interface Piece {
   keyframes: Keyframe[];
   /** Copies of it tile on along its own axes: across, down, or both (an endless plane). */
   repeat: Repeat;
+  /** Shading by the picture's light in 3D: 0 (off) … 1 (a face turned away from the light can go black). */
+  shade: number;
   /** Turned round in 3D: its pixels show mirrored, like paper, or it isn't drawn. */
   back: Back;
 }
@@ -80,6 +82,7 @@ export function makePiece(id: string, name: string, layerId: string, src: ImageB
     keyframes: [{ ...identityState(home.x + pivot.x, home.y + pivot.y), frame, easing: 'linear', in: null, out: null }],
     repeat: 'none',
     back: 'mirror',
+    shade: 0,
   };
 }
 

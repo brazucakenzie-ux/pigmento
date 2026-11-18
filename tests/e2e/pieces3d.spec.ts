@@ -206,3 +206,26 @@ test('the camera: drag its vanishing point, set its perspective, and show the gr
   await expect(grid).toHaveAttribute('aria-pressed', 'true');
   expect(await page.evaluate(() => window.__pigmentoTest!.pixel(5, 5))).toEqual({ r: 255, g: 255, b: 255, a: 255 });
 });
+
+test('shading darkens a piece turned away from the light, the same on screen as in the picture', async () => {
+  const { page } = h;
+  const id = await bandedPiece(page);
+  // Turned well away from the light (which comes from the top left), and shaded fully.
+  await page.evaluate((pid) => window.__pigmentoTest!.setPieceKey(pid, 0, { turn: -1.1, tilt: -0.5 }), id);
+  const lit = await page.evaluate(() => window.__pigmentoTest!.pixel(330, 200));
+  await page.keyboard.press('m');
+  const shade = page.locator('.optionsbar').getByRole('textbox', { name: 'Shade', exact: true });
+  await shade.fill('100');
+  await shade.press('Enter');
+  const dark = await page.evaluate(() => window.__pigmentoTest!.pixel(330, 200));
+  expect(dark.r + dark.g + dark.b).toBeLessThan((lit.r + lit.g + lit.b) * 0.9);
+  const m = await mismatch(page, { x: 150, y: 100, w: 340, h: 200 }, 9, 24);
+  expect(m.off).toBeLessThan(m.checked * 0.02);
+  // Moving the light to the other side lights it again.
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  const angle = page.locator('.ribbon').getByRole('textbox', { name: 'Light', exact: true });
+  await angle.fill('150');
+  await angle.press('Enter');
+  const relit = await page.evaluate(() => window.__pigmentoTest!.pixel(330, 200));
+  expect(relit.r + relit.g + relit.b).toBeGreaterThan(dark.r + dark.g + dark.b);
+});

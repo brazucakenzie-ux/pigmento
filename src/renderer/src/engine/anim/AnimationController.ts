@@ -7,7 +7,7 @@ import type { ImageBuf } from '../raster/transform';
 import type { I18nKey, I18nParams } from '../../i18n';
 import { movePivot, type Easing } from './interpolate';
 import { movePivot3D } from './planeEdit';
-import { MAX_STRENGTH, MIN_STRENGTH, type Camera } from './space';
+import { MAX_STRENGTH, MIN_STRENGTH, type Camera, type Light } from './space';
 import { MAX_PIXELS } from '../io/protocol';
 import {
   clonePiece,
@@ -62,6 +62,8 @@ export interface AnimationInfo {
   paintOnPiece: boolean;
   /** The camera 3D pieces are seen through. */
   camera: Camera;
+  /** The light shaded pieces are lit by. */
+  light: Light;
 }
 
 /** A piece's values as the options bar shows them (degrees and percent). */
@@ -84,6 +86,8 @@ export interface PieceFields {
   turn: number;
   /** What shows when it's turned round (not keyframed). */
   back: Back;
+  /** Shading by the light, in percent (0 = off; not keyframed). */
+  shade: number;
   /** Tilted or turned at this frame (the Animate tool's flat handles don't apply). */
   in3d: boolean;
   /** Easing from this frame's keyframe (or the one before it) to the next. */
@@ -106,11 +110,13 @@ export interface AnimSnapshot {
   loop: LoopMode;
   /** The camera 3D pieces are seen through. */
   camera: Camera;
+  /** The light shaded pieces are lit by. */
+  light: Light;
 }
 
 export function captureAnim(doc: PaintDocument): AnimSnapshot {
   const t = doc.timeline;
-  return { pieces: doc.pieces.map(clonePiece), fps: t.fps, length: t.length, loop: t.loop, camera: { ...doc.camera } };
+  return { pieces: doc.pieces.map(clonePiece), fps: t.fps, length: t.length, loop: t.loop, camera: { ...doc.camera }, light: { ...doc.light } };
 }
 
 export function restoreAnim(doc: PaintDocument, s: AnimSnapshot): void {
@@ -120,6 +126,7 @@ export function restoreAnim(doc: PaintDocument, s: AnimSnapshot): void {
   doc.timeline.loop = s.loop;
   doc.timeline.frame = clampFrame(doc.timeline.frame, s.length);
   doc.camera = { ...s.camera };
+  doc.light = { ...s.light };
   doc.showFrame(doc.timeline.frame);
 }
 
@@ -236,6 +243,7 @@ export class AnimationController {
       pieces: this.doc.pieces.map((p) => ({ id: p.id, name: p.name, layerId: p.layerId, keys: p.keyframes.map((k) => ({ frame: k.frame, easing: k.easing })) })),
       paintOnPiece: this.paintOn,
       camera: { ...this.doc.camera },
+      light: { ...this.doc.light },
     };
   }
 
@@ -261,6 +269,7 @@ export class AnimationController {
       tilt: s.tilt * DEG,
       turn: s.turn * DEG,
       back: p.back,
+      shade: p.shade * 100,
       in3d: s.tilt !== 0 || s.turn !== 0 || s.depth !== 0,
       easing: (at ?? before).easing,
       keyed: at !== undefined,
@@ -270,7 +279,7 @@ export class AnimationController {
   }
 
   /** Set the selected piece's values at the current frame (auto-key), in the options bar's units. */
-  setFields(change: Partial<Omit<PieceFields, 'keyed' | 'curved' | 'repeat' | 'back' | 'in3d'>>): boolean {
+  setFields(change: Partial<Omit<PieceFields, 'keyed' | 'curved' | 'repeat' | 'back' | 'in3d' | 'shade'>>): boolean {
     const p = this.selected;
     if (!p) return false;
     const k: KeyChange = {};
@@ -322,6 +331,27 @@ export class AnimationController {
     if (!this.drag) return;
     this.doc.camera = this.cameraWith(change);
     this.host.animationChanged(null);
+  }
+
+  /** Where the light comes from (degrees round the view from above, and its height: 0 … 90). One undo step. */
+  setLight(change: Partial<Light>): boolean {
+    const l = { ...this.doc.light, ...change };
+    const next = { angle: Number.isFinite(l.angle) ? ((((l.angle + 180) % 360) + 360) % 360) - 180 : -30, height: Math.min(90, Math.max(0, Number.isFinite(l.height) ? l.height : 45)) };
+    return this.change('history.light', () => {
+      this.doc.light = next;
+      return true;
+    });
+  }
+
+  /** How strongly a piece is shaded by the light in 3D (0 … 1, 0 = off; one undo step, not keyframed). */
+  setShade(id: string, shade: number): boolean {
+    const p = this.piece(id);
+    const v = Math.min(1, Math.max(0, Number.isFinite(shade) ? shade : 0));
+    if (!p || p.shade === v) return false;
+    return this.change('history.pieceShade', () => {
+      p.shade = v;
+      return true;
+    });
   }
 
   /** Which way copies of a piece tile on (one undo step; not keyframed). */
@@ -752,6 +782,7 @@ export class AnimationController {
 function sameAnim(a: AnimSnapshot, b: AnimSnapshot): boolean {
   if (a.fps !== b.fps || a.length !== b.length || a.loop !== b.loop || a.pieces.length !== b.pieces.length) return false;
   if (a.camera.x !== b.camera.x || a.camera.y !== b.camera.y || a.camera.strength !== b.camera.strength) return false;
+  if (a.light.angle !== b.light.angle || a.light.height !== b.light.height) return false;
   if (a.pieces.some((p, i) => p.src !== b.pieces[i].src)) return false;
   return JSON.stringify(a.pieces.map(strip)) === JSON.stringify(b.pieces.map(strip));
 }

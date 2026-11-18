@@ -48,6 +48,7 @@ export interface PigmentoTestHook {
     cels: Record<string, number[]>;
     paintOnPiece: boolean;
     camera: { x: number; y: number; strength: number };
+    light: { angle: number; height: number };
   };
   animateSelection(keepOriginal?: boolean): boolean;
   celMirrors(): number;

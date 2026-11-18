@@ -6,7 +6,7 @@ import type { PieceState } from './interpolate';
 import { sampleAffine, type Tiling } from './pieceSample';
 import { sampleProjective } from './pieceProject';
 import { backToFront, pieceBounds, pieceStateAt, pieceTouches, repeatAxes, type Piece } from './piece';
-import { FLAT_SPACE, placementOf, type Space } from './space';
+import { defaultLight, FLAT_SPACE, placementOf, shadeOf, type Light, type Space } from './space';
 import { celAt } from './cels';
 
 /** Pieces grouped by the layer they belong to, bottom to top. */
@@ -30,7 +30,7 @@ export function pieceTiling(p: Piece, s: PieceState): Tiling | null {
  * Draw one piece as it is at `frame` into view, inside r (bilinear, premultiplied, like the
  * screen): flat ones through their affine, ones in 3D through their homography (see pieceProject).
  */
-export function drawPiece(view: PixelView, r: Rect, p: Piece, frame: number, space: Space = FLAT_SPACE): void {
+export function drawPiece(view: PixelView, r: Rect, p: Piece, frame: number, space: Space = FLAT_SPACE, light: Light = defaultLight()): void {
   const s = pieceStateAt(p, frame);
   if (s.opacity <= 0) return;
   const pl = placementOf(s, p.pivot, p.src.width, p.src.height, space);
@@ -42,7 +42,7 @@ export function drawPiece(view: PixelView, r: Rect, p: Piece, frame: number, spa
     if (!area) return;
     img = sampleAffine(p.src, pl.affine, area, tiling);
   } else {
-    img = sampleProjective(p.src, pl, r, tiling, tiling ? null : pieceBounds(p, frame, space));
+    img = sampleProjective(p.src, pl, r, tiling, tiling ? null : pieceBounds(p, frame, space), shadeOf(s, pl.front, light, p.shade));
   }
   if (img.w === 0 || img.h === 0) return;
   applyImage(view, { x: img.x, y: img.y, w: img.w, h: img.h }, { data: img.data, stride: img.w, ox: img.x, oy: img.y }, 'over', s.opacity);
@@ -63,7 +63,7 @@ export function frameExtras(doc: PaintDocument, frame: number): LayerExtras | un
   return {
     covers: (layer, r) => layer.kind === 'raster' && visibleIn(layer, r).length > 0,
     draw: (layer, r, view) => {
-      for (const p of backToFront(visibleIn(layer, r), frame, space)) drawPiece(view, r, p, frame, space);
+      for (const p of backToFront(visibleIn(layer, r), frame, space)) drawPiece(view, r, p, frame, space, doc.light);
     },
     surfaceOf: cels ? (layer) => (layer.cels ? celAt(layer.cels, frame).surface : null) : undefined,
   };

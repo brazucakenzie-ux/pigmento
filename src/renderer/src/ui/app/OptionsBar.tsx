@@ -15,7 +15,7 @@ import { actions, runAction } from '../actions/actions';
 import { GradientButton, PatternPicker } from './PaintOptions';
 import { SelectedShapeParams, ShapeOption, ShapeToolParams } from './ShapeGallery';
 import { BrushPicker } from './BrushPicker';
-import { CameraField } from './CameraField';
+import { CameraField, LightFields } from './CameraField';
 import { EASINGS, type Easing } from '@engine/anim/interpolate';
 import { BACKS, REPEATS, repeatAxes, type Back, type Repeat } from '@engine/anim/piece';
 
@@ -441,6 +441,25 @@ function PieceFields({ plane = false }: { plane?: boolean }) {
       {plane ? null : field('skew', 'transform.skew', '°', -85, 85, 1)}
       {field('opacity', 'opt.opacity', '%', 0, 100, 0)}
       {plane ? (
+        <span className="opt tf-field" data-tip={t('piece.shadeTip')}>
+          <span>{t('piece.shade')}</span>
+          <NumberField
+            className="num tf-num"
+            value={Math.round(info.shade)}
+            decimals={0}
+            min={0}
+            max={100}
+            label={t('piece.shade')}
+            onChange={(v) => {
+              const id = engine.anim.selectedId;
+              if (id) engine.anim.setShade(id, v / 100);
+            }}
+            onEnter={() => (document.activeElement as HTMLElement | null)?.blur()}
+          />
+          <span className="unit">%</span>
+        </span>
+      ) : null}
+      {plane ? (
         <label className="opt">
           <span>{t('piece.back')}</span>
           <select
@@ -575,6 +594,7 @@ export function OptionsBar() {
         {toolId === 'transform' ? <TransformFields /> : null}
         {toolId === 'animate' ? <PieceFields /> : null}
         {toolId === 'plane' ? <CameraField /> : null}
+        {toolId === 'plane' ? <LightFields /> : null}
         {toolId === 'plane' ? <PieceFields plane /> : null}
         {tool.symmetry && !simple ? <SymmetryControl /> : null}
         <PathBar />

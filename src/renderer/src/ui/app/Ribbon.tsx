@@ -17,7 +17,7 @@ import { Popover } from '../components/Popover';
 import { Icon } from '../icons/Icon';
 import { brushRegistry } from '@engine/brush/BrushRegistry';
 import { brushTarget } from '../services/brushes';
-import { CameraField } from './CameraField';
+import { CameraField, LightFields } from './CameraField';
 import { engine } from '../state/engine';
 
 /** Tabs only Full mode shows. */
@@ -299,6 +299,9 @@ function AnimateTab() {
         <ActionButton id="tool.plane" label={t('ribbon.planeTool')} />
         <div className="rb-stack">
           <CameraField />
+        </div>
+        <div className="rb-stack">
+          <LightFields />
         </div>
       </RibbonGroup>
       <RibbonGroup label={t('group.frames')}>
