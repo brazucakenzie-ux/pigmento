@@ -531,6 +531,11 @@ function ViewTab() {
             )}
           </MenuButton>
         </div>
+        {simple ? null : (
+          <div className="rb-stack">
+            <ActionButton id="piecesOutside" variant="small" />
+          </div>
+        )}
       </RibbonGroup>
       <RibbonGroup label={t('group.panels')}>
         <ActionButton id="panels" />

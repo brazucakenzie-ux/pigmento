@@ -1,7 +1,7 @@
 // Pieces in 1.2.0: made from a layer, a picture file or the clipboard, any size, anywhere.
 import { expect, test, type Page } from '@playwright/test';
 import { writeFileSync } from 'node:fs';
-import { launchApp, pixel, ready, tempFile, type AppHandle } from './harness';
+import { docToScreen, drag, launchApp, pixel, ready, settle, tempFile, type AppHandle } from './harness';
 
 let h: AppHandle;
 
@@ -64,6 +64,52 @@ test('Place image adds a piece wider than the canvas, centred and hanging off bo
   // One undo step takes it away again.
   await page.keyboard.press('Control+z');
   expect(await page.evaluate(() => window.__pigmentoTest!.anim().pieces.length)).toBe(0);
+});
+
+test('pieces outside the canvas show faded around it, Fit takes them in, and the Animate tool grabs them there', async () => {
+  const { page } = h;
+  const { width: W, height: H } = await page.evaluate(() => window.__pigmentoTest!.doc());
+  await stubOpen(await twoColourPng(page, W * 2, 40));
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  await page.locator('.ribbon').getByRole('button', { name: 'Place image…' }).click();
+  await expect.poll(() => page.evaluate(() => window.__pigmentoTest!.anim().pieces.length)).toBe(1);
+  const id = await page.evaluate(() => window.__pigmentoTest!.anim().pieces[0].id);
+  // Fit: the whole picture, from half a canvas left of it to half a canvas right of it, is on screen.
+  await page.keyboard.press('Control+0');
+  await settle(page);
+  const y = Math.round(H / 2);
+  const box = await page.locator('.pg-view-canvas').boundingBox();
+  for (const x of [-W / 2 + 2, W * 1.5 - 2]) {
+    const s = await docToScreen(page, x, y);
+    expect(s.x).toBeGreaterThan(box!.x);
+    expect(s.x).toBeLessThan(box!.x + box!.width);
+  }
+  // Off the canvas it's faded over the workspace; turning it off leaves just the workspace.
+  const outside = () => page.evaluate(([x, py]) => window.__pigmentoTest!.displayPixel(x, py), [-W / 4, y] as const);
+  const shown = await outside();
+  await page.getByRole('tab', { name: 'View' }).click();
+  const toggle = page.locator('.ribbon').getByRole('button', { name: 'Pieces outside the canvas' });
+  await toggle.click();
+  const workspace = await outside();
+  // Red at 40 % over the workspace, whatever colour the theme gives it.
+  expect(Math.abs(shown.r - (0.4 * 255 + 0.6 * workspace.r))).toBeLessThan(12);
+  expect(Math.abs(shown.b - 0.6 * workspace.b)).toBeLessThan(12);
+  // Never in the picture itself, or exported: the composite only covers the canvas.
+  await toggle.click();
+  expect(await outside()).toEqual(shown);
+  // Click the piece where it hangs off the canvas to pick it, then drag it from there.
+  await page.keyboard.press('Escape');
+  expect(await page.evaluate(() => window.__pigmentoTest!.anim().selectedId)).toBeNull();
+  const before = (await page.evaluate((pid) => window.__pigmentoTest!.pieceAt(pid, 0), id))!;
+  await drag(page, [
+    [-W / 4, y],
+    [-W / 4 + 30, y + 10],
+    [-W / 4 + 60, y + 20],
+  ]);
+  expect(await page.evaluate(() => window.__pigmentoTest!.anim().selectedId)).toBe(id);
+  const after = (await page.evaluate((pid) => window.__pigmentoTest!.pieceAt(pid, 0), id))!;
+  expect(after.x - before.x).toBeCloseTo(60, 0);
+  expect(after.y - before.y).toBeCloseTo(20, 0);
 });
 
 test('Piece from layer lifts the whole layer under the pieces already on it', async () => {

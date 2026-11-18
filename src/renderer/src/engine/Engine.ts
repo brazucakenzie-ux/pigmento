@@ -9,6 +9,7 @@ import { LayerController, type LayersInfo } from './doc/LayerController';
 import { AnimationController, type AnimHost, type AnimationInfo } from './anim/AnimationController';
 import { compositeLayers } from './raster/blend';
 import { frameExtras } from './anim/pieceRaster';
+import { pieceBounds } from './anim/piece';
 import { transformPieces } from './anim/pieceTransform';
 import { celAt } from './anim/cels';
 import { clampFrame } from './anim/timeline';
@@ -223,7 +224,12 @@ export interface ViewOptions {
   snapGuides: boolean;
   snapCanvas: boolean;
   snapObjects: boolean;
+  /** Show the parts of pieces beyond the canvas (faded), and let the view reach them. */
+  piecesOutside: boolean;
 }
+
+/** How far outside the canvas the view reaches for pieces (keeps a stray typed number sane). */
+const MAX_REACH = 4 * MAX_DIMENSION;
 
 /** How close (screen px) a point or edge must be to snap. */
 const SNAP_PX = 6;
@@ -316,6 +322,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     snapGuides: true,
     snapCanvas: true,
     snapObjects: true,
+    piecesOutside: true,
   };
 
   get viewSettings(): Readonly<ViewOptions> {
@@ -482,7 +489,33 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   setViewOptions(o: Partial<ViewOptions>): void {
     this.viewOptions = { ...this.viewOptions, ...o };
     this.renderer.showPixelGrid = this.viewOptions.pixelGrid;
+    this.renderer.piecesOutside = this.viewOptions.piecesOutside;
+    this.updateReach();
     this.requestRender();
+  }
+
+  /**
+   * Where pieces on showing layers reach beyond the canvas at the frame shown, for the view to
+   * pan and scroll to (only while they're shown outside it). The view itself doesn't move.
+   */
+  private updateReach(): void {
+    let r: Rect | null = null;
+    if (this.viewOptions.piecesOutside && this.doc.pieces.length) {
+      const frame = this.doc.timeline.frame;
+      for (const p of this.doc.pieces) {
+        if (this.doc.layerById(p.layerId)?.kind === 'raster' && this.doc.isEffectivelyVisible(p.layerId)) r = rectUnion(r, pieceBounds(p, frame));
+      }
+      if (r) {
+        const x0 = Math.max(-MAX_REACH, r.x);
+        const y0 = Math.max(-MAX_REACH, r.y);
+        r = { x: x0, y: y0, w: Math.min(MAX_REACH, r.x + r.w) - x0, h: Math.min(MAX_REACH, r.y + r.h) - y0 };
+        if (r.w <= 0 || r.h <= 0) r = null;
+      }
+    }
+    if (rectEquals(r, this.view.extent)) return;
+    this.view.extent = r;
+    // The scrollbars change; the view stays where it is.
+    this.emitView();
   }
 
   // ---- events ---------------------------------------------------------------------------
@@ -545,12 +578,14 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     // Frame-by-frame layers may now show another drawing: upload the ones that changed.
     if (this.doc.hasCels) this.renderer.syncTree();
     this.renderer.invalidate(r);
+    this.updateReach();
     this.requestRender();
     this.emit('animation', this.anim.info());
     this.notifyPixels();
   }
 
   structureChanged(): void {
+    this.updateReach();
     this.view.setDocSize(this.doc.width, this.doc.height);
     this.renderer.resetDocument(this.doc);
     this.emit('doc', this.docInfo());
@@ -584,6 +619,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.emit('layers', this.layers.info());
     // Deleting, duplicating or merging layers changes their pieces.
     this.emit('animation', this.anim.info());
+    this.updateReach();
     this.requestRender();
     this.notifyPixels();
   }
@@ -1046,6 +1082,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.history.reset(initial);
     this.view.setDocSize(doc.width, doc.height);
     this.renderer.resetDocument(doc);
+    this.updateReach();
+    // Opening fits the canvas itself (View → Fit also takes in pieces outside it).
     this.view.fit();
     this.activeTool.activate?.(this);
     this.emit('doc', this.docInfo());
@@ -1271,8 +1309,10 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.afterViewChange();
   }
 
+  /** View → Fit: the canvas, and pieces shown outside it. */
   fit(): void {
-    this.view.fit(true);
+    this.updateReach();
+    this.view.fitAll(true);
     this.afterViewChange();
   }
 

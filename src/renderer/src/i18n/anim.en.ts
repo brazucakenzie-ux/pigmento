@@ -138,4 +138,5 @@ export const animEn = {
   'notice.pieceTooBig': 'A piece can be at most {max} pixels across. Choose a smaller picture.',
   'notice.pieceFromCels': 'This layer has a drawing for each frame, so it can’t become one piece.',
   'notice.pieceLayerEmpty': 'This layer is empty, so there’s nothing to make a piece from.',
+  'action.piecesOutside': 'Pieces outside the canvas',
 } as const;

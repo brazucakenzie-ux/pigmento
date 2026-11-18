@@ -14,6 +14,8 @@ import { celAt, celIndexAt } from '../anim/cels';
 /** Onion-skin tints: drawings before the one shown, and after it. */
 const ONION_BEFORE = '#ff6a14';
 const ONION_AFTER = '#1f6bff';
+/** How strongly pieces show outside the canvas (faded, so it's clear they aren't in the picture). */
+const OUTSIDE_ALPHA = 0.4;
 
 type Ctx2D = OffscreenCanvasRenderingContext2D;
 
@@ -101,6 +103,8 @@ export class Renderer {
     pixelGrid: 'rgba(120, 120, 140, 0.45)',
   };
   showPixelGrid = true;
+  /** Show the parts of pieces beyond the canvas, faded (screen only). */
+  piecesOutside = true;
   activeFilters: LayerFilter[] = [];
   /** A reference image over the canvas (view only: not in the composite, never exported). */
   reference: { canvas: OffscreenCanvas; x: number; y: number; w: number; h: number; scale: number; opacity: number } | null = null;
@@ -662,6 +666,8 @@ export class Renderer {
       }
     }
 
+    if (this.piecesOutside && this.doc.pieces.length) this.drawOutside(ctx, { x, y, w, h });
+
     const ref = this.reference;
     if (ref) {
       const z = view.zoom * dpr;
@@ -671,6 +677,37 @@ export class Renderer {
       ctx.drawImage(ref.canvas, d.x * dpr + ref.x * z, d.y * dpr + ref.y * z, ref.w * ref.scale * z, ref.h * ref.scale * z);
       ctx.restore();
     }
+  }
+
+  /**
+   * The parts of pieces beyond the canvas, faded, on the workspace around the page (`page` is
+   * where it's drawn on the view canvas), so they can be seen and grabbed there. Never exported.
+   */
+  private drawOutside(ctx: CanvasRenderingContext2D, page: Rect): void {
+    const frame = this.doc.timeline.frame;
+    const { width: dw, height: dh } = this.doc;
+    const out: Piece[] = [];
+    for (const layer of walkLayers(this.doc.layers)) {
+      if (layer.kind !== 'raster' || !this.doc.isEffectivelyVisible(layer.id)) continue;
+      for (const p of this.doc.pieces) {
+        if (p.layerId !== layer.id) continue;
+        const b = pieceBounds(p, frame);
+        if (b.x < 0 || b.y < 0 || b.x + b.w > dw || b.y + b.h > dh) out.push(p);
+      }
+    }
+    if (!out.length) return;
+    const z = this.view.zoom * this.dpr;
+    const d = this.view.docRectOnScreen();
+    ctx.save();
+    // Everywhere but the page.
+    const far = 1e7;
+    ctx.beginPath();
+    ctx.rect(-far, -far, 2 * far, 2 * far);
+    ctx.rect(page.x, page.y, page.w, page.h);
+    ctx.clip('evenodd');
+    ctx.transform(z, 0, 0, z, d.x * this.dpr, d.y * this.dpr);
+    this.drawPieces(ctx, out, null, OUTSIDE_ALPHA, frame);
+    ctx.restore();
   }
 
   /** Scaled snapshot of the composite for the navigator. */
