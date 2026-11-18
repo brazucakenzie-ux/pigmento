@@ -165,3 +165,44 @@ test('a repeating floor runs to the horizon on screen as in the picture, and a h
   expect(await page.evaluate(() => window.__pigmentoTest!.pixel(320, 200))).toEqual({ r: 255, g: 255, b: 255, a: 255 });
   expect(await page.evaluate(() => window.__pigmentoTest!.screenPixel(320, 200))).toEqual({ r: 255, g: 255, b: 255, a: 255 });
 });
+
+test('the camera: drag its vanishing point, set its perspective, and show the grid guide', async () => {
+  const { page } = h;
+  const { width: W, height: H } = await page.evaluate(() => window.__pigmentoTest!.doc());
+  const id = await bandedPiece(page);
+  await page.evaluate((pid) => window.__pigmentoTest!.setPieceKey(pid, 0, { turn: 0.6 }), id);
+  await page.keyboard.press('m');
+  const camera = () => page.evaluate(() => window.__pigmentoTest!.anim().camera);
+  expect(await camera()).toEqual({ x: W / 2, y: H / 2, strength: 50 });
+  const corner = () => page.evaluate((pid) => window.__pigmentoTest!.pieceHandle(pid, 240, 0), id);
+  const before = await corner();
+  // The vanishing point, dragged 200 px left and 100 up: the turned piece is seen from elsewhere.
+  await drag(page, [
+    [W / 2, H / 2],
+    [W / 2 - 100, H / 2 - 50],
+    [W / 2 - 200, H / 2 - 100],
+  ]);
+  const moved = await camera();
+  expect(moved.x).toBeCloseTo(W / 2 - 200, 0);
+  expect(moved.y).toBeCloseTo(H / 2 - 100, 0);
+  const after = await corner();
+  expect(Math.hypot(after.x - before.x, after.y - before.y)).toBeGreaterThan(2);
+  // Perspective strength from the options bar (and the same field on the Animate tab).
+  const field = page.locator('.optionsbar').getByRole('textbox', { name: 'Perspective', exact: true });
+  await field.fill('90');
+  await field.press('Enter');
+  expect((await camera()).strength).toBe(90);
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  await expect(page.locator('.ribbon').getByRole('textbox', { name: 'Perspective', exact: true })).toHaveValue('90');
+  // One undo step each.
+  await page.keyboard.press('Control+z');
+  expect((await camera()).strength).toBe(50);
+  await page.keyboard.press('Control+z');
+  expect((await camera()).x).toBe(W / 2);
+  // The perspective grid guide is a View option (on screen only).
+  await page.getByRole('tab', { name: 'View' }).click();
+  const grid = page.locator('.ribbon').getByRole('button', { name: 'Perspective grid' });
+  await grid.click();
+  await expect(grid).toHaveAttribute('aria-pressed', 'true');
+  expect(await page.evaluate(() => window.__pigmentoTest!.pixel(5, 5))).toEqual({ r: 255, g: 255, b: 255, a: 255 });
+});

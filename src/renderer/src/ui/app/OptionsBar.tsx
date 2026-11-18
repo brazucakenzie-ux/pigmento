@@ -15,6 +15,7 @@ import { actions, runAction } from '../actions/actions';
 import { GradientButton, PatternPicker } from './PaintOptions';
 import { SelectedShapeParams, ShapeOption, ShapeToolParams } from './ShapeGallery';
 import { BrushPicker } from './BrushPicker';
+import { CameraField } from './CameraField';
 import { EASINGS, type Easing } from '@engine/anim/interpolate';
 import { BACKS, REPEATS, repeatAxes, type Back, type Repeat } from '@engine/anim/piece';
 
@@ -573,6 +574,7 @@ export function OptionsBar() {
         ))}
         {toolId === 'transform' ? <TransformFields /> : null}
         {toolId === 'animate' ? <PieceFields /> : null}
+        {toolId === 'plane' ? <CameraField /> : null}
         {toolId === 'plane' ? <PieceFields plane /> : null}
         {tool.symmetry && !simple ? <SymmetryControl /> : null}
         <PathBar />

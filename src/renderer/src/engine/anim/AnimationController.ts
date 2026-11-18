@@ -7,6 +7,7 @@ import type { ImageBuf } from '../raster/transform';
 import type { I18nKey, I18nParams } from '../../i18n';
 import { movePivot, type Easing } from './interpolate';
 import { movePivot3D } from './planeEdit';
+import { MAX_STRENGTH, MIN_STRENGTH, type Camera } from './space';
 import { MAX_PIXELS } from '../io/protocol';
 import {
   clonePiece,
@@ -59,6 +60,8 @@ export interface AnimationInfo {
   cels: Record<string, number[]>;
   /** Painting tools paint on the selected piece instead of the active layer. */
   paintOnPiece: boolean;
+  /** The camera 3D pieces are seen through. */
+  camera: Camera;
 }
 
 /** A piece's values as the options bar shows them (degrees and percent). */
@@ -101,11 +104,13 @@ export interface AnimSnapshot {
   fps: number;
   length: number;
   loop: LoopMode;
+  /** The camera 3D pieces are seen through. */
+  camera: Camera;
 }
 
 export function captureAnim(doc: PaintDocument): AnimSnapshot {
   const t = doc.timeline;
-  return { pieces: doc.pieces.map(clonePiece), fps: t.fps, length: t.length, loop: t.loop };
+  return { pieces: doc.pieces.map(clonePiece), fps: t.fps, length: t.length, loop: t.loop, camera: { ...doc.camera } };
 }
 
 export function restoreAnim(doc: PaintDocument, s: AnimSnapshot): void {
@@ -114,6 +119,7 @@ export function restoreAnim(doc: PaintDocument, s: AnimSnapshot): void {
   doc.timeline.length = s.length;
   doc.timeline.loop = s.loop;
   doc.timeline.frame = clampFrame(doc.timeline.frame, s.length);
+  doc.camera = { ...s.camera };
   doc.showFrame(doc.timeline.frame);
 }
 
@@ -229,6 +235,7 @@ export class AnimationController {
       cels: Object.fromEntries(this.doc.rasterLayers().flatMap((l) => (l.cels ? [[l.id, l.cels.map((c) => c.start)]] : []))),
       pieces: this.doc.pieces.map((p) => ({ id: p.id, name: p.name, layerId: p.layerId, keys: p.keyframes.map((k) => ({ frame: k.frame, easing: k.easing })) })),
       paintOnPiece: this.paintOn,
+      camera: { ...this.doc.camera },
     };
   }
 
@@ -292,6 +299,29 @@ export class AnimationController {
       p.back = back;
       return true;
     });
+  }
+
+  /** The camera with `change`, kept sensible (strength 1–100 %, a finite vanishing point). */
+  private cameraWith(change: Partial<Camera>): Camera {
+    const c = { ...this.doc.camera, ...change };
+    const fin = (v: number, d: number) => (Number.isFinite(v) ? Math.max(-1e6, Math.min(1e6, v)) : d);
+    return { x: fin(c.x, this.doc.width / 2), y: fin(c.y, this.doc.height / 2), strength: Math.min(MAX_STRENGTH, Math.max(MIN_STRENGTH, Number.isFinite(c.strength) ? c.strength : 50)) };
+  }
+
+  /** Move the vanishing point or change the perspective's strength (one undo step). */
+  setCamera(change: Partial<Camera>): boolean {
+    const next = this.cameraWith(change);
+    return this.change('history.camera', () => {
+      this.doc.camera = next;
+      return true;
+    });
+  }
+
+  /** Change the camera live during a drag (no undo step yet). */
+  previewCamera(change: Partial<Camera>): void {
+    if (!this.drag) return;
+    this.doc.camera = this.cameraWith(change);
+    this.host.animationChanged(null);
   }
 
   /** Which way copies of a piece tile on (one undo step; not keyframed). */
@@ -721,6 +751,7 @@ export class AnimationController {
 /** Two snapshots hold the same animation (pixels are compared by identity). */
 function sameAnim(a: AnimSnapshot, b: AnimSnapshot): boolean {
   if (a.fps !== b.fps || a.length !== b.length || a.loop !== b.loop || a.pieces.length !== b.pieces.length) return false;
+  if (a.camera.x !== b.camera.x || a.camera.y !== b.camera.y || a.camera.strength !== b.camera.strength) return false;
   if (a.pieces.some((p, i) => p.src !== b.pieces[i].src)) return false;
   return JSON.stringify(a.pieces.map(strip)) === JSON.stringify(b.pieces.map(strip));
 }

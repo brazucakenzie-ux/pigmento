@@ -100,7 +100,7 @@ function setThemeMode(themeMode: ThemeMode): void {
   updateSettings({ themeMode });
 }
 
-type ViewToggle = 'rulers' | 'gridlines' | 'pixelGrid' | 'statusBar' | 'showGuides' | 'lockGuides' | 'snap' | 'snapGrid' | 'snapGuides' | 'snapCanvas' | 'snapObjects' | 'piecesOutside';
+type ViewToggle = 'rulers' | 'gridlines' | 'pixelGrid' | 'statusBar' | 'showGuides' | 'lockGuides' | 'snap' | 'snapGrid' | 'snapGuides' | 'snapCanvas' | 'snapObjects' | 'piecesOutside' | 'perspectiveGrid';
 
 function toggleView(key: ViewToggle): void {
   const v = useUi.getState().settings.view;
@@ -290,6 +290,7 @@ const base: Action[] = [
   { id: 'clearGuides', labelKey: 'action.clearGuides', icon: 'delete', group: 'view', run: () => engine.clearGuides(), enabled: (s) => s.guides > 0 },
   viewToggle('snap', 'action.snap', 'snap', 'magnet'),
   viewToggle('piecesOutside', 'action.piecesOutside', 'piecesOutside', 'animate'),
+  viewToggle('perspectiveGrid', 'action.perspectiveGrid', 'perspectiveGrid', 'plane'),
   viewToggle('snapGrid', 'action.snapGrid', 'snapGrid', 'grid'),
   viewToggle('snapGuides', 'action.snapGuides', 'snapGuides', 'guides'),
   viewToggle('snapCanvas', 'action.snapCanvas', 'snapCanvas', 'canvas-size'),

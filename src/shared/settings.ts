@@ -52,6 +52,7 @@ export const SettingsSchema = z.object({
       snapCanvas: z.boolean().default(true),
       snapObjects: z.boolean().default(true),
       piecesOutside: z.boolean().default(true),
+      perspectiveGrid: z.boolean().default(false),
     })
     .default({
       rulers: false,
@@ -67,6 +68,7 @@ export const SettingsSchema = z.object({
       snapCanvas: true,
       snapObjects: true,
       piecesOutside: true,
+      perspectiveGrid: false,
     }),
   colors: z
     .object({

@@ -40,6 +40,13 @@ interface Drag {
 
 let drag: Drag | null = null;
 let hovered: string | null = null;
+/** Dragging the camera's vanishing point (from where the pointer and the point were). */
+let camDrag: { start: Point; from: Point } | null = null;
+
+/** The vanishing point on screen. */
+function vanishing(ctx: ToolContext): Point {
+  return ctx.view.toScreen(ctx.doc.camera.x, ctx.doc.camera.y);
+}
 
 const HIT_PX = 7;
 
@@ -142,12 +149,19 @@ export default registerTool({
   options: [],
   cursor: () => 'default',
   deactivate(ctx) {
-    if (drag) ctx.anim.cancelDrag();
+    if (drag || camDrag) ctx.anim.cancelDrag();
     drag = null;
+    camDrag = null;
     hovered = null;
   },
   pointerDown(ctx, e) {
     if (e.button !== 0) return;
+    // The vanishing point can be dragged, whatever is selected (Shift keeps it level or upright).
+    if (near({ x: e.sx, y: e.sy }, vanishing(ctx))) {
+      camDrag = { start: { x: e.x, y: e.y }, from: { x: ctx.doc.camera.x, y: ctx.doc.camera.y } };
+      ctx.anim.beginDrag();
+      return;
+    }
     let piece = ctx.anim.selected;
     let hit = piece ? hitSelected(ctx, piece, e) : null;
     // A repeating piece's copies reach everywhere: a piece showing on top of them is picked instead.
@@ -177,6 +191,16 @@ export default registerTool({
     ctx.anim.beginDrag();
   },
   pointerMove(ctx, e) {
+    if (camDrag) {
+      let dx = e.x - camDrag.start.x;
+      let dy = e.y - camDrag.start.y;
+      if (e.shift) {
+        if (Math.abs(dx) > Math.abs(dy)) dy = 0;
+        else dx = 0;
+      }
+      ctx.anim.previewCamera({ x: camDrag.from.x + dx, y: camDrag.from.y + dy });
+      return;
+    }
     const d = drag;
     if (!d) return;
     const piece = ctx.anim.piece(d.id);
@@ -214,12 +238,21 @@ export default registerTool({
     ctx.anim.preview(d.id, (p) => (p.keyframes = setKey(d.keys0, frame, change)));
   },
   pointerUp(ctx) {
+    if (camDrag) {
+      camDrag = null;
+      ctx.anim.endDrag('history.camera');
+      return;
+    }
     const d = drag;
     drag = null;
     if (!d) return;
     ctx.anim.endDrag(d.hit.kind === 'pivot' ? 'history.pivot' : d.adding ? 'history.keyframeAdd' : 'history.keyframe');
   },
   hover(ctx, e) {
+    if (near({ x: e.sx, y: e.sy }, vanishing(ctx))) {
+      ctx.setCursor('move');
+      return;
+    }
     const sel = ctx.anim.selected;
     const hit = sel ? hitSelected(ctx, sel, e) : null;
     const over = hit ? null : pieceAt(visiblePieces(ctx), ctx.anim.frame, e, ctx.doc.space);
@@ -258,6 +291,11 @@ export default registerTool({
     return true;
   },
   drawOverlay(ctx, ov) {
+    // The horizon (the vanishing point's height) across the view, and the point itself.
+    const vp = vanishing(ctx);
+    ov.line(ctx.view.toScreen(ctx.doc.camera.x - 1e5, ctx.doc.camera.y), ctx.view.toScreen(ctx.doc.camera.x + 1e5, ctx.doc.camera.y), true);
+    ov.handle(vp, 'circle', camDrag !== null);
+    ov.pivot(vp, camDrag !== null);
     const sel = ctx.anim.selected;
     for (const p of visiblePieces(ctx)) {
       if (p === sel) continue;

@@ -34,6 +34,7 @@ import { Surface } from '../raster/Surface';
 import { MAX_DIMENSION, MAX_PIXELS } from './protocol';
 import { EASINGS, type Easing, type Keyframe } from '../anim/interpolate';
 import { BACKS, MAX_KEYFRAMES, MAX_PIECES, MAX_SCROLL, newPieceId, REPEATS, type Back, type Piece, type Repeat } from '../anim/piece';
+import { defaultCamera, MAX_STRENGTH, MIN_STRENGTH } from '../anim/space';
 import { LOOP_MODES, MAX_FPS, MAX_FRAMES, MIN_FPS, clampFrame, type LoopMode } from '../anim/timeline';
 import { MAX_CELS, type Cel } from '../anim/cels';
 
@@ -52,12 +53,18 @@ export const PROJECT_VERSION = 3;
 /** Furthest a piece can be pushed behind the canvas, or pulled in front of it, in pixels. */
 export const MAX_PIECE_DEPTH = 1e6;
 
+/** The camera isn't the one a new picture of this size gets. */
+function cameraMoved(doc: PaintDocument): boolean {
+  const d = defaultCamera(doc.width, doc.height);
+  return doc.camera.x !== d.x || doc.camera.y !== d.y || doc.camera.strength !== d.strength;
+}
+
 /** The oldest version that holds everything in `doc`. */
 export function versionFor(doc: PaintDocument): 1 | 2 | 3 {
   const v3 = doc.pieces.some(
     (p) => p.repeat !== 'none' || p.back !== 'mirror' || p.keyframes.some((k) => k.scrollX !== 0 || k.scrollY !== 0 || k.depth !== 0 || k.tilt !== 0 || k.turn !== 0),
   );
-  if (v3) return 3;
+  if (v3 || cameraMoved(doc)) return 3;
   return doc.pieces.length || doc.hasCels ? 2 : 1;
 }
 
@@ -364,6 +371,8 @@ export const DocumentJsonSchema = z.object({
     .optional(),
   /** Version 2: the timeline and animated pieces; optional. */
   animation: AnimationJson.optional(),
+  /** Version 3: the camera 3D pieces are seen through (left out while it's the default one). */
+  camera: z.object({ x: z.number().min(-1e6).max(1e6), y: z.number().min(-1e6).max(1e6), strength: z.number().min(MIN_STRENGTH).max(MAX_STRENGTH) }).optional(),
 });
 
 export type DocumentJson = z.infer<typeof DocumentJsonSchema>;
@@ -489,6 +498,7 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
     ...(assets.length ? { assets } : {}),
     ...(doc.guides.length ? { guides: doc.guides.map((g) => ({ axis: g.axis, pos: g.pos })) } : {}),
     ...(animation ? { animation } : {}),
+    ...(cameraMoved(doc) ? { camera: { ...doc.camera } } : {}),
   };
   files['document.json'] = [strToU8(JSON.stringify(json, null, 1)), { level: 6 }];
   if (thumbnail) files['thumbnail.png'] = [thumbnail, { level: 0 }];
@@ -638,6 +648,7 @@ export async function loadProject(bytes: Uint8Array, codec: PngCodec): Promise<P
   doc.savedSelections = saved;
   doc.guides = (json.guides ?? []).map((g) => guide(g.axis, g.pos));
   if (json.animation) await readAnimation(doc, json.animation, files, codec);
+  if (json.camera) doc.camera = { ...json.camera };
   // Frame-by-frame layers show the drawing for the frame the file was saved at.
   doc.showFrame(doc.timeline.frame);
   return doc;

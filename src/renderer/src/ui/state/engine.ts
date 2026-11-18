@@ -36,6 +36,7 @@ export function viewOptionsOf(v: Settings['view']): Parameters<typeof engine.set
     snapCanvas: v.snapCanvas,
     snapObjects: v.snapObjects,
     piecesOutside: v.piecesOutside,
+    perspectiveGrid: v.perspectiveGrid,
   };
 }
 

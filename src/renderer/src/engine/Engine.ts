@@ -228,6 +228,8 @@ export interface ViewOptions {
   snapObjects: boolean;
   /** Show the parts of pieces beyond the canvas (faded), and let the view reach them. */
   piecesOutside: boolean;
+  /** The perspective grid guide (view only, never exported). */
+  perspectiveGrid: boolean;
 }
 
 /** How far outside the canvas the view reaches for pieces (keeps a stray typed number sane). */
@@ -325,6 +327,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     snapCanvas: true,
     snapObjects: true,
     piecesOutside: true,
+    perspectiveGrid: false,
   };
 
   get viewSettings(): Readonly<ViewOptions> {
@@ -455,6 +458,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     const ov = this.overlay;
     ov.begin();
     if (this.viewOptions.gridlines) ov.gridlines(this.viewOptions.gridSize);
+    if (this.viewOptions.perspectiveGrid) ov.perspectiveGrid(this.doc.camera, this.doc.width, this.doc.height);
     const gp = this.guidePreview;
     if (this.viewOptions.showGuides) for (const g of this.doc.guides) if (g.id !== gp?.id) ov.guide(g.axis, g.pos);
     if (gp) ov.guide(gp.axis, gp.pos, true);

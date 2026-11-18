@@ -17,6 +17,7 @@ import { Popover } from '../components/Popover';
 import { Icon } from '../icons/Icon';
 import { brushRegistry } from '@engine/brush/BrushRegistry';
 import { brushTarget } from '../services/brushes';
+import { CameraField } from './CameraField';
 import { engine } from '../state/engine';
 
 /** Tabs only Full mode shows. */
@@ -296,6 +297,9 @@ function AnimateTab() {
       </RibbonGroup>
       <RibbonGroup label={t('group.space')}>
         <ActionButton id="tool.plane" label={t('ribbon.planeTool')} />
+        <div className="rb-stack">
+          <CameraField />
+        </div>
       </RibbonGroup>
       <RibbonGroup label={t('group.frames')}>
         <ActionButton id="newDrawing" />
@@ -537,6 +541,7 @@ function ViewTab() {
         {simple ? null : (
           <div className="rb-stack">
             <ActionButton id="piecesOutside" variant="small" />
+            <ActionButton id="perspectiveGrid" variant="small" />
           </div>
         )}
       </RibbonGroup>

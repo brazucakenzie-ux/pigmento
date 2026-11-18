@@ -204,6 +204,7 @@ Pieces in 1.2 can be bigger than the canvas and sit anywhere, partly or wholly o
   - `x` and `y` stay where the pivot shows on the canvas. A piece with no tilt or turn stays flat, and depth just shrinks it towards that spot.
 - **`back`** (on the piece): `mirror` (its pixels show mirrored when it's turned round, like paper) or `hide`. Left out, it's `mirror`.
 - **The camera:** it looks at the canvas straight on from its vanishing point, at a distance of (50 % ÷ strength) × the picture's diagonal. The pivot's point in 3D is the one at its depth that shows where the pivot is.
+- **`camera`** (in `document.json`, beside `animation`): `{ "x": 640, "y": 400, "strength": 50 }`, the vanishing point in document pixels (−1,000,000 to 1,000,000) and the strength from 1 to 100 %. It's left out while the camera is the default one, in the middle of the canvas at 50 %.
 
 ## Limits and safety
 - Width and height are at most 30,000 px each and 250 megapixels in total. Files may hold at most 2,000 layers, nested at most 64 deep, 200 saved selections and 256 pictures (each at most 4096 × 4096 px; bigger pictures are scaled down when chosen).

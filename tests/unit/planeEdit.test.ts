@@ -57,3 +57,56 @@ describe('Perspective plane drags', () => {
     }
   });
 });
+
+describe('the camera', () => {
+  it('is moved and strengthened as undo steps, and a drag is one step', async () => {
+    const { PaintDocument } = await import('@engine/doc/Document');
+    const { History } = await import('@engine/history/History');
+    const { AnimationController } = await import('@engine/anim/AnimationController');
+    const doc = new PaintDocument({ width: 800, height: 600 });
+    const history = new History();
+    const anim = new AnimationController({ doc, history, commitLive() {}, notify() {}, animationChanged() {} });
+    expect(anim.setCamera({ strength: 80 })).toBe(true);
+    expect(doc.space.f).toBeCloseTo(625, 9);
+    // Out of range is kept to 1–100 %.
+    anim.setCamera({ strength: 500 });
+    expect(doc.camera.strength).toBe(100);
+    anim.beginDrag();
+    anim.previewCamera({ x: 100 });
+    anim.previewCamera({ x: 120, y: 90 });
+    anim.endDrag('history.camera');
+    expect(doc.camera).toEqual({ x: 120, y: 90, strength: 100 });
+    history.undo();
+    expect(doc.camera).toEqual({ x: 400, y: 300, strength: 100 });
+    history.undo();
+    history.undo();
+    expect(doc.camera).toEqual({ x: 400, y: 300, strength: 50 });
+  });
+
+  it('is saved in version 3 once it’s moved, and not before', async () => {
+    const { PaintDocument } = await import('@engine/doc/Document');
+    const { loadProject, saveProject, versionFor } = await import('@engine/io/project');
+    const { unzipSync, strFromU8 } = await import('fflate');
+    const codec = {
+      async encode(data: Uint8ClampedArray, w: number, h: number) {
+        const out = new Uint8Array(8 + data.length);
+        new DataView(out.buffer).setUint32(0, w);
+        new DataView(out.buffer).setUint32(4, h);
+        out.set(data, 8);
+        return out;
+      },
+      async decode(bytes: Uint8Array) {
+        const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        return { w: dv.getUint32(0), h: dv.getUint32(4), data: new Uint8ClampedArray(bytes.slice(8)) };
+      },
+    };
+    const doc = new PaintDocument({ width: 80, height: 60 });
+    const json = (bytes: Uint8Array) => JSON.parse(strFromU8(unzipSync(bytes)['document.json'])) as Record<string, unknown>;
+    expect(json(await saveProject(doc, codec)).camera).toBeUndefined();
+    doc.camera = { x: 10, y: 50, strength: 70 };
+    expect(versionFor(doc)).toBe(3);
+    const bytes = await saveProject(doc, codec);
+    expect(json(bytes).camera).toEqual({ x: 10, y: 50, strength: 70 });
+    expect((await loadProject(bytes, codec)).camera).toEqual({ x: 10, y: 50, strength: 70 });
+  });
+});
