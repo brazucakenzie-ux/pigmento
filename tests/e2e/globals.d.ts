@@ -56,6 +56,9 @@ export interface PigmentoTestHook {
   pieceAt(id: string, frame: number): { x: number; y: number; sx: number; sy: number; angle: number; skew: number; opacity: number } | null;
   setFrame(frame: number): void;
   setPieceKey(id: string, frame: number, change: Partial<Record<'x' | 'y' | 'sx' | 'sy' | 'angle' | 'skew' | 'opacity', number>>): boolean;
+  pieceInfo(id: string): { w: number; h: number; home: { x: number; y: number; w: number; h: number }; layerId: string } | null;
+  piecePixel(id: string, x: number, y: number): { r: number; g: number; b: number; a: number } | null;
+  pieceFromLayer(keepOriginal?: boolean): boolean;
   addLayer(): string;
   groupLayers(ids: string[]): string | null;
   setLayerProps(id: string, p: Record<string, unknown>): void;

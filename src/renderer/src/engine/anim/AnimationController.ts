@@ -6,10 +6,12 @@ import type { Command, History } from '../history/History';
 import type { ImageBuf } from '../raster/transform';
 import type { I18nKey, I18nParams } from '../../i18n';
 import { movePivot, type Easing } from './interpolate';
+import { MAX_PIXELS } from '../io/protocol';
 import {
   clonePiece,
   makePiece,
   MAX_KEYFRAMES,
+  MAX_PIECE_SIDE,
   MAX_PIECES,
   moveKey,
   newPieceId,
@@ -445,20 +447,34 @@ export class AnimationController {
     });
   }
 
-  /** Add a piece made from `src`, lifted from `home` on layer `layerId`, with a keyframe at the current frame. */
-/** False (and says so) when the picture already has the most pieces it can. */
+  /** False (and says so) when the picture already has the most pieces it can. */
   canAdd(): boolean {
     if (this.doc.pieces.length < MAX_PIECES) return true;
     this.host.notify('error', 'notice.tooManyPieces', { max: MAX_PIECES });
     return false;
   }
 
-  add(src: ImageBuf | Surface, home: Rect, layerId: string): Piece | null {
-    if (!this.canAdd()) return null;
+  /** False (and says so) when a w × h piece would be bigger than a piece can be. */
+  fits(w: number, h: number): boolean {
+    if (w <= MAX_PIECE_SIDE && h <= MAX_PIECE_SIDE && w * h <= MAX_PIXELS) return true;
+    this.host.notify('error', 'notice.pieceTooBig', { max: MAX_PIECE_SIDE });
+    return false;
+  }
+
+  /**
+   * Add a piece made from `src`, lifted from (or placed at) `home` on layer `layerId`, with a
+   * keyframe at the current frame. It goes on top of the layer's pieces, or under them with
+   * `atBottom` (a whole layer's pixels made a piece keep their place under its other pieces).
+   */
+  add(src: ImageBuf | Surface, home: Rect, layerId: string, label: I18nKey = 'history.animateSelection', atBottom = false): Piece | null {
+    const size = src instanceof Surface ? { w: src.width, h: src.height } : src;
+    if (!this.canAdd() || !this.fits(size.w, size.h)) return null;
     const n = this.doc.pieces.length + 1;
     const piece = makePiece(newPieceId(), this.namer(n), layerId, src, home, this.frame);
-    this.change('history.animateSelection', () => {
-      this.doc.pieces.push(piece);
+    this.change(label, () => {
+      const first = atBottom ? this.doc.pieces.findIndex((p) => p.layerId === layerId) : -1;
+      if (first >= 0) this.doc.pieces.splice(first, 0, piece);
+      else this.doc.pieces.push(piece);
       return true;
     });
     this.selectedId = piece.id;

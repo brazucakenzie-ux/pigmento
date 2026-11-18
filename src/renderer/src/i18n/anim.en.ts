@@ -129,4 +129,13 @@ export const animEn = {
   'notice.mergeCels': 'Layers drawn frame by frame can’t be merged. Flatten a copy of the picture at each frame instead, or move the drawings onto one layer.',
   'notice.flattenCels': 'Layers drawn frame by frame can’t be flattened into one picture. Hide them first, or export the animation.',
   'notice.animatePixelsOnly': 'Pieces can only come from a pixel layer. Rasterise the layer first.',
+  'action.pieceFromLayer': 'Piece from layer',
+  'action.placeImage': 'Place image…',
+  'action.pasteAsPiece': 'Paste as piece',
+  'history.pieceFromLayer': 'Piece from layer',
+  'history.placeImage': 'Place image',
+  'history.pasteAsPiece': 'Paste as piece',
+  'notice.pieceTooBig': 'A piece can be at most {max} pixels across. Choose a smaller picture.',
+  'notice.pieceFromCels': 'This layer has a drawing for each frame, so it can’t become one piece.',
+  'notice.pieceLayerEmpty': 'This layer is empty, so there’s nothing to make a piece from.',
 } as const;

@@ -39,6 +39,13 @@ const customBrush = (s: UiState) => s.brushLibrary >= 0 && isCustomBrush(brushTa
 /** At least n objects selected on the active shape layer. */
 const hasShapes = (n: number) => (s: UiState) => s.vectorSelection.count >= n;
 
+/** Straight on to the Animate tool, with the new piece selected and the timeline showing. */
+function showNewPiece(): void {
+  engine.setTool('animate');
+  const anim = useUi.getState().settings.anim;
+  if (!anim.timeline) updateSettings({ anim: { ...anim, timeline: true } });
+}
+
 /** Open a selection dialog with floating pixels put down first (their selection stays). */
 function selectionDialog(d: Parameters<typeof openDialog>[0]): void {
   engine.commitLive(true);
@@ -199,14 +206,38 @@ const base: Action[] = [
     labelKey: 'action.animateSelection',
     icon: 'animate',
     group: 'animation',
-    // Straight on to the Animate tool, with the new piece selected and the timeline showing.
     run: safe(() => {
-      const anim = useUi.getState().settings.anim;
-      if (!engine.animateSelection(anim.keepOriginal)) return;
-      engine.setTool('animate');
-      if (!anim.timeline) updateSettings({ anim: { ...anim, timeline: true } });
+      if (engine.animateSelection(useUi.getState().settings.anim.keepOriginal)) showNewPiece();
     }),
     enabled: hasSelection,
+  },
+  {
+    id: 'pieceFromLayer',
+    labelKey: 'action.pieceFromLayer',
+    icon: 'layers',
+    group: 'animation',
+    run: safe(() => {
+      if (engine.pieceFromLayer(useUi.getState().settings.anim.keepOriginal)) showNewPiece();
+    }),
+    enabled: rasterActive,
+  },
+  {
+    id: 'placeImage',
+    labelKey: 'action.placeImage',
+    icon: 'place-image',
+    group: 'animation',
+    run: async () => {
+      if (await files.placeImage()) showNewPiece();
+    },
+  },
+  {
+    id: 'pasteAsPiece',
+    labelKey: 'action.pasteAsPiece',
+    icon: 'paste',
+    group: 'animation',
+    run: async () => {
+      if (await files.pasteAsPiece()) showNewPiece();
+    },
   },
   {
     id: 'animKeepOriginal',

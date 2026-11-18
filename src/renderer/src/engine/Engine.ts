@@ -1360,6 +1360,65 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     return added;
   }
 
+  /**
+   * Make everything on the active pixel layer a piece on that layer, under its other pieces so
+   * the picture looks the same. The layer is emptied unless `keepOriginal`. One undo step.
+   */
+  pieceFromLayer(keepOriginal: boolean): boolean {
+    this.commitLive(true);
+    const layer = this.doc.activeLayer;
+    if (layer.kind !== 'raster') {
+      this.notify('error', 'notice.animatePixelsOnly');
+      return false;
+    }
+    if (layer.locked) {
+      this.notify('error', 'notice.animateLocked');
+      return false;
+    }
+    // A frame-by-frame layer has a drawing per frame, and a piece holds one picture.
+    if (layer.cels) {
+      this.notify('info', 'notice.pieceFromCels');
+      return false;
+    }
+    const b = layer.surface.contentBounds();
+    if (!b) {
+      this.notify('info', 'notice.pieceLayerEmpty');
+      return false;
+    }
+    if (!this.anim.canAdd() || !this.anim.fits(b.w, b.h)) return false;
+    const src: ImageBuf = { w: b.w, h: b.h, data: layer.surface.readRect(b) };
+    return this.history.group('history.pieceFromLayer', () => {
+      if (!keepOriginal) {
+        const s = layer.surface;
+        s.beginEdit();
+        s.clearRect(b);
+        this.pushPixels('history.pieceFromLayer', layer, s.endEdit());
+        this.layerChanged(layer, b);
+      }
+      return this.anim.add(src, b, layer.id, 'history.pieceFromLayer', true) !== null;
+    });
+  }
+
+  /**
+   * A piece from a whole picture (a placed image file or the clipboard): centred on the canvas
+   * and free to hang off it, on the active pixel layer, or on a new pixel layer when the active
+   * layer is a shape layer or a group. One undo step.
+   */
+  addPieceImage(img: ImageBuf, label: 'history.placeImage' | 'history.pasteAsPiece'): boolean {
+    this.commitLive(true);
+    const active = this.doc.activeLayer;
+    if (active.kind === 'raster' && active.locked) {
+      this.notify('error', 'notice.animateLocked');
+      return false;
+    }
+    if (!this.anim.canAdd() || !this.anim.fits(img.w, img.h)) return false;
+    const home = { x: Math.round((this.doc.width - img.w) / 2), y: Math.round((this.doc.height - img.h) / 2), w: img.w, h: img.h };
+    return this.history.group(label, () => {
+      const layerId = active.kind === 'raster' ? active.id : this.layers.add();
+      return this.anim.add(img, home, layerId, label) !== null;
+    });
+  }
+
   liftSelection(copy: boolean): FloatObject | null {
     const sel = this.doc.selection;
     if (!sel) return null;

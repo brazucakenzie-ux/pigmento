@@ -237,5 +237,13 @@ export function installTestHook(): void {
       const p = engine.anim.piece(id);
       return p ? pieceStateAt(p, frame) : null;
     },
+    /** A piece's own size and where it came from (or was placed). */
+    pieceInfo: (id: string) => {
+      const p = engine.anim.piece(id);
+      return p ? { w: p.src.width, h: p.src.height, home: { ...p.home }, layerId: p.layerId } : null;
+    },
+    /** A pixel of a piece's own pixels. */
+    piecePixel: (id: string, x: number, y: number) => engine.anim.piece(id)?.src.getPixel(x, y) ?? null,
+    pieceFromLayer: (keepOriginal = false) => engine.pieceFromLayer(keepOriginal),
   };
 }

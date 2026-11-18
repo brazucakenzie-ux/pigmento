@@ -5,10 +5,10 @@ import { History } from '@engine/history/History';
 import { Surface } from '@engine/raster/Surface';
 import { affineTransform, type ImageBuf } from '@engine/raster/transform';
 import { matChain, matRotate, matScale, matTranslate } from '@engine/core/matrix';
-import { copyPiece, makePiece, pieceSize, setKey } from '@engine/anim/piece';
+import { copyPiece, makePiece, MAX_PIECE_SIDE, pieceSize, setKey } from '@engine/anim/piece';
 import { drawPiece } from '@engine/anim/pieceRaster';
 import { sampleAffine } from '@engine/anim/pieceSample';
-import { AnimationCommand, captureAnim, type AnimHost } from '@engine/anim/AnimationController';
+import { AnimationCommand, AnimationController, captureAnim, type AnimHost } from '@engine/anim/AnimationController';
 
 /** A deterministic picture with see-through parts. */
 function noise(w: number, h: number): ImageBuf {
@@ -91,6 +91,32 @@ describe('piece pixels on a tiled surface', () => {
     expect(copy.src).not.toBe(p.src);
     expect(copy.keyframes).toEqual(p.keyframes);
     expect(Array.from(copy.src.toRGBA())).toEqual(Array.from(p.src.toRGBA()));
+  });
+
+  it('adds a piece under the layer’s other pieces, with its own undo label', () => {
+    const doc = new PaintDocument({ width: 16, height: 16 });
+    const history = new History();
+    const host: AnimHost = { doc, history, commitLive() {}, notify() {}, animationChanged() {} };
+    const anim = new AnimationController(host);
+    const id = doc.layers[0].id;
+    const top = anim.add(noise(4, 4), { x: 0, y: 0, w: 4, h: 4 }, id)!;
+    const other = anim.add(noise(4, 4), { x: 0, y: 0, w: 4, h: 4 }, 'other-layer')!;
+    const under = anim.add(noise(8, 8), { x: 0, y: 0, w: 8, h: 8 }, id, 'history.pieceFromLayer', true)!;
+    expect(doc.pieces.map((p) => p.id)).toEqual([under.id, top.id, other.id]);
+    expect(history.entries().at(-1)?.label).toBe('history.pieceFromLayer');
+  });
+
+  it('refuses a piece longer than a texture side or bigger than a picture can be', () => {
+    const doc = new PaintDocument({ width: 16, height: 16 });
+    const notices: string[] = [];
+    const host: AnimHost = { doc, history: new History(), commitLive() {}, notify: (_k, key) => notices.push(key), animationChanged() {} };
+    const anim = new AnimationController(host);
+    expect(anim.fits(MAX_PIECE_SIDE, 100)).toBe(true);
+    expect(anim.fits(MAX_PIECE_SIDE + 1, 1)).toBe(false);
+    expect(anim.fits(16000, 16000)).toBe(false);
+    expect(notices).toEqual(['notice.pieceTooBig', 'notice.pieceTooBig']);
+    expect(anim.add({ w: MAX_PIECE_SIDE + 1, h: 1, data: new Uint8ClampedArray((MAX_PIECE_SIDE + 1) * 4) }, { x: 0, y: 0, w: 1, h: 1 }, doc.layers[0].id)).toBeNull();
+    expect(doc.pieces).toEqual([]);
   });
 
   it('an undo step counts the pixels of a piece it adds once', () => {
