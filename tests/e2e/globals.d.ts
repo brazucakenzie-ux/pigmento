@@ -66,6 +66,7 @@ export interface PigmentoTestHook {
   selectPiece(id: string | null): void;
   setPieceBack(id: string, back: 'mirror' | 'hide'): boolean;
   gpuPlanes(): boolean;
+  exportFramePixel(frame: number, x: number, y: number): { r: number; g: number; b: number; a: number };
   pieceHandle(id: string, x: number, y: number): { x: number; y: number };
   addLayer(): string;
   groupLayers(ids: string[]): string | null;

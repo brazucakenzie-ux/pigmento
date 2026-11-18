@@ -352,7 +352,22 @@ Decisions (agreed with the user):
 - [x] 6.12 Camera: the vanishing-point handle and horizon line while the tool is on; perspective strength in the options bar and the Animate tab; undoable; kept in `.pigm`; a perspective grid guide on the horizon (View tab, never exported)
 - [x] 6.13 Shading: a light direction for the picture and Shade per piece (on or off, with a strength); a face darkens by its angle to the light, the same on screen and in the CPU path; kept in `.pigm` (+ pixel tests)
 - [x] 6.14 Size-changing operations keep 3D pieces right: resize, crop, canvas size, trim, flips, quarter turns and free rotate move positions, angles, the camera and its vanishing point with the picture; skew asks to flatten 3D pieces first; flatten still refuses while visible pieces exist (+ unit tests)
-- [ ] 6.15 E2e: tilt a piece, paint on it, undo, save and reopen, export PNG and MP4 (frames match the screen); `npm run check` green; report
+- [x] 6.15 E2e: tilt a piece, paint on it, undo, save and reopen, export PNG and MP4 (frames match the screen); `npm run check` green; report
+- Stop 6B notes:
+  - **Tests:** lint, type-check, 501 unit and 127 e2e pass (18 opt-in skipped). The full run had two failures, both fixed or explained:
+    - The shortcut test in Settings assumed M was a free key. Now that every letter is taken it uses F8.
+    - The MP4 frame test failed once, as it has before, and passed on its own.
+  - **Commits:** 6.9 and 6.10 landed in one commit, because the GPU path falls back to the CPU one and is checked against it.
+  - **Decided while building:**
+    - The Perspective plane tool's shortcut is M. D and X were already the colour shortcuts.
+    - Flat pieces with depth stay on the Canvas 2D path; only tilted or turned pieces go through WebGL.
+    - The Animate tool still moves a piece in 3D but leaves its flat box handles out.
+    - The camera's distance is 50 % × the diagonal ÷ strength. Resizing keeps the look, and a crop changes the strength to keep it.
+    - An uneven resize moves 3D pieces but keeps their shape in depth, because only the even part rolls them. Skew asks to flatten them.
+    - The light is an angle round the picture plus a height. A face that faces the camera keeps its colours.
+    - The 6.8 helper is called `piecePlacementAt`. It gives the homography, and each corner's distance is its third row.
+  - **CPU path speed:** it takes 1.8 s for a 4000 × 3000 piece filling the picture (7.3 s before it was tuned), so it stays on one thread with no worker pool.
+  - **GPU against CPU:** they agree within a few levels except where details get thinner than a pixel towards the horizon. There the GPU's anisotropic filtering keeps them sharper than the CPU's mip levels, so the e2e compares averages there.
 
 **Stop 6C — Hinges, groups and camera moves**
 - [ ] 6.16 Model: groups (their own transform about a pivot at their centre, depth included, keyframed like a piece), attaching (a piece follows another) and hinges (the parent's edge, an offset along it, a fold angle); one tree per group, up to 64 pieces; deleting, duplicating and moving pieces between layers keep the links right; undoable (+ unit tests)

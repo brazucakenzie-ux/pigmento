@@ -250,6 +250,12 @@ export function installTestHook(): void {
     selectPiece: (id: string | null) => engine.anim.select(id),
     setPieceBack: (id: string, back: 'mirror' | 'hide') => engine.anim.setBack(id, back),
     gpuPlanes: () => engine.renderer.gpuPlanes,
+    /** A pixel of an animation-export frame (drawn on the GPU like the screen), on the paper. */
+    exportFramePixel: (frame: number, x: number, y: number) => {
+      const c = engine.animationFrameCanvas(frame, { scale: 1, transparent: false });
+      const d = c.getContext('2d')!.getImageData(x, y, 1, 1).data;
+      return { r: d[0], g: d[1], b: d[2], a: d[3] };
+    },
     /** Where a point of a piece (its own pixels) shows in the document at the frame shown. */
     pieceHandle: (id: string, x: number, y: number) => {
       const p = engine.anim.piece(id);

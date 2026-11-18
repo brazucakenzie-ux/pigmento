@@ -1,6 +1,8 @@
 // Pieces in 3D (1.2.0): drawn on the GPU, matching the CPU path used for flatten and still export.
 import { expect, test, type Page } from '@playwright/test';
-import { drag, launchApp, ready, type AppHandle } from './harness';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { drag, launchApp, ready, tempFile, type AppHandle } from './harness';
 
 let h: AppHandle;
 
@@ -228,4 +230,83 @@ test('shading darkens a piece turned away from the light, the same on screen as 
   await angle.press('Enter');
   const relit = await page.evaluate(() => window.__pigmentoTest!.pixel(330, 200));
   expect(relit.r + relit.g + relit.b).toBeGreaterThan(dark.r + dark.g + dark.b);
+});
+
+test('a tilted piece: painted, undone, saved and reopened, exported as PNG and MP4 the way the screen shows it', async () => {
+  const { page } = h;
+  const id = await bandedPiece(page);
+  await page.keyboard.press('m');
+  for (const [name, v] of [
+    ['Tilt', '35'],
+    ['Turn', '-20'],
+  ] as const) {
+    const f = page.locator('.optionsbar').getByRole('textbox', { name, exact: true });
+    await f.fill(v);
+    await f.press('Enter');
+  }
+  expect((await page.evaluate((pid) => window.__pigmentoTest!.pieceAt(pid, 0)!, id)).tilt).toBeCloseTo((35 * Math.PI) / 180, 6);
+  // Paint across its middle: the stroke lands on the piece's own pixels.
+  await page.keyboard.press('b');
+  await page.getByRole('checkbox', { name: 'Paint on piece' }).check();
+  const mid = await page.evaluate((pid) => window.__pigmentoTest!.pieceHandle(pid, 120, 60), id);
+  await drag(page, [
+    [mid.x - 30, mid.y],
+    [mid.x, mid.y],
+    [mid.x + 30, mid.y],
+  ]);
+  const ink = () => page.evaluate((pid) => window.__pigmentoTest!.piecePixel(pid, 120, 60)!, id);
+  // Black over the blue band there.
+  expect(await ink()).toMatchObject({ r: 0, g: 0, b: 0 });
+  await page.keyboard.press('Control+z');
+  expect(await ink()).toEqual({ r: 40, g: 80, b: 230, a: 255 });
+  await page.keyboard.press('Control+y');
+  expect(await ink()).toMatchObject({ r: 0, g: 0, b: 0 });
+  // Saved and opened again: still tilted and painted.
+  const dir = tempFile('x');
+  const project = path.join(path.dirname(dir), 'tilted.pigm');
+  const png = path.join(path.dirname(dir), 'tilted.png');
+  const stubSave = (fp: string) =>
+    h.app.evaluate(({ dialog }, file) => {
+      dialog.showSaveDialog = (async () => ({ canceled: false, filePath: file })) as typeof dialog.showSaveDialog;
+    }, fp);
+  await stubSave(project);
+  await page.keyboard.press('Control+Shift+s');
+  await expect.poll(() => existsSync(project)).toBe(true);
+  await page.evaluate((p) => window.__pigmentoTest!.openPath(p), project);
+  await expect.poll(() => page.evaluate(() => window.__pigmentoTest!.history().length)).toBe(0);
+  const back = await page.evaluate(() => window.__pigmentoTest!.anim().pieces[0].id);
+  expect((await page.evaluate((pid) => window.__pigmentoTest!.pieceAt(pid, 0)!, back)).turn).toBeCloseTo((-20 * Math.PI) / 180, 6);
+  expect(await page.evaluate((pid) => window.__pigmentoTest!.piecePixel(pid, 120, 60)!, back)).toMatchObject({ r: 0, g: 0, b: 0 });
+  // A PNG holds the picture as the CPU path draws it.
+  await stubSave(png);
+  await page.keyboard.press('Control+Shift+s');
+  await expect.poll(() => existsSync(png)).toBe(true);
+  const probes = [
+    [mid.x, mid.y],
+    [mid.x - 60, mid.y - 20],
+    [mid.x + 50, mid.y + 25],
+    [40, 40],
+  ].map(([x, y]) => [Math.round(x), Math.round(y)] as [number, number]);
+  const b64 = readFileSync(png).toString('base64');
+  const fromPng = await page.evaluate(
+    async ({ b64, probes }) => {
+      const bmp = await createImageBitmap(new Blob([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], { type: 'image/png' }));
+      const c = new OffscreenCanvas(bmp.width, bmp.height);
+      const ctx = c.getContext('2d')!;
+      ctx.drawImage(bmp, 0, 0);
+      return probes.map(([x, y]) => Array.from(ctx.getImageData(x, y, 1, 1).data));
+    },
+    { b64, probes },
+  );
+  for (const [i, [x, y]] of probes.entries()) {
+    const js = await page.evaluate(([px, py]) => window.__pigmentoTest!.pixel(px, py), [x, y] as const);
+    for (const [k, ch] of (['r', 'g', 'b'] as const).entries()) expect(Math.abs(fromPng[i][k] - js[ch])).toBeLessThanOrEqual(2);
+    // Animation export frames are drawn on the GPU, like the screen.
+    const frame = await page.evaluate(([px, py]) => window.__pigmentoTest!.exportFramePixel(0, px, py), [x, y] as const);
+    const screen = await page.evaluate(([px, py]) => window.__pigmentoTest!.screenPixel(px, py), [x, y] as const);
+    for (const ch of ['r', 'g', 'b'] as const) expect(Math.abs(frame[ch] - screen[ch])).toBeLessThanOrEqual(2);
+  }
+  // And an MP4 of it encodes.
+  const mp4 = await page.evaluate(() => window.__pigmentoTest!.encodeAnimation('mp4', 4));
+  expect(mp4.bytes).toBeGreaterThan(1000);
 });
