@@ -10,6 +10,7 @@ export default registerTool({
   group: 'tools',
   order: 40,
   paints: true,
+  paintsPieces: true,
   options: [
     {
       key: 'fillWith',

@@ -1,7 +1,7 @@
 // Pieces in 1.2.0: made from a layer, a picture file or the clipboard, any size, anywhere.
 import { expect, test, type Page } from '@playwright/test';
 import { writeFileSync } from 'node:fs';
-import { docToScreen, drag, launchApp, pixel, ready, settle, tempFile, type AppHandle } from './harness';
+import { clickDoc, docToScreen, drag, launchApp, pixel, ready, settle, tempFile, type AppHandle } from './harness';
 
 let h: AppHandle;
 
@@ -140,6 +140,65 @@ test('a repeating piece tiles across the canvas, scrolls, and looks the same on 
   }
   // Above and below the strip there's nothing but the paper.
   expect(await pixel(page, 5, 40)).toEqual(await pixel(page, 5, 10));
+});
+
+test('Paint on piece paints a scaled piece’s own pixels under the brush, as one undo step', async () => {
+  const { page } = h;
+  const layerId = await page.evaluate(() => window.__pigmentoTest!.layers().activeId);
+  await page.evaluate((lid) => window.__pigmentoTest!.fillLayer(lid, { r: 0, g: 200, b: 0, a: 255 }, { x: 100, y: 100, w: 40, h: 40 }), layerId);
+  await page.evaluate(() => window.__pigmentoTest!.selectRect(100, 100, 40, 40));
+  expect(await page.evaluate(() => window.__pigmentoTest!.animateSelection(false))).toBe(true);
+  const id = await page.evaluate(() => window.__pigmentoTest!.anim().selectedId!);
+  // Twice the size, about its middle (120, 120): it covers 80…160 on the canvas.
+  await page.evaluate((pid) => window.__pigmentoTest!.setPieceKey(pid, 0, { sx: 2, sy: 2 }), id);
+  await page.getByRole('tab', { name: 'Home' }).click();
+  await page.keyboard.press('b');
+  const paintOn = page.getByRole('checkbox', { name: 'Paint on piece' });
+  await paintOn.check();
+  expect(await page.evaluate(() => window.__pigmentoTest!.anim().paintOnPiece)).toBe(true);
+  const before = await page.evaluate(() => window.__pigmentoTest!.history().index);
+  // Across the canvas from 90 to 150 at y = 140: piece pixels 5 … 35 at y = 30.
+  await drag(page, [
+    [90, 140],
+    [120, 140],
+    [150, 140],
+  ]);
+  expect(await page.evaluate(() => window.__pigmentoTest!.history().index)).toBe(before + 1);
+  const ink = await page.evaluate((pid) => window.__pigmentoTest!.piecePixel(pid, 20, 30), id);
+  expect(ink!.g).toBeLessThan(100);
+  // Elsewhere the piece is untouched, and so is the layer under it (the brush went to the piece).
+  expect(await page.evaluate((pid) => window.__pigmentoTest!.piecePixel(pid, 20, 5), id)).toEqual({ r: 0, g: 200, b: 0, a: 255 });
+  expect((await pixel(page, 30, 140)).g).toBeGreaterThan(200);
+  // On the canvas the stroke shows where it was drawn, the same on screen.
+  const js = await pixel(page, 120, 140);
+  const gpu = await page.evaluate(() => window.__pigmentoTest!.screenPixel(120, 140));
+  expect(js.g).toBeLessThan(100);
+  for (const k of ['r', 'g', 'b'] as const) expect(Math.abs(js[k] - gpu[k])).toBeLessThanOrEqual(3);
+  await page.keyboard.press('Control+z');
+  expect(await page.evaluate((pid) => window.__pigmentoTest!.piecePixel(pid, 20, 30), id)).toEqual({ r: 0, g: 200, b: 0, a: 255 });
+  // A locked layer's pieces can't be painted.
+  await page.evaluate((lid) => window.__pigmentoTest!.setLayerProps(lid, { locked: true }), layerId);
+  await drag(page, [
+    [90, 140],
+    [150, 140],
+  ]);
+  expect(await page.evaluate((pid) => window.__pigmentoTest!.piecePixel(pid, 20, 30), id)).toEqual({ r: 0, g: 200, b: 0, a: 255 });
+  await page.evaluate((lid) => window.__pigmentoTest!.setLayerProps(lid, { locked: false }), layerId);
+  // Fill paints the piece too, from the piece pixel under the pointer.
+  await page.keyboard.press('f');
+  await expect(paintOn).toBeChecked();
+  await clickDoc(page, 130, 100);
+  await expect.poll(() => page.evaluate((pid) => window.__pigmentoTest!.piecePixel(pid, 2, 2)!.g, id)).toBeLessThan(100);
+  expect((await pixel(page, 30, 140)).g).toBeGreaterThan(200);
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('b');
+  // Turned off, the brush paints the layer again.
+  await paintOn.uncheck();
+  await drag(page, [
+    [20, 20],
+    [40, 20],
+  ]);
+  expect((await pixel(page, 30, 20)).g).toBeLessThan(100);
 });
 
 test('Piece from layer lifts the whole layer under the pieces already on it', async () => {

@@ -10,11 +10,18 @@ let offset: Point | null = null;
 /** Per stroke: the offset in use, for the overlay. */
 let current: Point | null = null;
 
-function offsetFor(ctx: ToolContext, start: Point): Point | null {
+/**
+ * `start` is in the pixels painted, and `toTarget` carries the source (a canvas point) into them,
+ * so painting on a piece copies from the piece where the source shows on it.
+ */
+function offsetFor(ctx: ToolContext, start: Point, toTarget: (p: Point) => Point): Point | null {
   if (!source) return null;
   const aligned = ctx.options('clone').aligned !== false;
   // Aligned: the first stroke fixes the offset. Not aligned: every stroke starts at the source.
-  if (!aligned || !offset) offset = { x: source.x - start.x, y: source.y - start.y };
+  if (!aligned || !offset) {
+    const from = toTarget(source);
+    offset = { x: from.x - start.x, y: from.y - start.y };
+  }
   return offset;
 }
 
@@ -33,7 +40,7 @@ export default registerTool(
     ],
     op: (ctx, o, s) => {
       // Every symmetry copy uses the same offset (worked out for the first one).
-      const off = s.copy === 0 ? offsetFor(ctx, s.start) : current;
+      const off = s.copy === 0 ? offsetFor(ctx, s.start, s.toTarget) : current;
       if (!off) {
         ctx.notify('info', 'notice.cloneNeedsSource');
         return null;
@@ -47,9 +54,10 @@ export default registerTool(
       ctx.invalidateOverlay();
       return true;
     },
-    overlay: (_ctx, ov, hover) => {
-      // Where the brush is copying from: the source, or the pointer plus the aligned offset.
-      const at = offset ? { x: hover.x + offset.x, y: hover.y + offset.y } : source;
+    overlay: (ctx, ov, hover) => {
+      // Where the brush is copying from: the source, or the pointer plus the aligned offset
+      // (on a piece the offset is in its own pixels, so just the source is shown).
+      const at = offset && !ctx.anim.paintTarget ? { x: hover.x + offset.x, y: hover.y + offset.y } : source;
       if (!at) return;
       const p = ov.toScreen(at);
       ov.line({ x: p.x - 7, y: p.y }, { x: p.x + 7, y: p.y });

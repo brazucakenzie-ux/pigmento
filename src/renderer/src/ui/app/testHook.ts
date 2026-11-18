@@ -246,5 +246,6 @@ export function installTestHook(): void {
     piecePixel: (id: string, x: number, y: number) => engine.anim.piece(id)?.src.getPixel(x, y) ?? null,
     pieceFromLayer: (keepOriginal = false) => engine.pieceFromLayer(keepOriginal),
     setPieceRepeat: (id: string, repeat: 'none' | 'x' | 'y' | 'both') => engine.anim.setRepeat(id, repeat),
+    selectPiece: (id: string | null) => engine.anim.select(id),
   };
 }

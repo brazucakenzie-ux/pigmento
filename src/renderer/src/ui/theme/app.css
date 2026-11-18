@@ -3237,6 +3237,22 @@ dialog.tour::backdrop {
 .tl-piece-name .tl-name {
   padding-left: 22px;
 }
+/* Paint on piece, beside a piece's name */
+.tl-piece-paint {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 2px 4px 2px 0;
+}
+.tl-piece-paint[aria-pressed='true'] {
+  background: var(--bg-selected);
+  color: var(--accent-fg);
+}
+@media (forced-colors: active) {
+  .tl-piece-paint[aria-pressed='true'] {
+    border: 1px solid Highlight;
+  }
+}
 .tl-drag-label {
   position: absolute;
   top: -2px;

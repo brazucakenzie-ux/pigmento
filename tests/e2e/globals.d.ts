@@ -46,6 +46,7 @@ export interface PigmentoTestHook {
     current: { x: number; y: number; w: number; h: number; angle: number; skew: number; opacity: number; easing: string; keyed: boolean; curved: boolean } | null;
     playing: boolean;
     cels: Record<string, number[]>;
+    paintOnPiece: boolean;
   };
   animateSelection(keepOriginal?: boolean): boolean;
   celMirrors(): number;
@@ -60,6 +61,7 @@ export interface PigmentoTestHook {
   piecePixel(id: string, x: number, y: number): { r: number; g: number; b: number; a: number } | null;
   pieceFromLayer(keepOriginal?: boolean): boolean;
   setPieceRepeat(id: string, repeat: 'none' | 'x' | 'y' | 'both'): boolean;
+  selectPiece(id: string | null): void;
   addLayer(): string;
   groupLayers(ids: string[]): string | null;
   setLayerProps(id: string, p: Record<string, unknown>): void;

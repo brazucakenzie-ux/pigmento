@@ -9,7 +9,9 @@ import { LayerController, type LayersInfo } from './doc/LayerController';
 import { AnimationController, type AnimHost, type AnimationInfo } from './anim/AnimationController';
 import { compositeLayers } from './raster/blend';
 import { frameExtras } from './anim/pieceRaster';
-import { pieceBounds } from './anim/piece';
+import { pieceBounds, pieceStateAt, type Piece } from './anim/piece';
+import { docToPixel } from './anim/pieceEdit';
+import { PiecePixelsCommand } from './anim/piecePaint';
 import { transformPieces } from './anim/pieceTransform';
 import { celAt } from './anim/cels';
 import { clampFrame } from './anim/timeline';
@@ -985,6 +987,25 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.notifyPixels();
   }
 
+  pieceChanged(piece: Piece, r: Rect | null): void {
+    this.renderer.pieceChanged(piece.src, r ?? piece.src.bounds);
+    // Where it shows on the canvas depends on its transform (and copies, if it repeats): redraw it all.
+    this.renderer.invalidate(null);
+    this.requestRender();
+    this.notifyPixels();
+  }
+
+  pushPiecePixels(label: I18nKey, piece: Piece, delta: TileDelta | null): void {
+    if (delta) this.history.push(new PiecePixelsCommand(label, this, piece, delta));
+  }
+
+  /** Undo or redo swapped a piece's tiles (its GPU copy picks up the new tiles when drawn). */
+  piecePixelsChanged(_piece: Piece): void {
+    this.renderer.invalidate(null);
+    this.requestRender();
+    this.notifyPixels();
+  }
+
   // ---- history --------------------------------------------------------------------------
 
   pushPixels(
@@ -1194,6 +1215,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   }
 
   async floodFill(x: number, y: number, paint: RGBA | FillPattern, tolerance: number, contiguous: boolean): Promise<void> {
+    const piece = this.anim.paintTarget;
+    if (piece) return this.fillPiece(piece, x, y, paint, tolerance, contiguous);
     if (this.fillBusy || !this.canPaint()) return;
     const px = Math.floor(x);
     const py = Math.floor(y);
@@ -1228,6 +1251,40 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
         this.pushPixels('history.fill', layer, s.endEdit());
       }
       this.layerChanged(layer, bounds);
+    } finally {
+      this.fillBusy = false;
+    }
+  }
+
+  /**
+   * Fill on a piece's own pixels (Paint on piece): from the pixel under the pointer, through its
+   * transform and folded onto its tile if it repeats. The selection doesn't apply on a piece.
+   */
+  private async fillPiece(piece: Piece, x: number, y: number, paint: RGBA | FillPattern, tolerance: number, contiguous: boolean): Promise<void> {
+    if (this.fillBusy || !this.anim.canPaint(piece)) return;
+    const q = docToPixel(piece, pieceStateAt(piece, this.doc.timeline.frame), { x, y });
+    const s = piece.src;
+    const { width: w, height: h } = s;
+    const px = q ? Math.floor(q.x) : -1;
+    const py = q ? Math.floor(q.y) : -1;
+    if (px < 0 || py < 0 || px >= w || py >= h) return;
+    this.fillBusy = true;
+    try {
+      const { mask, bounds } = await this.codecs.fill(s.toRGBA(), w, h, px, py, tolerance, contiguous, null);
+      if (!bounds || !this.doc.pieces.includes(piece)) return;
+      const area = { data: mask, stride: w, ox: 0, oy: 0, w, h };
+      s.beginEdit();
+      if ('pattern' in paint) {
+        const tile = this.patternTile(paint);
+        if (!tile) {
+          s.abortEdit();
+          return;
+        }
+        const src = tileInto(tile, bounds);
+        s.compositeImage(bounds, { data: src.data, stride: bounds.w, ox: bounds.x, oy: bounds.y }, 'over', 1, area);
+      } else s.compositeColor(bounds, paint, area, 'over', 1);
+      this.pushPiecePixels('pattern' in paint ? 'history.patternFill' : 'history.fill', piece, s.endEdit());
+      this.pieceChanged(piece, bounds);
     } finally {
       this.fillBusy = false;
     }

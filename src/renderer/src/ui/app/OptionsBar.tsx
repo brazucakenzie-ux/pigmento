@@ -494,6 +494,22 @@ function PieceFields() {
   );
 }
 
+/** Paint on piece, for the tools that can paint a piece's own pixels, while a piece is selected. */
+function PaintOnPiece() {
+  const pieces = useUi((s) => s.animation.pieces);
+  const selectedId = useUi((s) => s.animation.selectedId);
+  const on = useUi((s) => s.animation.paintOnPiece);
+  const i = pieces.findIndex((p) => p.id === selectedId);
+  if (i < 0) return null;
+  const name = pieces[i].name || t('piece.defaultName', { n: i + 1 });
+  return (
+    <label className="check opt" data-tip={t('piece.paintOn', { piece: name })}>
+      <input type="checkbox" checked={on} onChange={() => engine.anim.setPaintOnPiece(!on)} />
+      {t('action.paintOnPiece')}
+    </label>
+  );
+}
+
 export function OptionsBar() {
   const simple = useUi((s) => s.settings.ui.mode === 'simple');
   const toolId = useUi((s) => s.tool);
@@ -519,6 +535,7 @@ export function OptionsBar() {
             {t('action.transparentSelection')}
           </label>
         ) : null}
+        {tool.paintsPieces && !simple ? <PaintOnPiece /> : null}
         {visible.map((spec) => (
           <OptionControl key={spec.key} toolId={toolId} spec={spec} values={values} />
         ))}

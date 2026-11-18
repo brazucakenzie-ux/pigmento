@@ -151,4 +151,8 @@ export const animEn = {
   'history.loopScroll': 'Loop scroll',
   'notice.loopNeedsRepeat': 'Only a repeating piece can scroll round. Turn on Repeat first.',
   'notice.loopNeedsFrames': 'The timeline needs at least 2 frames to loop.',
+  'notice.pieceHidden': 'This piece isn’t showing at this frame (its layer is hidden, or it’s see-through), so it can’t be painted on here.',
+  'action.paintOnPiece': 'Paint on piece',
+  'piece.paintOn': 'Paint on {piece}: painting tools paint this piece’s own pixels, through its transform, instead of the layer',
+  'piece.paintOnHint': 'Painting on {piece}',
 } as const;

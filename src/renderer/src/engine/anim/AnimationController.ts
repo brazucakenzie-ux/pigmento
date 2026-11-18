@@ -55,6 +55,8 @@ export interface AnimationInfo {
   playing: boolean;
   /** Frame-by-frame layers: where each drawing starts (layers not listed are still). */
   cels: Record<string, number[]>;
+  /** Painting tools paint on the selected piece instead of the active layer. */
+  paintOnPiece: boolean;
 }
 
 /** A piece's values as the options bar shows them (degrees and percent). */
@@ -145,6 +147,8 @@ export class AnimationController {
   /** Default names for new pieces, supplied by the UI (the engine never stores English text). */
   namer: (n: number) => string = () => '';
   private drag: AnimSnapshot | null = null;
+  /** Paint on piece: painting tools paint the selected piece's own pixels (view state, not undoable). */
+  private paintOn = false;
 
   constructor(private readonly host: AnimHost) {}
 
@@ -173,6 +177,35 @@ export class AnimationController {
     return this.doc.pieces.length > 0 || this.doc.hasCels;
   }
 
+  get paintOnPiece(): boolean {
+    return this.paintOn;
+  }
+
+  setPaintOnPiece(on: boolean): void {
+    if (on === this.paintOn) return;
+    this.paintOn = on;
+    this.host.animationChanged(null);
+  }
+
+  /** The piece painting tools paint on (Paint on piece is on and a piece is selected), or null. */
+  get paintTarget(): Piece | null {
+    return this.paintOn ? this.selected : null;
+  }
+
+  /** True if `p` can be painted on (its layer is showing and unlocked); says why not otherwise. */
+  canPaint(p: Piece): boolean {
+    const layer = this.doc.layerById(p.layerId);
+    if (!layer || layer.locked) {
+      this.host.notify('info', 'notice.layerLocked');
+      return false;
+    }
+    if (!this.doc.isEffectivelyVisible(layer.id) || pieceStateAt(p, this.frame).opacity <= 0) {
+      this.host.notify('info', 'notice.pieceHidden');
+      return false;
+    }
+    return true;
+  }
+
   info(): AnimationInfo {
     const t = this.doc.timeline;
     return {
@@ -185,6 +218,7 @@ export class AnimationController {
       playing: this.playing,
       cels: Object.fromEntries(this.doc.rasterLayers().flatMap((l) => (l.cels ? [[l.id, l.cels.map((c) => c.start)]] : []))),
       pieces: this.doc.pieces.map((p) => ({ id: p.id, name: p.name, layerId: p.layerId, keys: p.keyframes.map((k) => ({ frame: k.frame, easing: k.easing })) })),
+      paintOnPiece: this.paintOn,
     };
   }
 
