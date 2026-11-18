@@ -152,6 +152,7 @@ export const animEn = {
   'history.pieceBack': 'Piece back',
   'tool.plane': 'Perspective plane',
   'history.camera': 'Change camera',
+  'notice.skew3d': 'Some pieces are tilted or turned in 3D, and a skewed picture can’t show them right. Flatten those pieces into their layers first, or lay them flat again.',
   'history.light': 'Move light',
   'history.pieceShade': 'Shade piece',
   'light.angle': 'Light',

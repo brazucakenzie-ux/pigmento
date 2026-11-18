@@ -12,7 +12,7 @@ import { frameExtras } from './anim/pieceRaster';
 import { pieceBounds, pieceStateAt, type Piece } from './anim/piece';
 import { docToPixel } from './anim/pieceEdit';
 import { PiecePixelsCommand } from './anim/piecePaint';
-import { transformPieces } from './anim/pieceTransform';
+import { keepsDepth, transformCamera, transformPieces } from './anim/pieceTransform';
 import { celAt } from './anim/cels';
 import { clampFrame } from './anim/timeline';
 import { Selection, type SelectionMode, type SelectionModify } from './doc/Selection';
@@ -2019,6 +2019,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       l.setObjects(l.objects.map((n) => transformNode(n, m)));
     }
     this.doc.pieces = transformPieces(this.doc.pieces, m);
+    this.doc.camera = transformCamera(this.doc.camera, m, this.doc.width, this.doc.height, w, h);
   }
 
   /** Area a shape layer's objects cover, outlines included. */
@@ -2599,6 +2600,11 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       const warpedMask = mask ? affineTransform(mask, matChain(matTranslate(mask.x, mask.y), around), true) : null;
       f.resetTo(warped, outline, warpedMask);
       this.refreshFloat(f, before);
+      return;
+    }
+    // A skewed perspective isn't anything a camera sees: tilted or turned pieces would come out wrong.
+    if (!keepsDepth(m) && this.doc.pieces.some((p) => p.keyframes.some((k) => k.tilt !== 0 || k.turn !== 0))) {
+      this.notify('info', 'notice.skew3d');
       return;
     }
     this.transformWholeImage('history.skew', m);
