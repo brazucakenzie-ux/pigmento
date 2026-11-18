@@ -2,8 +2,8 @@ import { rectIntersect, type Rect } from '../core/geometry';
 import type { Layer, PaintDocument } from '../doc/Document';
 import type { LayerExtras } from '../raster/blend';
 import { applyImage, type PixelView } from '../raster/pixels';
-import { affineTransform } from '../raster/transform';
 import { stateMatrix } from './interpolate';
+import { sampleAffine } from './pieceSample';
 import { pieceBounds, pieceStateAt, type Piece } from './piece';
 import { celAt } from './cels';
 
@@ -24,7 +24,7 @@ export function drawPiece(view: PixelView, r: Rect, p: Piece, frame: number): vo
   if (s.opacity <= 0) return;
   const area = rectIntersect(pieceBounds(p, frame), r);
   if (!area) return;
-  const img = affineTransform(p.src, stateMatrix(s, p.pivot), true, area);
+  const img = sampleAffine(p.src, stateMatrix(s, p.pivot), area);
   if (img.w === 0 || img.h === 0) return;
   applyImage(view, { x: img.x, y: img.y, w: img.w, h: img.h }, { data: img.data, stride: img.w, ox: img.x, oy: img.y }, 'over', s.opacity);
 }

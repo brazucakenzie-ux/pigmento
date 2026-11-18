@@ -111,8 +111,8 @@ export class AnimationCommand implements Command {
     const a = ids(before);
     const b = ids(after);
     let src = 0;
-    for (const img of a) if (!b.has(img)) src += img.data.byteLength;
-    for (const img of b) if (!a.has(img)) src += img.data.byteLength;
+    for (const s of a) if (!b.has(s)) src += s.bytes;
+    for (const s of b) if (!a.has(s)) src += s.bytes;
     this.bytes = piecesBytes(before.pieces) + piecesBytes(after.pieces) + src;
   }
 
@@ -453,7 +453,7 @@ export class AnimationController {
     return false;
   }
 
-  add(src: ImageBuf, home: Rect, layerId: string): Piece | null {
+  add(src: ImageBuf | Surface, home: Rect, layerId: string): Piece | null {
     if (!this.canAdd()) return null;
     const n = this.doc.pieces.length + 1;
     const piece = makePiece(newPieceId(), this.namer(n), layerId, src, home, this.frame);

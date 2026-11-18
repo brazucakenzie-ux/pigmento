@@ -16,7 +16,7 @@ import type { CommandHost } from '../history/commands';
 import { LayerPropsCommand, LayerTreeCommand } from '../history/layerCommands';
 import type { I18nKey } from '../../i18n';
 import { cloneNode } from '../vector/model';
-import { clonePiece, newPieceId } from '../anim/piece';
+import { copyPiece, newPieceId } from '../anim/piece';
 
 export interface LayerNode {
   id: string;
@@ -196,7 +196,7 @@ export class LayerController {
       // The copy gets copies of the layer's animated pieces.
       const ids = new Map<string, string>();
       pairLayers(src, copy, ids);
-      const pieces = this.doc.pieces.filter((p) => ids.has(p.layerId)).map((p) => ({ ...clonePiece(p), id: newPieceId(), layerId: ids.get(p.layerId)! }));
+      const pieces = this.doc.pieces.filter((p) => ids.has(p.layerId)).map((p) => copyPiece(p, newPieceId(), ids.get(p.layerId)!));
       this.doc.pieces.push(...pieces);
     });
     return copy.id;

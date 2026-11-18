@@ -54,7 +54,8 @@ describe('projects with animation (version 2)', () => {
     const [q] = doc.pieces;
     expect(p).toMatchObject({ id: q.id, name: 'Ball', layerId: back.layers[0].id, pivot: { x: 0, y: 1.5 }, home: q.home });
     expect(p.keyframes).toEqual(q.keyframes);
-    expect(Array.from(p.src.data)).toEqual(Array.from(q.src.data));
+    expect(p.src.width).toBe(4);
+    expect(Array.from(p.src.toRGBA())).toEqual(Array.from(q.src.toRGBA()));
   });
 
   it('writes a picture without animation as version 1, which Pigmento 1.0 opens', async () => {

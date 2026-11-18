@@ -1,19 +1,21 @@
 import { boundsOfPoints, type Point, type Rect } from '../core/geometry';
 import { matApplyPoints, type Mat } from '../core/matrix';
+import { Surface } from '../raster/Surface';
 import type { ImageBuf } from '../raster/transform';
 import { identityState, stateAt, stateMatrix, STATE_KEYS, type Easing, type Keyframe, type PieceState } from './interpolate';
 
 /**
- * Pixels lifted from a selection on a pixel layer and animated with keyframes. It's drawn just
- * above its layer's pixels, inside the layer. `src` never changes once the piece is made, so
- * undo snapshots share it.
+ * Pixels with their own size, belonging to a pixel layer and animated with keyframes. It's
+ * drawn just above its layer's pixels, inside the layer, and may sit partly or wholly outside
+ * the canvas. `src` is only ever written inside a surface edit (so a tile is copied before it
+ * changes), which lets undo snapshots and copies share its tiles.
  */
 export interface Piece {
   readonly id: string;
   /** User content ('' = unnamed; the UI shows a localised default). */
   name: string;
   layerId: string;
-  readonly src: ImageBuf;
+  readonly src: Surface;
   /** Where the pixels were lifted from, in document pixels. */
   readonly home: Rect;
   /** The point it turns and scales around, in source pixels. */
@@ -34,22 +36,41 @@ export function newPieceId(): string {
 
 export const MAX_PIECES = 500;
 export const MAX_KEYFRAMES = 2000;
+/** Longest side a piece can have (what graphics cards take as one texture). */
+export const MAX_PIECE_SIDE = 16384;
 
-export function makePiece(id: string, name: string, layerId: string, src: ImageBuf, home: Rect, frame: number): Piece {
-  const pivot = { x: src.w / 2, y: src.h / 2 };
+/** The pixels as a piece's surface (an image is copied into a new one). */
+export function pieceSurface(src: ImageBuf | Surface): Surface {
+  return src instanceof Surface ? src : Surface.fromRGBA(Math.max(1, src.w), Math.max(1, src.h), src.data);
+}
+
+/** A piece's size in its own pixels. */
+export function pieceSize(p: Pick<Piece, 'src'>): { w: number; h: number } {
+  return { w: p.src.width, h: p.src.height };
+}
+
+export function makePiece(id: string, name: string, layerId: string, src: ImageBuf | Surface, home: Rect, frame: number): Piece {
+  const surface = pieceSurface(src);
+  const pivot = { x: surface.width / 2, y: surface.height / 2 };
   return {
     id,
     name,
     layerId,
-    src,
+    src: surface,
     home: { ...home },
     pivot,
     keyframes: [{ ...identityState(home.x + pivot.x, home.y + pivot.y), frame, easing: 'linear', in: null, out: null }],
   };
 }
 
+/** The same piece (for undo snapshots: the pixels are shared, not copied). */
 export function clonePiece(p: Piece): Piece {
   return { ...p, home: { ...p.home }, pivot: { ...p.pivot }, keyframes: p.keyframes.map(cloneKeyframe) };
+}
+
+/** A separate copy with its own id: its pixels share tiles until either is painted on. */
+export function copyPiece(p: Piece, id: string, layerId: string): Piece {
+  return { ...clonePiece(p), id, layerId, src: p.src.snapshot() };
 }
 
 export function cloneKeyframe(k: Keyframe): Keyframe {
@@ -67,11 +88,12 @@ export function pieceMatrixAt(p: Piece, frame: number): Mat {
 
 /** The piece's four corners at `frame`, in document pixels. */
 export function pieceCorners(p: Piece, frame: number): Point[] {
+  const { w, h } = pieceSize(p);
   return matApplyPoints(pieceMatrixAt(p, frame), [
     { x: 0, y: 0 },
-    { x: p.src.w, y: 0 },
-    { x: p.src.w, y: p.src.h },
-    { x: 0, y: p.src.h },
+    { x: w, y: 0 },
+    { x: w, y: h },
+    { x: 0, y: h },
   ]);
 }
 

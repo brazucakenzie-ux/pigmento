@@ -32,7 +32,7 @@ export function isCornerHandle(h: PieceHandle): boolean {
 
 export function handleLocal(p: Pick<Piece, 'src'>, h: PieceHandle): Point {
   const [fx, fy] = FRACTION[h];
-  return { x: fx * p.src.w, y: fy * p.src.h };
+  return { x: fx * p.src.width, y: fy * p.src.height };
 }
 
 /** Skew then rotate: the part of the piece's transform after scaling (no translation). */
@@ -143,8 +143,8 @@ export function pieceAt(pieces: readonly Piece[], frame: number, p: Point): Piec
     if (!q) continue;
     const x = Math.floor(q.x);
     const y = Math.floor(q.y);
-    if (x < 0 || y < 0 || x >= piece.src.w || y >= piece.src.h) continue;
-    if (piece.src.data[(y * piece.src.w + x) * 4 + 3] > 16) return piece;
+    if (x < 0 || y < 0 || x >= piece.src.width || y >= piece.src.height) continue;
+    if (piece.src.getPixel(x, y).a > 16) return piece;
   }
   return null;
 }
@@ -152,5 +152,5 @@ export function pieceAt(pieces: readonly Piece[], frame: number, p: Point): Piec
 /** True if p is inside the piece's box at `frame` (transparent parts included). */
 export function insidePiece(piece: Piece, frame: number, p: Point): boolean {
   const q = docToLocal(pieceStateAt(piece, frame), piece.pivot, p);
-  return !!q && q.x >= 0 && q.y >= 0 && q.x <= piece.src.w && q.y <= piece.src.h;
+  return !!q && q.x >= 0 && q.y >= 0 && q.x <= piece.src.width && q.y <= piece.src.height;
 }

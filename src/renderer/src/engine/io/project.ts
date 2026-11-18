@@ -427,12 +427,12 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
   for (const p of doc.pieces) {
     if (!rasterIds.has(p.layerId)) continue;
     const file = `pieces/${String(pieces.length + 1).padStart(4, '0')}.png`;
-    files[file] = [await codec.encode(p.src.data, p.src.w, p.src.h), { level: 0 }];
+    files[file] = [await codec.encode(p.src.toRGBA(), p.src.width, p.src.height), { level: 0 }];
     pieces.push({
       id: p.id,
       name: p.name,
       layerId: p.layerId,
-      image: { file, w: p.src.w, h: p.src.h },
+      image: { file, w: p.src.width, h: p.src.height },
       home: { ...p.home },
       pivot: { ...p.pivot },
       keyframes: p.keyframes.map((k) => ({ ...k, in: k.in && { ...k.in }, out: k.out && { ...k.out } })),
@@ -632,7 +632,7 @@ async function readAnimation(doc: PaintDocument, a: NonNullable<DocumentJson['an
       id,
       name: p.name,
       layerId: p.layerId,
-      src: { w: img.w, h: img.h, data: img.data },
+      src: Surface.fromRGBA(img.w, img.h, img.data),
       home: { ...p.home },
       pivot: { ...p.pivot },
       keyframes: [...byFrame.values()].sort((x, y) => x.frame - y.frame),

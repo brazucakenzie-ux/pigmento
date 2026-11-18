@@ -2,11 +2,10 @@ import { toCss } from '../core/color';
 import { rectIntersect, rectUnion, type Rect } from '../core/geometry';
 import { walkLayers, type GroupLayer, type Layer, type PaintDocument, type RasterLayer, type VectorLayer } from '../doc/Document';
 import { drawNodes } from '../vector/render';
-import type { Surface } from '../raster/Surface';
+import type { Surface, Tile } from '../raster/Surface';
 import { TILE_SIZE } from '../raster/Surface';
 import type { PixelView } from '../raster/pixels';
 import type { View } from './View';
-import type { ImageBuf } from '../raster/transform';
 import { stateMatrix } from '../anim/interpolate';
 import { pieceBounds, pieceStateAt, type Piece } from '../anim/piece';
 import { piecesByLayer } from '../anim/pieceRaster';
@@ -26,6 +25,13 @@ interface Mirror {
   surface: Surface | null;
   /** Shape layers: the object version last drawn. */
   version: number;
+}
+
+/** A piece's GPU copy and the tiles it was last uploaded from. */
+interface PieceMirror {
+  canvas: OffscreenCanvas;
+  ctx: Ctx2D;
+  tiles: (Tile | null)[];
 }
 
 /** Off-screen canvas a group's children are composited into before it is blended as one. */
@@ -63,8 +69,8 @@ export class Renderer {
   private groups = new Map<string, GroupCanvas>();
   /** Layers with pieces and a blend mode or opacity are composed here first (isolated). */
   private isolated = new Map<string, GroupCanvas>();
-  /** GPU copies of piece pixels (a piece's pixels never change, so they're uploaded once). */
-  private pieceCanvases = new WeakMap<ImageBuf, OffscreenCanvas>();
+  /** GPU copies of piece pixels, brought up to date tile by tile when they're drawn. */
+  private pieceCanvases = new WeakMap<Surface, PieceMirror>();
   /**
    * GPU copies of frame-by-frame drawings, kept so moving between frames needs no upload. The
    * least recently shown go first once they'd take more than CEL_MIRROR_BYTES.
@@ -209,21 +215,47 @@ export class Renderer {
     return g;
   }
 
-  private pieceCanvas(img: ImageBuf): OffscreenCanvas {
-    let c = this.pieceCanvases.get(img);
-    if (!c) {
-      c = new OffscreenCanvas(Math.max(1, img.w), Math.max(1, img.h));
-      ctx2d(c).putImageData(new ImageData(new Uint8ClampedArray(img.data), img.w, img.h), 0, 0);
-      this.pieceCanvases.set(img, c);
+  /**
+   * A piece's GPU copy. Painting, undo and redo give a changed tile a new array, so comparing
+   * the tiles with the ones last uploaded finds what to upload again; `pieceChanged` covers a
+   * stroke still writing into the same tiles.
+   */
+  private pieceCanvas(s: Surface): OffscreenCanvas {
+    let m = this.pieceCanvases.get(s);
+    if (!m) {
+      const canvas = new OffscreenCanvas(s.width, s.height);
+      // A new canvas is transparent, which is what empty tiles are.
+      m = { canvas, ctx: ctx2d(canvas), tiles: s.tiles.map(() => null) };
+      this.pieceCanvases.set(s, m);
     }
-    return c;
+    for (let i = 0; i < s.tiles.length; i++) if (m.tiles[i] !== s.tiles[i]) this.uploadPieceTile(m, s, i);
+    return m.canvas;
+  }
+
+  private uploadPieceTile(m: PieceMirror, s: Surface, i: number): void {
+    const tile = s.tiles[i];
+    const r = s.tileRect(i);
+    m.tiles[i] = tile;
+    if (!tile) m.ctx.clearRect(r.x, r.y, r.w, r.h);
+    else m.ctx.putImageData(new ImageData(tile as Uint8ClampedArray<ArrayBuffer>, TILE_SIZE, TILE_SIZE), r.x, r.y, 0, 0, r.w, r.h);
+  }
+
+  /** A piece's pixels changed inside r (its own pixels) without new tiles (a stroke under way). */
+  pieceChanged(s: Surface, r: Rect): void {
+    const m = this.pieceCanvases.get(s);
+    if (!m) return;
+    const tx0 = Math.max(0, Math.floor(r.x / TILE_SIZE));
+    const ty0 = Math.max(0, Math.floor(r.y / TILE_SIZE));
+    const tx1 = Math.min(s.cols - 1, Math.floor((r.x + r.w - 1) / TILE_SIZE));
+    const ty1 = Math.min(s.rows - 1, Math.floor((r.y + r.h - 1) / TILE_SIZE));
+    for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) this.uploadPieceTile(m, s, ty * s.cols + tx);
   }
 
   /** Draw pieces as they are at the current frame (r = only those touching it; alpha scales them). */
   private drawPieces(ctx: Ctx2D | CanvasRenderingContext2D, pieces: readonly Piece[], r: Rect | null, alpha = 1, frame = this.doc.timeline.frame): void {
     for (const p of pieces) {
       const st = pieceStateAt(p, frame);
-      if (st.opacity <= 0 || p.src.w === 0 || p.src.h === 0) continue;
+      if (st.opacity <= 0) continue;
       if (r && !rectIntersect(pieceBounds(p, frame), r)) continue;
       const m = stateMatrix(st, p.pivot);
       ctx.save();

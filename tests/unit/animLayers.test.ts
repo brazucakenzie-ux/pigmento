@@ -72,7 +72,9 @@ describe('layer operations keep pieces right', () => {
     const [orig, dup] = doc.pieces;
     expect(dup.layerId).toBe(copy.children[0].id);
     expect(dup.id).not.toBe(orig.id);
-    expect(dup.src).toBe(orig.src);
+    // Its own pixels (painting one mustn't change the other), sharing tiles until then.
+    expect(dup.src).not.toBe(orig.src);
+    expect(dup.src.tiles[0]).toBe(orig.src.tiles[0]);
     expect(dup.keyframes).toEqual(orig.keyframes);
     history.undo();
     expect(doc.pieces).toHaveLength(1);
