@@ -294,6 +294,9 @@ function AnimateTab() {
           <ActionButton id="animKeepOriginal" variant="small" />
         </div>
       </RibbonGroup>
+      <RibbonGroup label={t('group.space')}>
+        <ActionButton id="tool.plane" label={t('ribbon.planeTool')} />
+      </RibbonGroup>
       <RibbonGroup label={t('group.frames')}>
         <ActionButton id="newDrawing" />
         <div className="rb-stack">

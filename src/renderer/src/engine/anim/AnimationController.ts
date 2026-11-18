@@ -6,6 +6,7 @@ import type { Command, History } from '../history/History';
 import type { ImageBuf } from '../raster/transform';
 import type { I18nKey, I18nParams } from '../../i18n';
 import { movePivot, type Easing } from './interpolate';
+import { movePivot3D } from './planeEdit';
 import { MAX_PIXELS } from '../io/protocol';
 import {
   clonePiece,
@@ -74,6 +75,14 @@ export interface PieceFields {
   /** How far its tiles have slid, in its own pixels (a repeating piece). */
   scrollX: number;
   scrollY: number;
+  /** In 3D: pixels behind the canvas, and degrees of tilt and turn. */
+  depth: number;
+  tilt: number;
+  turn: number;
+  /** What shows when it's turned round (not keyframed). */
+  back: Back;
+  /** Tilted or turned at this frame (the Animate tool's flat handles don't apply). */
+  in3d: boolean;
   /** Easing from this frame's keyframe (or the one before it) to the next. */
   easing: Easing;
   /** There's a keyframe at this frame. */
@@ -241,6 +250,11 @@ export class AnimationController {
       opacity: s.opacity * 100,
       scrollX: s.scrollX,
       scrollY: s.scrollY,
+      depth: s.depth,
+      tilt: s.tilt * DEG,
+      turn: s.turn * DEG,
+      back: p.back,
+      in3d: s.tilt !== 0 || s.turn !== 0 || s.depth !== 0,
       easing: (at ?? before).easing,
       keyed: at !== undefined,
       curved: at !== undefined && (at.in !== null || at.out !== null),
@@ -249,7 +263,7 @@ export class AnimationController {
   }
 
   /** Set the selected piece's values at the current frame (auto-key), in the options bar's units. */
-  setFields(change: Partial<Omit<PieceFields, 'keyed' | 'curved' | 'repeat'>>): boolean {
+  setFields(change: Partial<Omit<PieceFields, 'keyed' | 'curved' | 'repeat' | 'back' | 'in3d'>>): boolean {
     const p = this.selected;
     if (!p) return false;
     const k: KeyChange = {};
@@ -262,6 +276,10 @@ export class AnimationController {
     if (change.opacity !== undefined) k.opacity = Math.max(0, Math.min(100, change.opacity)) / 100;
     if (change.scrollX !== undefined) k.scrollX = clampScroll(change.scrollX);
     if (change.scrollY !== undefined) k.scrollY = clampScroll(change.scrollY);
+    if (change.tilt !== undefined) k.tilt = change.tilt / DEG;
+    if (change.turn !== undefined) k.turn = change.turn / DEG;
+    // Never at or past the camera.
+    if (change.depth !== undefined) k.depth = Math.max(-this.doc.space.f * 0.99, Math.min(1e6, change.depth));
     if (change.easing !== undefined) k.easing = change.easing;
     return this.setKey(p.id, this.frame, k);
   }
@@ -655,7 +673,9 @@ export class AnimationController {
     const p = this.piece(id);
     if (!p || (pivot.x === p.pivot.x && pivot.y === p.pivot.y)) return false;
     return this.change('history.pivot', () => {
-      p.keyframes = movePivot(p.keyframes, p.pivot, pivot);
+      // In 3D the piece stays put too (a flat piece's keyframes come out as movePivot's).
+      const in3d = p.keyframes.some((k) => k.depth !== 0 || k.tilt !== 0 || k.turn !== 0);
+      p.keyframes = in3d ? movePivot3D(p.keyframes, p.pivot, pivot, this.doc.space) : movePivot(p.keyframes, p.pivot, pivot);
       p.pivot = { ...pivot };
       return true;
     });

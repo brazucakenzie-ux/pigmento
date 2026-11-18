@@ -8,7 +8,8 @@ import { openPath } from '../services/files';
 import { autosaveNow } from '../services/autosave';
 import { defaultParams, shapeRegistry } from '@engine/shapes/ShapeRegistry';
 import { paintShape } from '@engine/vector/render';
-import { makePiece, pieceStateAt } from '@engine/anim/piece';
+import { makePiece, piecePlacementAt, pieceStateAt } from '@engine/anim/piece';
+import { project } from '@engine/anim/space';
 import { drawPiece } from '@engine/anim/pieceRaster';
 import { encodeAnimation } from '@engine/io/animExport';
 import { EASINGS, type Keyframe } from '@engine/anim/interpolate';
@@ -249,5 +250,11 @@ export function installTestHook(): void {
     selectPiece: (id: string | null) => engine.anim.select(id),
     setPieceBack: (id: string, back: 'mirror' | 'hide') => engine.anim.setBack(id, back),
     gpuPlanes: () => engine.renderer.gpuPlanes,
+    /** Where a point of a piece (its own pixels) shows in the document at the frame shown. */
+    pieceHandle: (id: string, x: number, y: number) => {
+      const p = engine.anim.piece(id);
+      if (!p) return { x: Number.NaN, y: Number.NaN };
+      return project(piecePlacementAt(p, engine.anim.frame, engine.doc.space), { x, y }) ?? { x: Number.NaN, y: Number.NaN };
+    },
   };
 }

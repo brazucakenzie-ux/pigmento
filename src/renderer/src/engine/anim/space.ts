@@ -125,6 +125,22 @@ export function placementOf(s: PieceState, pivot: Point, w: number, h: number, s
   return { affine: null, h: hm, inv: invertHomography(hm), depth: zMid, front };
 }
 
+/** Where piece point q (its own pixels) is in 3D at state s (z: behind the canvas). */
+export function worldOf(s: PieceState, pivot: Point, q: Point, space: Space): { x: number; y: number; z: number } {
+  const { cx, cy, f } = space;
+  const depth = Math.max(s.depth, -f * (1 - NEAR));
+  const m = stateMatrix(s, pivot);
+  const p = { x: m[0] * q.x + m[2] * q.y + m[4], y: m[1] * q.x + m[3] * q.y + m[5] };
+  const u = { x: p.x - s.x, y: p.y - s.y };
+  const { c0, c1 } = rotation(s.tilt, s.turn);
+  const g = (f + depth) / f;
+  return {
+    x: cx + (s.x - cx) * g + c0[0] * u.x + c1[0] * u.y,
+    y: cy + (s.y - cy) * g + c0[1] * u.x + c1[1] * u.y,
+    z: depth + c0[2] * u.x + c1[2] * u.y,
+  };
+}
+
 /** A piece point on the canvas, or null behind the camera. */
 export function project(pl: Placement, q: Point): Point | null {
   const [h0, h1, h2, h3, h4, h5, h6, h7, h8] = pl.h;

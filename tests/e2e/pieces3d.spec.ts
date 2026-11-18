@@ -1,6 +1,6 @@
 // Pieces in 3D (1.2.0): drawn on the GPU, matching the CPU path used for flatten and still export.
 import { expect, test, type Page } from '@playwright/test';
-import { launchApp, ready, type AppHandle } from './harness';
+import { drag, launchApp, ready, type AppHandle } from './harness';
 
 let h: AppHandle;
 
@@ -71,6 +71,52 @@ test('a tilted and turned piece looks the same on screen as in the picture, and 
   await page.evaluate((pid) => window.__pigmentoTest!.setPieceKey(pid, 0, { tilt: 0, turn: 0, depth: 0 }), id);
   const flat = await mismatch(page, { x: 205, y: 145, w: 230, h: 110 }, 15, 2);
   expect(flat.off).toBe(0);
+});
+
+test('the Perspective plane tool tilts, turns and pushes a piece back, with fields that key it', async () => {
+  const { page } = h;
+  const id = await bandedPiece(page);
+  await page.keyboard.press('m');
+  expect(await page.evaluate(() => window.__pigmentoTest!.tool())).toBe('plane');
+  const state = () => page.evaluate((pid) => window.__pigmentoTest!.pieceAt(pid, 0)!, id);
+  // The top handle (the middle of the top edge, at 320, 140) dragged 60 px down tilts the top back.
+  await drag(page, [
+    [320, 140],
+    [320, 170],
+    [320, 200],
+  ]);
+  expect((await state()).tilt).toBeCloseTo(60 / 150, 1);
+  // The right-hand handle dragged 45 px in turns it like a door.
+  const before = await state();
+  const right = await page.evaluate(([pid]) => {
+    // Where the middle of its right edge shows now (it's tilted).
+    return window.__pigmentoTest!.pieceHandle(pid as string, 240, 60);
+  }, [id] as const);
+  await drag(page, [
+    [right.x, right.y],
+    [right.x - 25, right.y],
+    [right.x - 45, right.y],
+  ]);
+  expect((await state()).turn - before.turn).toBeCloseTo(45 / 150, 1);
+  // Ctrl-drag up on the sheet (beside the pivot, which has a handle of its own) pushes it away;
+  // the fields show it and set it.
+  await page.keyboard.down('Control');
+  await drag(page, [
+    [290, 200],
+    [290, 150],
+  ]);
+  await page.keyboard.up('Control');
+  expect((await state()).depth).toBeGreaterThan(100);
+  const depth = page.getByRole('textbox', { name: 'Depth', exact: true });
+  await depth.fill('400');
+  await depth.press('Enter');
+  expect((await state()).depth).toBeCloseTo(400, 6);
+  await page.getByRole('textbox', { name: 'Tilt', exact: true }).fill('0');
+  await page.getByRole('textbox', { name: 'Tilt', exact: true }).press('Enter');
+  expect((await state()).tilt).toBe(0);
+  // Each change is one undo step.
+  await page.keyboard.press('Control+z');
+  expect((await state()).tilt).toBeCloseTo(60 / 150, 1);
 });
 
 test('a repeating floor runs to the horizon on screen as in the picture, and a hidden back isn’t drawn', async () => {
