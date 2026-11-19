@@ -102,7 +102,7 @@ export function drawPiece(view: PixelView, r: Rect, p: Piece, scene: Scene, ligh
 export function frameExtras(doc: PaintDocument, frame: number): LayerExtras | undefined {
   const cels = doc.hasCels;
   if (!doc.pieces.length && !cels) return undefined;
-  const scene = new Scene(doc.pieces, frame, doc.space);
+  const scene = new Scene(doc.pieces, frame, doc.spaceAt(frame));
   const byLayer = piecesByLayer(doc.pieces);
   const hinged = hingedIds(doc.pieces);
   const visibleIn = (layer: Layer, r: Rect): Piece[] =>

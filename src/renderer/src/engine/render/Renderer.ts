@@ -281,7 +281,7 @@ export class Renderer {
     frame = this.doc.timeline.frame,
     area: Rect = r ?? { x: 0, y: 0, w: this.doc.width, h: this.doc.height },
   ): void {
-    const scene = new Scene(this.doc.pieces, frame, this.doc.space);
+    const scene = new Scene(this.doc.pieces, frame, this.doc.spaceAt(frame));
     const order = scene.backToFront(pieces).filter((p) => scene.shows(p) && (!r || scene.touches(p, r)));
     for (const run of drawRuns(order, hingedIds(this.doc.pieces))) {
       if (run.length > 1) {
@@ -772,7 +772,7 @@ export class Renderer {
    */
   private drawOutside(ctx: CanvasRenderingContext2D, page: Rect): void {
     const frame = this.doc.timeline.frame;
-    const scene = new Scene(this.doc.pieces, frame, this.doc.space);
+    const scene = new Scene(this.doc.pieces, frame, this.doc.spaceAt(frame));
     const { width: dw, height: dh } = this.doc;
     const out: Piece[] = [];
     for (const layer of walkLayers(this.doc.layers)) {

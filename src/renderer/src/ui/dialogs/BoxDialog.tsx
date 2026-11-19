@@ -4,7 +4,7 @@ import { t, type I18nKey } from '../../i18n';
 import { Dialog } from '../components/Dialog';
 import { NumberField } from '../components/Controls';
 import { engine } from '../state/engine';
-import { closeDialog, useUi } from '../state/store';
+import { closeDialog, updateSettings, useUi } from '../state/store';
 
 /**
  * Box maker: six blank faces of the size chosen, hinged and folded into a box in the middle of
@@ -28,7 +28,11 @@ export function BoxDialog() {
   );
   const ok = () => {
     closeDialog();
-    if (engine.anim.makeBox({ w, h, d })) engine.setTool('plane');
+    if (!engine.anim.makeBox({ w, h, d })) return;
+    // Straight on to turning it, with the timeline showing (as for any new piece).
+    engine.setTool('plane');
+    const anim = useUi.getState().settings.anim;
+    if (!anim.timeline) updateSettings({ anim: { ...anim, timeline: true } });
   };
   return (
     <Dialog title={t('dialog.box.title')} onCancel={closeDialog} onSubmit={ok} submitLabel={t('dialog.box.make')}>

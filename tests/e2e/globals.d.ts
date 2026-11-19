@@ -49,6 +49,8 @@ export interface PigmentoTestHook {
     paintOnPiece: boolean;
     camera: { x: number; y: number; strength: number };
     light: { angle: number; height: number };
+    cameraSelected: boolean;
+    cameraKeys: { frame: number; easing: string }[];
   };
   animateSelection(keepOriginal?: boolean): boolean;
   celMirrors(): number;

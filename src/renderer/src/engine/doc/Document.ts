@@ -4,6 +4,7 @@ import { defaultTimeline, type Timeline } from '../anim/timeline';
 import { clonePiece, type Piece } from '../anim/piece';
 import { celAt, celSurfaces, type Cel } from '../anim/cels';
 import { defaultCamera, defaultLight, spaceOf, type Camera, type Light, type Space } from '../anim/space';
+import { cameraMoveAt, type CameraKey } from '../anim/cameraMove';
 import type { Selection } from './Selection';
 import type { Guide } from './guides';
 import type { VectorNode } from '../vector/model';
@@ -237,6 +238,8 @@ export class PaintDocument {
   camera: Camera;
   /** The light shaded pieces are lit by (saved in projects). */
   light: Light = defaultLight();
+  /** The camera's moves over the timeline (pan and push; none: it stays put). Saved in projects. */
+  cameraKeys: CameraKey[] = [];
 
   constructor(init: DocumentInit, layers?: Layer[]) {
     this.width = init.width;
@@ -249,9 +252,14 @@ export class PaintDocument {
     this.camera = defaultCamera(init.width, init.height);
   }
 
-  /** The camera worked out for the picture's size (what placing pieces in 3D needs). */
+  /** The camera worked out for the picture's size (what placing pieces in 3D needs), at the frame shown. */
   get space(): Space {
-    return spaceOf(this.camera, this.width, this.height);
+    return this.spaceAt(this.timeline.frame);
+  }
+
+  /** The camera at `frame`, moved as its keys say. */
+  spaceAt(frame: number): Space {
+    return spaceOf(this.camera, this.width, this.height, cameraMoveAt(this.cameraKeys, frame));
   }
 
   get activeLayer(): Layer {

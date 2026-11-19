@@ -18,6 +18,7 @@ import { BrushPicker } from './BrushPicker';
 import { CameraField, LightFields } from './CameraField';
 import { EASINGS, type Easing } from '@engine/anim/interpolate';
 import { BACKS, REPEATS, repeatAxes, type Back, type Repeat } from '@engine/anim/piece';
+import type { CameraMoveFields } from '@engine/anim/AnimationController';
 
 const FALLBACK_FONTS = ['Segoe UI', 'Arial', 'Calibri', 'Cambria', 'Comic Sans MS', 'Consolas', 'Georgia', 'Impact', 'Segoe Print', 'Times New Roman', 'Trebuchet MS', 'Verdana'];
 
@@ -379,6 +380,8 @@ function TransformFields() {
 function PieceFields({ plane = false }: { plane?: boolean }) {
   const info = useUi((s) => s.animation.current);
   const keys = useUi((s) => s.animation.pieces.find((p) => p.id === s.animation.selectedId)?.keys.length ?? 0);
+  const cameraMove = useUi((s) => s.animation.cameraMove);
+  if (cameraMove) return <CameraMoveBar move={cameraMove} />;
   if (!info) return <span className="opt-hint">{t('piece.noneSelected')}</span>;
   const axes = repeatAxes(info.repeat);
   // A hinged piece is placed by its hinge (it only folds); a group carries pieces and has no pixels.
@@ -585,6 +588,55 @@ function PieceFields({ plane = false }: { plane?: boolean }) {
           ) : null}
         </>
       )}
+    </>
+  );
+}
+
+/** The camera's move at the frame shown, while its timeline row is selected (auto-key, like a piece). */
+function CameraMoveBar({ move }: { move: CameraMoveFields }) {
+  const blur = () => (document.activeElement as HTMLElement | null)?.blur();
+  const field = (key: 'panX' | 'panY' | 'push', labelKey: I18nKey, tip?: I18nKey) => {
+    const label = t(labelKey);
+    return (
+      <span className="opt tf-field" data-tip={tip ? t(tip) : undefined}>
+        <span>{label}</span>
+        <NumberField className="num tf-num" value={Math.round(move[key])} min={-1e6} max={1e6} label={label} onChange={(v) => engine.anim.setCameraKey(engine.anim.frame, { [key]: v })} onEnter={blur} />
+        <span className="unit">px</span>
+      </span>
+    );
+  };
+  return (
+    <>
+      <span className="opt">
+        <Icon name="camera" size={16} />
+        <span>{t('camera.row')}</span>
+      </span>
+      <button
+        type="button"
+        className="icon-btn"
+        aria-pressed={move.keyed}
+        aria-label={t(move.keyed ? 'camera.keyed' : 'camera.addKey')}
+        data-tip={t(move.keyed ? 'camera.keyed' : 'camera.addKey')}
+        onClick={() => !move.keyed && engine.anim.setCameraKey(engine.anim.frame, {})}
+      >
+        <Icon name={move.keyed ? 'keyframe' : 'keyframe-add'} size={16} />
+      </button>
+      <button type="button" className="icon-btn" aria-label={t('camera.deleteKey')} data-tip={t('camera.deleteKey')} disabled={!move.keyed} onClick={() => engine.anim.removeCameraKey(engine.anim.frame)}>
+        <Icon name="keyframe-delete" size={16} />
+      </button>
+      {field('panX', 'camera.panX')}
+      {field('panY', 'camera.panY')}
+      {field('push', 'camera.push', 'camera.pushTip')}
+      <label className="opt">
+        <span>{t('piece.easing')}</span>
+        <select className="select" aria-label={t('piece.easing')} value={move.easing} onChange={(e) => engine.anim.setCameraKey(engine.anim.frame, { easing: e.target.value as Easing })}>
+          {EASINGS.map((e) => (
+            <option key={e} value={e}>
+              {t(`easing.${e}` as I18nKey)}
+            </option>
+          ))}
+        </select>
+      </label>
     </>
   );
 }

@@ -8,7 +8,7 @@ import { PaintDocument } from '@engine/doc/Document';
 const W = 100;
 const H = 60;
 const pivot = { x: 50, y: 30 };
-const space: Space = { cx: 400, cy: 300, f: 1000 };
+const space: Space = { cx: 400, cy: 300, f: 1000, px: 0, py: 0, pz: 0 };
 const at = (change: Partial<PieceState>): PieceState => ({ ...identityState(400, 300), ...change });
 const close = (p: { x: number; y: number } | null, x: number, y: number) => {
   expect(p).not.toBeNull();
@@ -19,7 +19,7 @@ const close = (p: { x: number; y: number } | null, x: number, y: number) => {
 describe('the camera', () => {
   it('starts in the middle at 50 %, which puts it a diagonal in front of the canvas', () => {
     expect(defaultCamera(800, 600)).toEqual({ x: 400, y: 300, strength: 50 });
-    expect(spaceOf(defaultCamera(800, 600), 800, 600)).toEqual({ cx: 400, cy: 300, f: 1000 });
+    expect(spaceOf(defaultCamera(800, 600), 800, 600)).toEqual({ cx: 400, cy: 300, f: 1000, px: 0, py: 0, pz: 0 });
     // Stronger perspective is a closer camera; it keeps to 1–100 %.
     expect(spaceOf({ x: 0, y: 0, strength: 100 }, 800, 600).f).toBe(500);
     expect(spaceOf({ x: 0, y: 0, strength: 5000 }, 800, 600).f).toBe(500);

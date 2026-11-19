@@ -231,50 +231,23 @@ export function frameFlat(A: Readonly<Frame>): boolean {
 }
 
 /** Where a w × h sheet with frame A shows, seen by `space` (as placementOf does for a free piece). */
-export function placementFromFrame(
-  A: Readonly<Frame>,
-  w: number,
-  h: number,
-  space: Space,
-): Placement {
-  const { cx, cy, f } = space;
+export function placementFromFrame(A: Readonly<Frame>, w: number, h: number, space: Space): Placement {
+  const { cx, cy, f, px, py, pz } = space;
   const n = frameNormal(A);
   const mid = frameApply(A, w / 2, h / 2);
-  const toCam: Vec3 = [cx - mid[0], cy - mid[1], -f - mid[2]];
+  // The camera: at rest at (cx, cy, −f), moved by (px, py, pz).
+  const toCam: Vec3 = [cx + px - mid[0], cy + py - mid[1], pz - f - mid[2]];
   const front = dot(n, toCam) < 0;
   if (frameFlat(A)) {
     // A depth at or past the camera can't be seen: keep it just in front.
-    const z = Math.max(A[11], -f * (1 - NEAR));
+    const z = Math.max(A[11] - pz, -f * (1 - NEAR));
     const k = f / (f + z);
-    const affine: Mat =
-      k === 1
-        ? [A[0], A[4], A[1], A[5], A[3], A[7]]
-        : [A[0] * k, A[4] * k, A[1] * k, A[5] * k, cx + (A[3] - cx) * k, cy + (A[7] - cy) * k];
-    const hm: Homography = [
-      affine[0],
-      affine[2],
-      affine[4],
-      affine[1],
-      affine[3],
-      affine[5],
-      0,
-      0,
-      1,
-    ];
+    const affine: Mat = k === 1 && px === 0 && py === 0 ? [A[0], A[4], A[1], A[5], A[3], A[7]] : [A[0] * k, A[4] * k, A[1] * k, A[5] * k, cx + (A[3] - cx - px) * k, cy + (A[7] - cy - py) * k];
+    const hm: Homography = [affine[0], affine[2], affine[4], affine[1], affine[3], affine[5], 0, 0, 1];
     return { affine, h: hm, inv: invertHomography(hm), depth: z, front };
   }
-  // Seen from (cx, cy, −f): x' = (f·X + cx·Z) / (f + Z), and likewise y'.
-  const hm: Homography = [
-    f * A[0] + cx * A[8],
-    f * A[1] + cx * A[9],
-    f * A[3] + cx * A[11],
-    f * A[4] + cy * A[8],
-    f * A[5] + cy * A[9],
-    f * A[7] + cy * A[11],
-    A[8],
-    A[9],
-    A[11] + f,
-  ];
+  // Seen from the camera: x' = cx + f·(X − cx − px) / (Z + f − pz), and likewise y'.
+  const hm: Homography = [f * A[0] + cx * A[8], f * A[1] + cx * A[9], f * (A[3] - px) + cx * (A[11] - pz), f * A[4] + cy * A[8], f * A[5] + cy * A[9], f * (A[7] - py) + cy * (A[11] - pz), A[8], A[9], A[11] + f - pz];
   return { affine: null, h: hm, inv: invertHomography(hm), depth: mid[2], front };
 }
 

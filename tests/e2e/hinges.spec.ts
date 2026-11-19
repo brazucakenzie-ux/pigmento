@@ -222,3 +222,58 @@ test('the box maker folds a box; dragging a face moves it all, Alt-dragging fold
   expect(await state(group)).toEqual(g0);
   expect((await page.evaluate(() => window.__pigmentoTest!.history())).index).toBe(steps);
 });
+
+test('a box folds open over 24 frames on its own rows, and the camera row pans past it by depth', async () => {
+  const { page } = h;
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  await page.getByRole('button', { name: 'Box…' }).click();
+  await page.getByRole('dialog', { name: 'Make a box' }).getByRole('button', { name: 'Make' }).click();
+  const ids = Object.fromEntries((await page.evaluate(() => window.__pigmentoTest!.anim().pieces)).map((p) => [p.name, p.id]));
+  // The group's row, with its faces indented under it (the back hangs off the right side).
+  const rows = await page.locator('.tl-piece-name').evaluateAll((els) => els.map((el) => [el.textContent?.trim() ?? '', Number((el as HTMLElement).dataset.level)]));
+  expect(rows).toEqual([
+    ['Group 1', 0],
+    ['Front', 1],
+    ['Right', 2],
+    ['Back', 3],
+    ['Left', 2],
+    ['Bottom', 2],
+    ['Top', 2],
+  ]);
+  // The right side, folded shut on frame 1, folds open by the last frame.
+  await page.locator('.tl-names').getByRole('button', { name: 'Right', exact: true }).click();
+  await page.evaluate(() => window.__pigmentoTest!.setFrame(23));
+  const fold = page.getByRole('textbox', { name: 'Fold', exact: true });
+  await fold.fill('0');
+  await fold.press('Enter');
+  expect((await page.evaluate((id) => window.__pigmentoTest!.pieceKeys(id), ids.Right)).map((k) => k.frame)).toEqual([0, 23]);
+  await page.evaluate(() => window.__pigmentoTest!.setFrame(12));
+  expect((await page.evaluate((id) => window.__pigmentoTest!.pieceAt(id, 12)!, ids.Right)).fold).toBeCloseTo(Math.PI / 2 * (1 - 12 / 23), 6);
+  expect((await page.evaluate(() => window.__pigmentoTest!.anim().current!.fold))).toBeCloseTo(90 * (1 - 12 / 23), 6);
+  // The camera row: panned 120 px by the last frame, the front (about on the canvas: the box is
+  // turned a little) slides back by nearly all of it, and the far corner of the left side (still
+  // folded shut) by clearly less.
+  const at = async (frame: number, id: string) => {
+    await page.evaluate((f) => window.__pigmentoTest!.setFrame(f), frame);
+    return corner(page, id, 0, 0);
+  };
+  const front0 = await at(23, ids.Front);
+  const far0 = await at(23, ids.Left);
+  await page.locator('.tl-names').getByRole('button', { name: 'Camera' }).click();
+  expect((await page.evaluate(() => window.__pigmentoTest!.anim())).cameraSelected).toBe(true);
+  const pan = page.getByRole('textbox', { name: 'Pan X', exact: true });
+  await pan.fill('120');
+  await pan.press('Enter');
+  expect((await page.evaluate(() => window.__pigmentoTest!.anim())).cameraKeys.map((k) => k.frame)).toEqual([0, 23]);
+  const front1 = await at(23, ids.Front);
+  const far1 = await at(23, ids.Left);
+  const near = front1.x - front0.x;
+  const far = far1.x - far0.x;
+  expect(near).toBeLessThan(-100);
+  expect(near).toBeGreaterThan(-125);
+  expect(far).toBeLessThan(-60);
+  expect(far).toBeGreaterThan(near + 5);
+  // Halfway through, the camera is halfway there (the front itself doesn't move).
+  expect((await at(12, ids.Front)).x - front0.x).toBeCloseTo((near * 12) / 23, 3);
+  expect((await at(0, ids.Front)).x).toBeCloseTo(front0.x, 6);
+});

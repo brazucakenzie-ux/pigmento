@@ -12,7 +12,7 @@ import { frameExtras } from './anim/pieceRaster';
 import type { Piece } from './anim/piece';
 import { docToPixel } from './anim/pieceEdit';
 import { PiecePixelsCommand } from './anim/piecePaint';
-import { keepsDepth, transformCamera, transformPieces } from './anim/pieceTransform';
+import { keepsDepth, transformCamera, transformCameraKeys, transformPieces } from './anim/pieceTransform';
 import { celAt } from './anim/cels';
 import { clampFrame } from './anim/timeline';
 import { Selection, type SelectionMode, type SelectionModify } from './doc/Selection';
@@ -2019,6 +2019,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     }
     this.doc.pieces = transformPieces(this.doc.pieces, m);
     this.doc.camera = transformCamera(this.doc.camera, m, this.doc.width, this.doc.height, w, h);
+    this.doc.cameraKeys = transformCameraKeys(this.doc.cameraKeys, m);
   }
 
   /** Area a shape layer's objects cover, outlines included. */

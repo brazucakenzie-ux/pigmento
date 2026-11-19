@@ -10,6 +10,7 @@ import type { Command } from './History';
 import { clonePiece, type Piece } from '../anim/piece';
 import type { Cel } from '../anim/cels';
 import type { Camera } from '../anim/space';
+import type { CameraKey } from '../anim/cameraMove';
 
 /** What commands need from the engine to keep the display in sync. */
 export interface CommandHost {
@@ -79,8 +80,9 @@ export interface DocState {
   vectors: Map<VectorLayer, { objects: readonly VectorNode[]; width: number; height: number }>;
   /** Animated pieces (they move with resizes, crops and turns). */
   pieces: Piece[];
-  /** The camera (its vanishing point and strength follow the picture). */
+  /** The camera (its vanishing point and strength follow the picture), and its moves. */
   camera: Camera;
+  cameraKeys: CameraKey[];
 }
 
 export function captureDocState(doc: PaintDocument): DocState {
@@ -96,6 +98,7 @@ export function captureDocState(doc: PaintDocument): DocState {
     vectors: new Map(doc.vectorLayers().map((l) => [l, { objects: l.objects, width: l.width, height: l.height }])),
     pieces: doc.pieces.map(clonePiece),
     camera: { ...doc.camera },
+    cameraKeys: doc.cameraKeys.map((k) => ({ ...k })),
   };
 }
 
@@ -117,6 +120,7 @@ export function applyDocState(doc: PaintDocument, s: DocState): void {
   }
   doc.pieces = s.pieces.map(clonePiece);
   doc.camera = { ...s.camera };
+  doc.cameraKeys = s.cameraKeys.map((k) => ({ ...k }));
 }
 
 /**

@@ -224,6 +224,12 @@ Pieces in 1.2 can be bigger than the canvas and sit anywhere, partly or wholly o
   - With a hinge, it hangs off the parent's `edge` (`n`, `e`, `s` or `w`: top, right, bottom, left), and only its keyframes' `fold`, `opacity` and scroll count. Edges run clockwise round a box (the top from left to right, the right edge downwards, and so on). Its own `childEdge` lies along the parent's edge, running the other way, starting `offset` parent pixels from that edge's start. `along` and `across` are parent pixels per piece pixel, along the edge and away from it (0.0001 to 10,000).
   - Unfolded, a hinged piece lies flat outside the parent's edge. **`fold`** (on each keyframe, radians, not wrapped, 0 when left out) turns it round the edge, away from the viewer when positive, so a front face with its sides folded by π/2 makes a box going back from it with the fronts outward.
   - A group's opacity multiplies the opacity of every piece under it; a piece's own opacity reaches only itself.
+### Camera moves
+
+- **`cameraMoves`** (in `animation`, version 3): the camera's moves over the timeline, `[{ "frame": 0, "panX": 0, "panY": 0, "push": 0, "easing": "linear" }, …]`. Left out (or empty), the camera stays put.
+  - `panX` and `panY` slide the camera across and down from where it rests, and `push` moves it in towards the canvas (negative: back from it), all in document pixels from −1,000,000 to 1,000,000. Between keys the camera eases as pieces do; before the first key and after the last it holds.
+  - Pieces are placed in 3D by the camera at rest and seen by the moved one, so near pieces slide past faster than far ones. The camera never gets closer to the canvas than 5 % of its distance. Layers' own pixels don't move.
+  - One key per frame (the last given wins); frames past the end of the timeline move to its last frame.
 - Links that don't hold are dropped when a file is opened (the piece then follows nothing): one to a missing piece or one on another layer, a link from a group, a hinge onto a group, a loop, and pieces past the 64th in one tree.
 
 ## Limits and safety

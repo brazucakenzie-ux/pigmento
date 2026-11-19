@@ -36,6 +36,7 @@ import { EASINGS, type Easing, type Keyframe } from '../anim/interpolate';
 import { BACKS, MAX_KEYFRAMES, MAX_PIECES, MAX_SCROLL, newPieceId, REPEATS, type Back, type Piece, type Repeat } from '../anim/piece';
 import { EDGES, type Edge } from '../anim/frames';
 import { checkLinks } from '../anim/links';
+import { MAX_CAMERA_KEYS, MAX_CAMERA_MOVE, type CameraKey } from '../anim/cameraMove';
 import { defaultCamera, defaultLight, MAX_STRENGTH, MIN_STRENGTH } from '../anim/space';
 import { LOOP_MODES, MAX_FPS, MAX_FRAMES, MIN_FPS, clampFrame, type LoopMode } from '../anim/timeline';
 import { MAX_CELS, type Cel } from '../anim/cels';
@@ -78,7 +79,7 @@ export function versionFor(doc: PaintDocument): 1 | 2 | 3 {
       p.shade !== 0 ||
       p.keyframes.some((k) => k.scrollX !== 0 || k.scrollY !== 0 || k.depth !== 0 || k.tilt !== 0 || k.turn !== 0 || k.fold !== 0),
   );
-  if (v3 || cameraMoved(doc) || lightMoved(doc)) return 3;
+  if (v3 || doc.cameraKeys.length > 0 || cameraMoved(doc) || lightMoved(doc)) return 3;
   return doc.pieces.length || doc.hasCels ? 2 : 1;
 }
 
@@ -376,12 +377,21 @@ const PieceJson = z.object({
     .nullable()
     .default(null),
 });
+const CameraKeyJson = z.object({
+  frame: int.min(0).max(MAX_FRAMES - 1),
+  panX: z.number().min(-MAX_CAMERA_MOVE).max(MAX_CAMERA_MOVE),
+  panY: z.number().min(-MAX_CAMERA_MOVE).max(MAX_CAMERA_MOVE),
+  push: z.number().min(-MAX_CAMERA_MOVE).max(MAX_CAMERA_MOVE),
+  easing: z.enum(EASINGS as [Easing, ...Easing[]]),
+});
 const AnimationJson = z.object({
   fps: int.min(MIN_FPS).max(MAX_FPS),
   length: int.min(1).max(MAX_FRAMES),
   loop: z.enum(LOOP_MODES as [LoopMode, ...LoopMode[]]),
   frame: int.min(0).max(MAX_FRAMES - 1),
   pieces: z.array(PieceJson).max(MAX_PIECES),
+  /** Version 3: the camera's moves (pan and push) over the timeline; none, it stays put. */
+  cameraMoves: z.array(CameraKeyJson).max(MAX_CAMERA_KEYS).default([]),
 });
 
 export const DocumentJsonSchema = z.object({
@@ -529,7 +539,8 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
     });
   }
   const t = doc.timeline;
-  const animation = pieces.length || doc.hasCels ? { fps: t.fps, length: t.length, loop: t.loop, frame: t.frame, pieces } : null;
+  const moves = v3 && doc.cameraKeys.length ? { cameraMoves: doc.cameraKeys.map((k) => ({ ...k })) } : {};
+  const animation = pieces.length || doc.hasCels ? { fps: t.fps, length: t.length, loop: t.loop, frame: t.frame, pieces, ...moves } : null;
   // What is written: fields with defaults may be left out (older versions don't have them).
   const json: z.input<typeof DocumentJsonSchema> = {
     format: PROJECT_MAGIC,
@@ -705,6 +716,13 @@ export async function loadProject(bytes: Uint8Array, codec: PngCodec): Promise<P
 /** The timeline and pieces of a version 2 project. Pieces on missing or non-pixel layers are left out. */
 async function readAnimation(doc: PaintDocument, a: NonNullable<DocumentJson['animation']>, files: Record<string, Uint8Array>, codec: PngCodec): Promise<void> {
   doc.timeline = { fps: a.fps, length: a.length, loop: a.loop, frame: clampFrame(a.frame, a.length) };
+  // One camera key per frame, in order, inside the timeline (the last one given for a frame wins).
+  const moves = new Map<number, CameraKey>();
+  for (const k of a.cameraMoves) {
+    const frame = clampFrame(k.frame, a.length);
+    moves.set(frame, { ...k, frame });
+  }
+  doc.cameraKeys = [...moves.values()].sort((x, y) => x.frame - y.frame);
   const rasters = new Set(doc.rasterLayers().map((l) => l.id));
   const ids = new Set<string>();
   const pieces: Piece[] = [];

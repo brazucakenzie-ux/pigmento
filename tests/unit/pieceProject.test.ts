@@ -10,7 +10,7 @@ import { Surface } from '@engine/raster/Surface';
 import { perspectiveWarp, type Quad } from '@engine/raster/warp';
 import type { ImageBuf } from '@engine/raster/transform';
 
-const space: Space = { cx: 200, cy: 150, f: 500 };
+const space: Space = { cx: 200, cy: 150, f: 500, px: 0, py: 0, pz: 0 };
 
 /** Smooth colours (no hard edges), so bilinear results compare closely. */
 function gradient(w: number, h: number): ImageBuf {
@@ -66,7 +66,7 @@ describe('the CPU path for pieces in 3D', () => {
     const src = Surface.fromRGBA(4, 4, new Uint8ClampedArray(64).fill(255));
     // Barely tilted, so its edges sit where the flat piece's would.
     const s = at({ tilt: 1e-6, x: 10, y: 10 });
-    const pl = placementOf(s, { x: 2, y: 2 }, 4, 4, { cx: 10, cy: 10, f: 1e6 });
+    const pl = placementOf(s, { x: 2, y: 2 }, 4, 4, { cx: 10, cy: 10, f: 1e6, px: 0, py: 0, pz: 0 });
     const out = sampleProjective(src, pl, { x: 0, y: 0, w: 20, h: 20 });
     const alpha = (x: number, y: number) => out.data[((y - out.y) * out.w + (x - out.x)) * 4 + 3] ?? 0;
     expect(alpha(9, 9)).toBe(255);
@@ -121,7 +121,7 @@ describe('the CPU path for pieces in 3D', () => {
   it('draws a 4000 × 3000 piece tilted to fill the picture in good time', () => {
     const src = new Surface(4000, 3000);
     src.fillRect({ x: 0, y: 0, w: 4000, h: 3000 }, { r: 40, g: 90, b: 200, a: 255 });
-    const pl = placementOf({ ...identityState(2000, 1500), tilt: 0.3, turn: 0.2 }, { x: 2000, y: 1500 }, 4000, 3000, { cx: 2000, cy: 1500, f: 5000 });
+    const pl = placementOf({ ...identityState(2000, 1500), tilt: 0.3, turn: 0.2 }, { x: 2000, y: 1500 }, 4000, 3000, { cx: 2000, cy: 1500, f: 5000, px: 0, py: 0, pz: 0 });
     const t0 = performance.now();
     const out = sampleProjective(src, pl, { x: 0, y: 0, w: 4000, h: 3000 });
     const ms = performance.now() - t0;

@@ -4,7 +4,7 @@ import { flipH, flipV, rotate90, type ImageBuf } from '../raster/transform';
 import { transformSaved } from '../doc/savedSelections';
 import { turnGuides } from '../doc/guides';
 import { transformNode } from '../vector/model';
-import { transformCamera, transformPieces } from '../anim/pieceTransform';
+import { transformCamera, transformCameraKeys, transformPieces } from '../anim/pieceTransform';
 import type { Mat } from '../core/matrix';
 import type { I18nKey } from '../../i18n';
 import type { CommandHost } from './commands';
@@ -50,6 +50,7 @@ export function applyLossless(doc: PaintDocument, op: LosslessOp, inverse: boole
   }
   doc.pieces = transformPieces(doc.pieces, m);
   doc.camera = transformCamera(doc.camera, m, doc.width, doc.height, nw, nh);
+  doc.cameraKeys = transformCameraKeys(doc.cameraKeys, m);
   doc.width = nw;
   doc.height = nh;
   doc.selection = null;

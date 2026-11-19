@@ -12,6 +12,7 @@ import type { Hinge } from './frames';
 import { attach, centrePivot, detach, duplicateTree, hinge, movePivotLocal, moveTree, removeTree, rootOf, subtree, type LinkRefusal } from './links';
 import { BOX_FACES, faceSize, makeBox, MAX_BOX_SIDE, type BoxFace, type BoxSize } from './box';
 import { MAX_TREE, Scene } from './scene';
+import { cameraMoveAt, MAX_CAMERA_KEYS, moveCameraKey, removeCameraKey, setCameraKey, type CameraKey, type CameraMove } from './cameraMove';
 import { MAX_PIXELS } from '../io/protocol';
 import {
   clonePiece,
@@ -74,6 +75,18 @@ export interface AnimationInfo {
   camera: Camera;
   /** The light shaded pieces are lit by. */
   light: Light;
+  /** The camera row is selected (its moves are what the options bar shows). */
+  cameraSelected: boolean;
+  /** Where the camera has keys for its moves. */
+  cameraKeys: { frame: number; easing: Easing }[];
+  /** The camera's move at the frame shown, while its row is selected. */
+  cameraMove: CameraMoveFields | null;
+}
+
+/** The camera's move at the frame shown, as the options bar shows it. */
+export interface CameraMoveFields extends CameraMove {
+  keyed: boolean;
+  easing: Easing;
 }
 
 /** A piece's values as the options bar shows them (degrees and percent). */
@@ -130,11 +143,13 @@ export interface AnimSnapshot {
   camera: Camera;
   /** The light shaded pieces are lit by. */
   light: Light;
+  /** The camera's moves. */
+  cameraKeys: CameraKey[];
 }
 
 export function captureAnim(doc: PaintDocument): AnimSnapshot {
   const t = doc.timeline;
-  return { pieces: doc.pieces.map(clonePiece), fps: t.fps, length: t.length, loop: t.loop, camera: { ...doc.camera }, light: { ...doc.light } };
+  return { pieces: doc.pieces.map(clonePiece), fps: t.fps, length: t.length, loop: t.loop, camera: { ...doc.camera }, light: { ...doc.light }, cameraKeys: doc.cameraKeys.map((k) => ({ ...k })) };
 }
 
 export function restoreAnim(doc: PaintDocument, s: AnimSnapshot): void {
@@ -145,6 +160,7 @@ export function restoreAnim(doc: PaintDocument, s: AnimSnapshot): void {
   doc.timeline.frame = clampFrame(doc.timeline.frame, s.length);
   doc.camera = { ...s.camera };
   doc.light = { ...s.light };
+  doc.cameraKeys = s.cameraKeys.map((k) => ({ ...k }));
   doc.showFrame(doc.timeline.frame);
 }
 
@@ -192,6 +208,8 @@ export class AnimationController {
   private drag: AnimSnapshot | null = null;
   /** Paint on piece: painting tools paint the selected piece's own pixels (view state, not undoable). */
   private paintOn = false;
+  /** The camera row is selected instead of a piece (view state). */
+  private cameraOn = false;
 
   constructor(private readonly host: AnimHost) {}
 
@@ -209,7 +227,7 @@ export class AnimationController {
 
   /** Every piece's pose at `frame` (the frame shown by default), as the picture's camera sees it. */
   scene(frame = this.frame): Scene {
-    return new Scene(this.doc.pieces, frame, this.doc.space);
+    return new Scene(this.doc.pieces, frame, this.doc.spaceAt(frame));
   }
 
   piece(id: string | null): Piece | null {
@@ -277,7 +295,69 @@ export class AnimationController {
       paintOnPiece: this.paintOn,
       camera: { ...this.doc.camera },
       light: { ...this.doc.light },
+      cameraSelected: this.cameraOn,
+      cameraKeys: this.doc.cameraKeys.map((k) => ({ frame: k.frame, easing: k.easing })),
+      cameraMove: this.cameraOn ? this.cameraFields() : null,
     };
+  }
+
+  /** The camera's move at the frame shown. */
+  cameraFields(): CameraMoveFields {
+    const f = this.frame;
+    const keys = this.doc.cameraKeys;
+    const at = keys.find((k) => k.frame === f);
+    const before = [...keys].reverse().find((k) => k.frame <= f) ?? keys[0];
+    return { ...cameraMoveAt(keys, f), keyed: at !== undefined, easing: (at ?? before)?.easing ?? 'linear' };
+  }
+
+  get cameraSelected(): boolean {
+    return this.cameraOn;
+  }
+
+  /** Select the camera row (its moves show in the options bar), or let go of it. */
+  selectCamera(on = true): void {
+    if (on === this.cameraOn && (!on || this.selectedId === null)) return;
+    this.cameraOn = on;
+    if (on) this.selectedId = null;
+    this.host.animationChanged(null);
+  }
+
+  /**
+   * Set the camera's move at `frame` (adding a key there if there isn't one): one undo step. The
+   * first move keyed after the start also keys the camera at rest on the first frame, so it moves
+   * from there.
+   */
+  setCameraKey(frame: number, change: Partial<Omit<CameraKey, 'frame'>>): boolean {
+    const adding = !this.doc.cameraKeys.some((k) => k.frame === frame);
+    if (adding && this.doc.cameraKeys.length >= MAX_CAMERA_KEYS) {
+      this.host.notify('error', 'notice.tooManyKeyframes', { max: MAX_CAMERA_KEYS });
+      return false;
+    }
+    return this.change(adding ? 'history.cameraKeyAdd' : 'history.cameraKey', () => {
+      let keys = this.doc.cameraKeys;
+      if (!keys.length && frame > 0) keys = setCameraKey(keys, 0, {});
+      this.doc.cameraKeys = setCameraKey(keys, frame, change);
+      return true;
+    });
+  }
+
+  removeCameraKey(frame: number): boolean {
+    const next = removeCameraKey(this.doc.cameraKeys, frame);
+    if (!next) return false;
+    return this.change('history.cameraKeyDelete', () => {
+      this.doc.cameraKeys = next;
+      return true;
+    });
+  }
+
+  moveCameraKey(from: number, to: number): boolean {
+    const target = clampFrame(to, this.doc.timeline.length);
+    const next = target !== from ? moveCameraKey(this.doc.cameraKeys, from, target) : null;
+    if (!next) return false;
+    return this.change('history.cameraKeyMove', () => {
+      this.doc.cameraKeys = next;
+      return true;
+    });
   }
 
   /** The selected piece's values at the current frame. */
@@ -439,6 +519,7 @@ export class AnimationController {
   reset(): void {
     this.stopTimer();
     this.selectedId = null;
+    this.cameraOn = false;
     this.drag = null;
   }
 
@@ -608,9 +689,9 @@ export class AnimationController {
     return [...new Set(pieces.flatMap((p) => p.keyframes.map((k) => k.frame)))].sort((a, b) => a - b);
   }
 
-  /** Go to the previous (-1) or next (1) keyframe of the selected piece, or of any piece. */
+  /** Go to the previous (-1) or next (1) keyframe of the selected piece (or the camera), or of any piece. */
   stepKey(dir: -1 | 1): void {
-    const frames = this.keyFrames(this.selected ? this.selectedId : null);
+    const frames = this.cameraOn ? this.doc.cameraKeys.map((k) => k.frame) : this.keyFrames(this.selected ? this.selectedId : null);
     const f = this.frame;
     const target = dir > 0 ? frames.find((k) => k > f) : [...frames].reverse().find((k) => k < f);
     if (target !== undefined) this.setFrame(target);
@@ -618,8 +699,9 @@ export class AnimationController {
 
   select(id: string | null): void {
     const next = this.piece(id) ? id : null;
-    if (next === this.selectedId) return;
+    if (next === this.selectedId && !(next && this.cameraOn)) return;
     this.selectedId = next;
+    if (next) this.cameraOn = false;
     this.host.animationChanged(null);
   }
 
@@ -956,6 +1038,7 @@ function sameAnim(a: AnimSnapshot, b: AnimSnapshot): boolean {
   if (a.fps !== b.fps || a.length !== b.length || a.loop !== b.loop || a.pieces.length !== b.pieces.length) return false;
   if (a.camera.x !== b.camera.x || a.camera.y !== b.camera.y || a.camera.strength !== b.camera.strength) return false;
   if (a.light.angle !== b.light.angle || a.light.height !== b.light.height) return false;
+  if (JSON.stringify(a.cameraKeys) !== JSON.stringify(b.cameraKeys)) return false;
   if (a.pieces.some((p, i) => p.src !== b.pieces[i].src)) return false;
   return JSON.stringify(a.pieces.map(strip)) === JSON.stringify(b.pieces.map(strip));
 }

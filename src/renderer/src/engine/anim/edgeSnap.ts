@@ -2,7 +2,7 @@ import type { Point } from '../core/geometry';
 import { edgeOf, EDGES, frameApply, frameChain, frameInvert, hingeFrame, type Edge, type Hinge } from './frames';
 import type { Piece } from './piece';
 import type { Scene } from './scene';
-import { project, unproject } from './space';
+import { project, projectWorld, unproject } from './space';
 
 /** Where a dragged piece would hinge if it were let go now. */
 export interface EdgeSnap {
@@ -142,12 +142,10 @@ export function foldToward(scene: Scene, piece: Piece, p: Point, near: number, s
   const handle = foldHandle(piece);
   if (!parent || parent.kind !== 'piece' || !h || !handle) return near;
   const pf = scene.pose(parent).frame;
-  const { cx, cy, f } = scene.space;
   const dist = (phi: number): number => {
     const W = frameApply(frameChain(pf, hingeFrame(parent.src.width, parent.src.height, piece.src.width, piece.src.height, h, phi)), handle.x, handle.y);
-    const z = W[2] + f;
-    if (!(z > f * 0.01)) return Infinity;
-    return Math.hypot((f * W[0] + cx * W[2]) / z - p.x, (f * W[1] + cy * W[2]) / z - p.y);
+    const at = projectWorld(W, scene.space);
+    return at ? Math.hypot(at.x - p.x, at.y - p.y) : Infinity;
   };
   const search = (from: number, to: number, step: number): number => {
     let best = near;

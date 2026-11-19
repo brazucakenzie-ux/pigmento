@@ -3,7 +3,7 @@ import { identityState, type Keyframe, type PieceState } from '@engine/anim/inte
 import { depthDrag, DEPTH_PX, movePivot3D, resizeDrag, tiltDrag, TURN_PX, turnDrag } from '@engine/anim/planeEdit';
 import { placementOf, project, worldOf, type Space } from '@engine/anim/space';
 
-const space: Space = { cx: 400, cy: 300, f: 1000 };
+const space: Space = { cx: 400, cy: 300, f: 1000, px: 0, py: 0, pz: 0 };
 const s0: PieceState = { ...identityState(400, 300), tilt: 0.1, turn: -0.2 };
 
 describe('Perspective plane drags', () => {

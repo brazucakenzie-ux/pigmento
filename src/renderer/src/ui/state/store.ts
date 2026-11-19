@@ -151,7 +151,7 @@ export const useUi = create<UiState>(() => ({
   shapeLibrary: 0,
   symmetry: { mode: 'off', segments: 6, center: null },
   reference: null,
-  animation: { fps: 12, length: 24, loop: 'loop', frame: 0, pieces: [], selectedId: null, current: null, playing: false, cels: {}, paintOnPiece: false, camera: { x: 0, y: 0, strength: 50 }, light: { angle: -30, height: 45 } },
+  animation: { fps: 12, length: 24, loop: 'loop', frame: 0, pieces: [], selectedId: null, current: null, playing: false, cels: {}, paintOnPiece: false, camera: { x: 0, y: 0, strength: 50 }, light: { angle: -30, height: 45 }, cameraSelected: false, cameraKeys: [], cameraMove: null },
   brushLibrary: 0,
   patterns: [],
   guides: 0,
