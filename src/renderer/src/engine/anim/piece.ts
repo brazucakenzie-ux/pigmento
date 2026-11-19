@@ -1,9 +1,8 @@
-import { boundsOfPoints, type Point, type Rect } from '../core/geometry';
-import { matApplyPoints, type Mat } from '../core/matrix';
+import type { Point, Rect } from '../core/geometry';
 import { Surface } from '../raster/Surface';
 import type { ImageBuf } from '../raster/transform';
-import { identityState, stateAt, stateMatrix, STATE_KEYS, type Easing, type Keyframe, type PieceState } from './interpolate';
-import { FLAT_SPACE, placementOf, placementOutline, type Placement, type Space } from './space';
+import type { Hinge } from './frames';
+import { identityState, stateAt, STATE_KEYS, type Easing, type Keyframe, type PieceState } from './interpolate';
 
 /**
  * Pixels with their own size, belonging to a pixel layer and animated with keyframes. It's
@@ -13,6 +12,11 @@ import { FLAT_SPACE, placementOf, placementOutline, type Placement, type Space }
  */
 export interface Piece {
   readonly id: string;
+  /**
+   * A piece of pixels, or a group: an empty piece that's never drawn, whose state carries the
+   * pieces linked under it (a box spins about its group's pivot, in its middle).
+   */
+  readonly kind: PieceKind;
   /** User content ('' = unnamed; the UI shows a localised default). */
   name: string;
   layerId: string;
@@ -29,6 +33,19 @@ export interface Piece {
   shade: number;
   /** Turned round in 3D: its pixels show mirrored, like paper, or it isn't drawn. */
   back: Back;
+  /**
+   * The piece it follows (on the same layer; null = none): its keyframes are then relative to that
+   * piece's own pixels, or, hinged, it hangs off one of that piece's edges at its fold angle.
+   */
+  link: Link | null;
+}
+
+export type PieceKind = 'piece' | 'group';
+
+export interface Link {
+  parent: string;
+  /** null: it follows the parent's pixels (keyframes relative to them), without a hinge. */
+  hinge: Hinge | null;
 }
 
 export type Repeat = 'none' | 'x' | 'y' | 'both';
@@ -83,17 +100,59 @@ export function makePiece(id: string, name: string, layerId: string, src: ImageB
     repeat: 'none',
     back: 'mirror',
     shade: 0,
+    kind: 'piece',
+    link: null,
   };
+}
+
+/** A group whose pivot is at `pivot` (document pixels while it's untouched), keyed from `keyframes`. */
+export function makeGroup(id: string, name: string, layerId: string, home: Rect, pivot: Point, keyframes: readonly Keyframe[]): Piece {
+  return {
+    id,
+    name,
+    layerId,
+    src: new Surface(1, 1),
+    home: { ...home },
+    pivot: { ...pivot },
+    keyframes: keyframes.map(cloneKeyframe),
+    repeat: 'none',
+    back: 'mirror',
+    shade: 0,
+    kind: 'group',
+    link: null,
+  };
+}
+
+export function cloneLink(l: Link | null): Link | null {
+  return l && { parent: l.parent, hinge: l.hinge && { ...l.hinge } };
 }
 
 /** The same piece (for undo snapshots: the pixels are shared, not copied). */
 export function clonePiece(p: Piece): Piece {
-  return { ...p, home: { ...p.home }, pivot: { ...p.pivot }, keyframes: p.keyframes.map(cloneKeyframe) };
+  return { ...p, home: { ...p.home }, pivot: { ...p.pivot }, keyframes: p.keyframes.map(cloneKeyframe), link: cloneLink(p.link) };
 }
 
-/** A separate copy with its own id: its pixels share tiles until either is painted on. */
+/**
+ * A separate copy with its own id: its pixels share tiles until either is painted on. Its link
+ * still names the old parent; copyPieces renames links within the copies.
+ */
 export function copyPiece(p: Piece, id: string, layerId: string): Piece {
   return { ...clonePiece(p), id, layerId, src: p.src.snapshot() };
+}
+
+/**
+ * Copies of `pieces` with new ids (from `newId`) on the layers `layerOf` gives, linked to each
+ * other as the originals were; a link to a piece that isn't copied is dropped (the copy stays where
+ * it is relative to nothing, so callers copy whole trees).
+ */
+export function copyPieces(pieces: readonly Piece[], newId: () => string, layerOf: (p: Piece) => string): Piece[] {
+  const ids = new Map(pieces.map((p) => [p.id, newId()]));
+  return pieces.map((p) => {
+    const c = copyPiece(p, ids.get(p.id)!, layerOf(p));
+    const parent = p.link && ids.get(p.link.parent);
+    c.link = parent && p.link ? { parent, hinge: p.link.hinge && { ...p.link.hinge } } : null;
+    return c;
+  });
 }
 
 export function cloneKeyframe(k: Keyframe): Keyframe {
@@ -105,55 +164,6 @@ export function pieceStateAt(p: Piece, frame: number): PieceState {
   return stateAt(p.keyframes, frame) ?? identityState(p.home.x + p.pivot.x, p.home.y + p.pivot.y);
 }
 
-/** Where the piece is at `frame`, in 3D as `space` sees it (flat pieces get an affine too). */
-export function piecePlacementAt(p: Piece, frame: number, space: Space = FLAT_SPACE): Placement {
-  return placementOf(pieceStateAt(p, frame), p.pivot, p.src.width, p.src.height, space);
-}
-
-export function pieceMatrixAt(p: Piece, frame: number): Mat {
-  return stateMatrix(pieceStateAt(p, frame), p.pivot);
-}
-
-/**
- * The piece's box at `frame` on the canvas, in document pixels: its four corners, or in 3D the
- * outline of the part in front of the camera.
- */
-export function pieceCorners(p: Piece, frame: number, space: Space = FLAT_SPACE): Point[] {
-  const { w, h } = pieceSize(p);
-  const pl = piecePlacementAt(p, frame, space);
-  if (!pl.affine) return placementOutline(pl, w, h, space);
-  return matApplyPoints(pl.affine, [
-    { x: 0, y: 0 },
-    { x: w, y: 0 },
-    { x: w, y: h },
-    { x: 0, y: h },
-  ]);
-}
-
-/**
- * Area the piece's own box covers at `frame` (rounded out to whole pixels, plus one for
- * smoothing). A repeating piece draws beyond it: see `pieceTouches`.
- */
-export function pieceBounds(p: Piece, frame: number, space: Space = FLAT_SPACE): Rect {
-  const b = boundsOfPoints(pieceCorners(p, frame, space)) ?? { x: 0, y: 0, w: 0, h: 0 };
-  const x = Math.floor(b.x) - 1;
-  const y = Math.floor(b.y) - 1;
-  return { x, y, w: Math.ceil(b.x + b.w) + 1 - x, h: Math.ceil(b.y + b.h) + 1 - y };
-}
-
-/** The piece may draw something inside r at `frame` (a repeating one reaches everywhere). */
-export function pieceTouches(p: Piece, frame: number, r: Rect, space: Space = FLAT_SPACE): boolean {
-  if (p.repeat !== 'none') return true;
-  const b = pieceBounds(p, frame, space);
-  return b.x < r.x + r.w && b.x + b.w > r.x && b.y < r.y + r.h && b.y + b.h > r.y;
-}
-
-/** A layer's pieces back to front: the furthest away first (by their middles), ties in list order. */
-export function backToFront(pieces: readonly Piece[], frame: number, space: Space = FLAT_SPACE): Piece[] {
-  const keyed = pieces.map((p, i) => ({ p, i, d: piecePlacementAt(p, frame, space).depth }));
-  if (keyed.every((k) => k.d === keyed[0]?.d)) return [...pieces];
-  return keyed.sort((a, b) => b.d - a.d || a.i - b.i).map((k) => k.p);
-}
 
 export function keyframeIndex(keys: readonly Keyframe[], frame: number): number {
   return keys.findIndex((k) => k.frame === frame);

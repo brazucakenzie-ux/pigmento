@@ -8,7 +8,8 @@ import { openPath } from '../services/files';
 import { autosaveNow } from '../services/autosave';
 import { defaultParams, shapeRegistry } from '@engine/shapes/ShapeRegistry';
 import { paintShape } from '@engine/vector/render';
-import { makePiece, piecePlacementAt, pieceStateAt } from '@engine/anim/piece';
+import { makePiece, pieceStateAt } from '@engine/anim/piece';
+import { Scene } from '@engine/anim/scene';
 import { project } from '@engine/anim/space';
 import { drawPiece } from '@engine/anim/pieceRaster';
 import { encodeAnimation } from '@engine/io/animExport';
@@ -97,7 +98,8 @@ async function motionSheet(): Promise<{ ids: string[]; w: number; h: number; png
     const base = p.keyframes[0];
     const key = (k: Partial<Keyframe>, frame: number): Keyframe => ({ ...base, ...k, frame, y: (k.y ?? 32) + r * H });
     p.keyframes = [key(row.keys[0], 0), key(row.keys[1], 8)];
-    for (let f = 0; f <= 8; f++) drawPiece(view, { x: 0, y: r * H, w: W, h: H }, p, f);
+    for (let f = 0; f <= 8; f++)
+      drawPiece(view, { x: 0, y: r * H, w: W, h: H }, p, new Scene([p], f));
   });
   const png = await engine.codecs.encode('png', W, H * rows.length, data, 100, 96);
   return { ids: rows.map((r) => r.id), w: W, h: H * rows.length, png: Array.from(png) };
@@ -260,7 +262,7 @@ export function installTestHook(): void {
     pieceHandle: (id: string, x: number, y: number) => {
       const p = engine.anim.piece(id);
       if (!p) return { x: Number.NaN, y: Number.NaN };
-      return project(piecePlacementAt(p, engine.anim.frame, engine.doc.space), { x, y }) ?? { x: Number.NaN, y: Number.NaN };
+      return project(engine.anim.scene().placement(p), { x, y }) ?? { x: Number.NaN, y: Number.NaN };
     },
   };
 }

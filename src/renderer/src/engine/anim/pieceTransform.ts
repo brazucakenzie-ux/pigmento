@@ -96,6 +96,14 @@ export function transformPieces(pieces: readonly Piece[], m: Mat): Piece[] {
   const q2: [number, number, number, number] = flips ? [ct, st, st, -ct] : [ct, st, -st, ct];
   const vec = (v: Point | null): Point | null => (v ? linear(lin, v) : null);
   return pieces.map((p) => {
+    // A linked piece is placed in its parent's pixels, so it goes wherever its parent goes.
+    if (p.link)
+      return {
+        ...p,
+        home: matApplyRect(m, p.home),
+        pivot: { ...p.pivot },
+        keyframes: p.keyframes.map(cloneKeyframe),
+      };
     let prevOld = 0;
     let prevNew = 0;
     let prev3d = { tilt: 0, turn: 0, oldTilt: 0, oldTurn: 0 };

@@ -4,6 +4,8 @@ import { LayerController, type LayerHost } from '@engine/doc/LayerController';
 import { History } from '@engine/history/History';
 import { Surface } from '@engine/raster/Surface';
 import { makePiece, setKey, type Piece } from '@engine/anim/piece';
+import { hinge } from '@engine/anim/links';
+import { Scene } from '@engine/anim/scene';
 
 function layer(name: string): RasterLayer {
   const s = new Surface(16, 16);
@@ -93,6 +95,29 @@ describe('layer operations keep pieces right', () => {
     history.undo();
     expect(doc.pieces[0].layerId).toBe(upper.id);
     expect(doc.pieces[0].keyframes.map((k) => k.opacity)).toEqual([1, 0.8]);
+  });
+
+  it('keeps hinged pieces linked when their layer is duplicated or merged down (a group fades its pieces once)', () => {
+    const lower = layer('Low');
+    const upper = layer('Up');
+    upper.opacity = 0.5;
+    const { doc, ctl } = setup([lower, upper]);
+    let n = 0;
+    const linked = hinge([piece(upper.id, 'a'), piece(upper.id, 'b')], 'b', 'a', { edge: 'e', childEdge: 'w', offset: 0, along: 1, across: 1 }, 0.5, () => `g${++n}`);
+    if (typeof linked === 'string') throw new Error(linked);
+    doc.pieces = linked.pieces;
+    const copyId = ctl.duplicate(upper.id)!;
+    const copies = doc.pieces.filter((p) => p.layerId === copyId);
+    expect(copies).toHaveLength(3);
+    const ids = new Set(copies.map((p) => p.id));
+    expect(copies.filter((p) => p.link).every((p) => ids.has(p.link!.parent))).toBe(true);
+    ctl.remove(copyId);
+    const before = new Scene(doc.pieces, 5).opacity(doc.pieces.find((p) => p.id === 'b')!);
+    expect(ctl.mergeDown(upper.id)).toBe(true);
+    const merged = doc.layers[0];
+    expect(doc.pieces.every((p) => p.layerId === merged.id)).toBe(true);
+    expect(doc.pieces.find((p) => p.id === 'b')?.link?.parent).toBe('a');
+    expect(new Scene(doc.pieces, 5).opacity(doc.pieces.find((p) => p.id === 'b')!)).toBeCloseTo(before * 0.5, 9);
   });
 
   it('refuses to merge onto a layer with pieces, and to flatten visible pieces', () => {

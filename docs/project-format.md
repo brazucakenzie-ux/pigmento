@@ -208,6 +208,24 @@ Pieces in 1.2 can be bigger than the canvas and sit anywhere, partly or wholly o
 - **`light`** (in `document.json`): `{ "angle": -30, "height": 45 }`. `angle` is where the light comes from round the picture, in degrees clockwise from straight above, and `height` runs from 0 (grazing) to 90 (from the front). It's left out while it's the default shown here.
 - **`camera`** (in `document.json`, beside `animation`): `{ "x": 640, "y": 400, "strength": 50 }`, the vanishing point in document pixels (−1,000,000 to 1,000,000) and the strength from 1 to 100 %. It's left out while the camera is the default one, in the middle of the canvas at 50 %.
 
+### Linked pieces, hinges and groups
+
+```json
+{
+  "id": "piece-7", "kind": "piece", "layerId": "layer-2",
+  "link": { "parent": "piece-3", "hinge": { "edge": "e", "childEdge": "w", "offset": 0, "along": 1, "across": 1 } },
+  "keyframes": [{ "frame": 0, "fold": 1.5708, "…": "…" }]
+}
+```
+
+- **`kind`** (on the piece): `piece` (the default) or `group`. A group is never drawn: it carries the pieces linked under it, so a box turns about its group's pivot. Its `image` is one clear pixel.
+- **`link`** (on the piece): the piece it follows, by id, on the same layer, or `null` (the default). Groups follow nothing.
+  - Without a hinge (`"hinge": null`), the piece's keyframes are relative to its parent: `x`, `y` and `depth` are a point in the parent's own pixels (depth along the parent's normal, scaled with its area), and the rest turn it in that space as they turn a free piece on the canvas.
+  - With a hinge, it hangs off the parent's `edge` (`n`, `e`, `s` or `w`: top, right, bottom, left), and only its keyframes' `fold`, `opacity` and scroll count. Edges run clockwise round a box (the top from left to right, the right edge downwards, and so on). Its own `childEdge` lies along the parent's edge, running the other way, starting `offset` parent pixels from that edge's start. `along` and `across` are parent pixels per piece pixel, along the edge and away from it (0.0001 to 10,000).
+  - Unfolded, a hinged piece lies flat outside the parent's edge. **`fold`** (on each keyframe, radians, not wrapped, 0 when left out) turns it round the edge, away from the viewer when positive, so a front face with its sides folded by π/2 makes a box going back from it with the fronts outward.
+  - A group's opacity multiplies the opacity of every piece under it; a piece's own opacity reaches only itself.
+- Links that don't hold are dropped when a file is opened (the piece then follows nothing): one to a missing piece or one on another layer, a link from a group, a hinge onto a group, a loop, and pieces past the 64th in one tree.
+
 ## Limits and safety
 - Width and height are at most 30,000 px each and 250 megapixels in total. Files may hold at most 2,000 layers, nested at most 64 deep, 200 saved selections and 256 pictures (each at most 4096 × 4096 px; bigger pictures are scaled down when chosen).
 - Each archive entry is capped at 1 GB uncompressed and the whole archive at 2 GB. PNG sizes must match the sizes recorded for them.

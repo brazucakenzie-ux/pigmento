@@ -8,6 +8,9 @@ import type { I18nKey, I18nParams } from '../../i18n';
 import { movePivot, type Easing } from './interpolate';
 import { movePivot3D } from './planeEdit';
 import { MAX_STRENGTH, MIN_STRENGTH, type Camera, type Light } from './space';
+import type { Hinge } from './frames';
+import { attach, detach, duplicateTree, hinge, movePivotLocal, moveTree, removeTree, subtree, type LinkRefusal } from './links';
+import { MAX_TREE, Scene } from './scene';
 import { MAX_PIXELS } from '../io/protocol';
 import {
   clonePiece,
@@ -24,6 +27,7 @@ import {
   pieceStateAt,
   type KeyChange,
   type Piece,
+  type PieceKind,
   type Back,
   type Repeat,
 } from './piece';
@@ -44,6 +48,11 @@ export interface PieceInfo {
   name: string;
   layerId: string;
   keys: { frame: number; easing: Easing }[];
+  kind: PieceKind;
+  /** The piece it follows (null: none). */
+  parent: string | null;
+  /** It hangs off its parent's edge. */
+  hinged: boolean;
 }
 
 export interface AnimationInfo {
@@ -88,7 +97,13 @@ export interface PieceFields {
   back: Back;
   /** Shading by the light, in percent (0 = off; not keyframed). */
   shade: number;
-  /** Tilted or turned at this frame (the Animate tool's flat handles don't apply). */
+  /** Hinged pieces: degrees folded round the edge they hang from. */
+  fold: number;
+  /** It's a group (it carries linked pieces and is never drawn). */
+  group: boolean;
+  /** What it follows: nothing, another piece's pixels, or an edge it's hinged to. */
+  link: 'none' | 'follows' | 'hinged';
+  /** Tilted or turned at this frame, or linked (the Animate tool's flat handles don't apply). */
   in3d: boolean;
   /** Easing from this frame's keyframe (or the one before it) to the next. */
   easing: Easing;
@@ -167,8 +182,8 @@ export class AnimationCommand implements Command {
  */
 export class AnimationController {
   selectedId: string | null = null;
-  /** Default names for new pieces, supplied by the UI (the engine never stores English text). */
-  namer: (n: number) => string = () => '';
+  /** Default names for new pieces and groups, supplied by the UI (the engine never stores English text). */
+  namer: (n: number, kind: PieceKind) => string = () => '';
   private drag: AnimSnapshot | null = null;
   /** Paint on piece: painting tools paint the selected piece's own pixels (view state, not undoable). */
   private paintOn = false;
@@ -185,6 +200,11 @@ export class AnimationController {
 
   get frame(): number {
     return this.doc.timeline.frame;
+  }
+
+  /** Every piece's pose at `frame` (the frame shown by default), as the picture's camera sees it. */
+  scene(frame = this.frame): Scene {
+    return new Scene(this.doc.pieces, frame, this.doc.space);
   }
 
   piece(id: string | null): Piece | null {
@@ -222,7 +242,7 @@ export class AnimationController {
       this.host.notify('info', 'notice.layerLocked');
       return false;
     }
-    if (!this.doc.isEffectivelyVisible(layer.id) || pieceStateAt(p, this.frame).opacity <= 0) {
+    if (!this.doc.isEffectivelyVisible(layer.id) || !this.scene().shows(p)) {
       this.host.notify('info', 'notice.pieceHidden');
       return false;
     }
@@ -240,7 +260,15 @@ export class AnimationController {
       current: this.fields(),
       playing: this.playing,
       cels: Object.fromEntries(this.doc.rasterLayers().flatMap((l) => (l.cels ? [[l.id, l.cels.map((c) => c.start)]] : []))),
-      pieces: this.doc.pieces.map((p) => ({ id: p.id, name: p.name, layerId: p.layerId, keys: p.keyframes.map((k) => ({ frame: k.frame, easing: k.easing })) })),
+      pieces: this.doc.pieces.map((p) => ({
+        id: p.id,
+        name: p.name,
+        layerId: p.layerId,
+        keys: p.keyframes.map((k) => ({ frame: k.frame, easing: k.easing })),
+        kind: p.kind,
+        parent: p.link?.parent ?? null,
+        hinged: !!p.link?.hinge,
+      })),
       paintOnPiece: this.paintOn,
       camera: { ...this.doc.camera },
       light: { ...this.doc.light },
@@ -268,9 +296,12 @@ export class AnimationController {
       depth: s.depth,
       tilt: s.tilt * DEG,
       turn: s.turn * DEG,
+      fold: s.fold * DEG,
+      group: p.kind === 'group',
+      link: p.link ? (p.link.hinge ? 'hinged' : 'follows') : 'none',
       back: p.back,
       shade: p.shade * 100,
-      in3d: s.tilt !== 0 || s.turn !== 0 || s.depth !== 0,
+      in3d: s.tilt !== 0 || s.turn !== 0 || s.depth !== 0 || p.link !== null,
       easing: (at ?? before).easing,
       keyed: at !== undefined,
       curved: at !== undefined && (at.in !== null || at.out !== null),
@@ -279,7 +310,7 @@ export class AnimationController {
   }
 
   /** Set the selected piece's values at the current frame (auto-key), in the options bar's units. */
-  setFields(change: Partial<Omit<PieceFields, 'keyed' | 'curved' | 'repeat' | 'back' | 'in3d' | 'shade'>>): boolean {
+  setFields(change: Partial<Omit<PieceFields, 'keyed' | 'curved' | 'repeat' | 'back' | 'in3d' | 'shade' | 'group' | 'link'>>): boolean {
     const p = this.selected;
     if (!p) return false;
     const k: KeyChange = {};
@@ -294,6 +325,7 @@ export class AnimationController {
     if (change.scrollY !== undefined) k.scrollY = clampScroll(change.scrollY);
     if (change.tilt !== undefined) k.tilt = change.tilt / DEG;
     if (change.turn !== undefined) k.turn = change.turn / DEG;
+    if (change.fold !== undefined) k.fold = change.fold / DEG;
     // Never at or past the camera.
     if (change.depth !== undefined) k.depth = Math.max(-this.doc.space.f * 0.99, Math.min(1e6, change.depth));
     if (change.easing !== undefined) k.easing = change.easing;
@@ -647,8 +679,8 @@ export class AnimationController {
   add(src: ImageBuf | Surface, home: Rect, layerId: string, label: I18nKey = 'history.animateSelection', atBottom = false): Piece | null {
     const size = src instanceof Surface ? { w: src.width, h: src.height } : src;
     if (!this.canAdd() || !this.fits(size.w, size.h)) return null;
-    const n = this.doc.pieces.length + 1;
-    const piece = makePiece(newPieceId(), this.namer(n), layerId, src, home, this.frame);
+    const n = this.doc.pieces.filter((p) => p.kind === 'piece').length + 1;
+    const piece = makePiece(newPieceId(), this.namer(n, 'piece'), layerId, src, home, this.frame);
     this.change(label, () => {
       const first = atBottom ? this.doc.pieces.findIndex((p) => p.layerId === layerId) : -1;
       if (first >= 0) this.doc.pieces.splice(first, 0, piece);
@@ -670,15 +702,92 @@ export class AnimationController {
     });
   }
 
+  /** Delete a piece with the pieces linked under it (and its group, if that's left empty). */
   remove(id: string): boolean {
-    const i = this.doc.pieces.findIndex((p) => p.id === id);
-    if (i < 0) return false;
+    if (!this.piece(id)) return false;
     const done = this.change('history.pieceDelete', () => {
-      this.doc.pieces.splice(i, 1);
+      this.doc.pieces = removeTree(this.doc.pieces, id);
       return true;
     });
-    if (this.selectedId === id) this.selectedId = null;
+    if (!this.piece(this.selectedId)) this.selectedId = null;
     return done;
+  }
+
+  /** Say why a link can't be made. */
+  private refused(why: LinkRefusal): false {
+    if (why === 'layer') this.host.notify('info', 'notice.linkLayer');
+    else if (why === 'loop') this.host.notify('info', 'notice.linkLoop');
+    else if (why === 'full') this.host.notify('info', 'notice.linkFull', { max: MAX_TREE });
+    else if (why === 'group') this.host.notify('info', 'notice.linkGroup');
+    return false;
+  }
+
+  /** `id` follows `parentId` from now on, staying where it is at this frame (one undo step). */
+  attach(id: string, parentId: string): boolean {
+    const next = attach(this.doc.pieces, id, parentId, this.frame, this.doc.space);
+    if (typeof next === 'string') return this.refused(next);
+    return this.change('history.pieceAttach', () => {
+      this.doc.pieces = next;
+      return true;
+    });
+  }
+
+  /** Hang `id` off an edge of `parentId`, folded by `fold` radians (one undo step; a group may be made to carry them). */
+  hinge(id: string, parentId: string, h: Hinge, fold: number): boolean {
+    const groups = this.doc.pieces.filter((p) => p.kind === 'group').length;
+    const next = hinge(this.doc.pieces, id, parentId, h, fold, newPieceId);
+    if (typeof next === 'string') return this.refused(next);
+    if (next.group) next.group.name = this.namer(groups + 1, 'group');
+    return this.change('history.hinge', () => {
+      this.doc.pieces = next.pieces;
+      return true;
+    });
+  }
+
+  /** `id` follows nothing any more, moving as it did (one undo step). */
+  detach(id: string): boolean {
+    const p = this.piece(id);
+    if (!p?.link) return false;
+    return this.change(p.link.hinge ? 'history.unhinge' : 'history.pieceDetach', () => {
+      this.doc.pieces = detach(this.doc.pieces, id, this.doc.space);
+      return true;
+    });
+  }
+
+  /** A copy of a piece and the pieces under it, linked as they are, then selected (one undo step). */
+  duplicate(id: string): string | null {
+    if (!this.piece(id)) return null;
+    if (this.doc.pieces.length + subtree(this.doc.pieces, id).length > MAX_PIECES) {
+      this.host.notify('error', 'notice.tooManyPieces', { max: MAX_PIECES });
+      return null;
+    }
+    const next = duplicateTree(this.doc.pieces, id, newPieceId);
+    if (!next) {
+      this.host.notify('info', 'notice.linkFull', { max: MAX_TREE });
+      return null;
+    }
+    const done = this.change('history.pieceDuplicate', () => {
+      this.doc.pieces = next.pieces;
+      return true;
+    });
+    if (!done) return null;
+    this.select(next.copy.id);
+    return next.copy.id;
+  }
+
+  /** Move the whole tree a piece is in onto another pixel layer (one undo step). */
+  moveToLayer(id: string, layerId: string): boolean {
+    const p = this.piece(id);
+    const layer = this.doc.layerById(layerId);
+    if (!p || layer?.kind !== 'raster' || p.layerId === layerId) return false;
+    if (layer.locked) {
+      this.host.notify('info', 'notice.layerLocked');
+      return false;
+    }
+    return this.change('history.pieceMoveLayer', () => {
+      this.doc.pieces = moveTree(this.doc.pieces, id, layerId);
+      return true;
+    });
   }
 
   /** Set values at `frame` (adding a keyframe there if there isn't one). */
@@ -733,9 +842,11 @@ export class AnimationController {
     const p = this.piece(id);
     if (!p || (pivot.x === p.pivot.x && pivot.y === p.pivot.y)) return false;
     return this.change('history.pivot', () => {
-      // In 3D the piece stays put too (a flat piece's keyframes come out as movePivot's).
+      // In 3D the piece stays put too (a flat piece's keyframes come out as movePivot's). A piece
+      // following another is placed in that piece's pixels; a hinged one by its hinge alone.
       const in3d = p.keyframes.some((k) => k.depth !== 0 || k.tilt !== 0 || k.turn !== 0);
-      p.keyframes = in3d ? movePivot3D(p.keyframes, p.pivot, pivot, this.doc.space) : movePivot(p.keyframes, p.pivot, pivot);
+      if (p.link && !p.link.hinge) p.keyframes = movePivotLocal(p.keyframes, p.pivot, pivot);
+      else if (!p.link) p.keyframes = in3d ? movePivot3D(p.keyframes, p.pivot, pivot, this.doc.space) : movePivot(p.keyframes, p.pivot, pivot);
       p.pivot = { ...pivot };
       return true;
     });

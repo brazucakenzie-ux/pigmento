@@ -1,8 +1,8 @@
 import type { Point } from '../../core/geometry';
-import { walkLayers } from '../../doc/Document';
 import { handleCursor, ROTATE_HANDLE_OFFSET } from '../../live/BoxGeom';
 import { movePivot, type Keyframe, type PieceState } from '../../anim/interpolate';
-import { cloneKeyframe, pieceCorners, pieceStateAt, setKey, type Piece } from '../../anim/piece';
+import { cloneKeyframe, pieceStateAt, setKey, type Piece } from '../../anim/piece';
+import { piecesInDrawOrder } from '../../anim/pieceRaster';
 import {
   docToLocal,
   handleLocal,
@@ -59,12 +59,7 @@ const PIVOT_SNAP_PX = 8;
 
 /** Pieces in drawing order (bottom to top) on layers that are showing. */
 function visiblePieces(ctx: ToolContext): Piece[] {
-  const out: Piece[] = [];
-  for (const layer of walkLayers(ctx.doc.layers)) {
-    if (layer.kind !== 'raster' || !ctx.doc.isEffectivelyVisible(layer.id)) continue;
-    for (const p of ctx.doc.pieces) if (p.layerId === layer.id) out.push(p);
-  }
-  return out;
+  return piecesInDrawOrder(ctx.doc, ctx.anim.scene());
 }
 
 interface ScreenGeom {
@@ -103,14 +98,15 @@ const near = (a: Point, b: Point, px = HIT_PX): boolean => Math.abs(a.x - b.x) <
 /** The piece has depth, tilt or turn at the frame shown. */
 function in3d(ctx: ToolContext, p: Piece): boolean {
   const s = pieceStateAt(p, ctx.anim.frame);
-  return s.depth !== 0 || s.tilt !== 0 || s.turn !== 0;
+  return s.depth !== 0 || s.tilt !== 0 || s.turn !== 0 || p.link !== null;
 }
 
 function hitSelected(ctx: ToolContext, p: Piece, e: ToolPointerEvent): Hit | null {
   const g = geometry(ctx, p);
   const sp = { x: e.sx, y: e.sy };
   const frame = ctx.anim.frame;
-  const keys = p.keyframes.length > 1 ? p.keyframes : [];
+  // A linked piece's keyframes are relative to what it follows, so its path isn't on the canvas.
+  const keys = p.keyframes.length > 1 && !p.link ? p.keyframes : [];
   const dot = (k: Keyframe) => ctx.view.toScreen(k.x, k.y);
   // Bend handles first: they sit off the path, where nothing else is.
   for (const k of keys) {
@@ -127,7 +123,7 @@ function hitSelected(ctx: ToolContext, p: Piece, e: ToolPointerEvent): Hit | nul
     if (near(sp, g.rotate)) return { kind: 'rotate' };
   }
   for (const k of keys) if (k.frame !== frame && near(sp, dot(k))) return { kind: 'key', frame: k.frame };
-  if (insidePiece(p, frame, e, ctx.doc.space)) return { kind: 'body' };
+  if (insidePiece(p, ctx.anim.scene(), e)) return { kind: 'body' };
   return null;
 }
 
@@ -145,7 +141,7 @@ function stateChange(s: PieceState): Partial<PieceState> {
 }
 
 function drawPath(ctx: ToolContext, ov: Overlay, p: Piece): void {
-  if (p.keyframes.length < 2) return;
+  if (p.keyframes.length < 2 || p.link) return;
   const first = p.keyframes[0].frame;
   const last = p.keyframes[p.keyframes.length - 1].frame;
   const pts: Point[] = [];
@@ -191,7 +187,7 @@ export default registerTool({
     let hit = piece ? hitSelected(ctx, piece, e) : null;
     // A repeating piece's copies reach everywhere: a piece showing on top of them is picked instead.
     if (piece && hit?.kind === 'body' && piece.repeat !== 'none') {
-      const top = pieceAt(visiblePieces(ctx), ctx.anim.frame, e, ctx.doc.space);
+      const top = pieceAt(visiblePieces(ctx), ctx.anim.scene(), e);
       if (top && top.id !== piece.id) hit = null;
     }
     // Double-click a keyframe's dot: a straight path there again.
@@ -200,7 +196,7 @@ export default registerTool({
       if (ctx.anim.straighten(piece.id, frame)) return;
     }
     if (!hit) {
-      piece = pieceAt(visiblePieces(ctx), ctx.anim.frame, e, ctx.doc.space);
+      piece = pieceAt(visiblePieces(ctx), ctx.anim.scene(), e);
       ctx.anim.select(piece?.id ?? null);
       if (!piece) return;
       hit = { kind: 'body' };
@@ -294,7 +290,7 @@ export default registerTool({
   hover(ctx, e) {
     const sel = ctx.anim.selected;
     const hit = sel ? hitSelected(ctx, sel, e) : null;
-    const over = hit ? null : pieceAt(visiblePieces(ctx), ctx.anim.frame, e, ctx.doc.space);
+    const over = hit ? null : pieceAt(visiblePieces(ctx), ctx.anim.scene(), e);
     const id = over?.id ?? null;
     if (id !== hovered) {
       hovered = id;
@@ -332,7 +328,7 @@ export default registerTool({
   drawOverlay(ctx, ov) {
     const sel = ctx.anim.selected;
     // The outline as it's drawn (in 3D, the sheet seen in perspective).
-    const outline = (p: Piece) => pieceCorners(p, ctx.anim.frame, ctx.doc.space).map((q) => ctx.view.toScreen(q.x, q.y));
+    const outline = (p: Piece) => ctx.anim.scene().corners(p).map((q) => ctx.view.toScreen(q.x, q.y));
     for (const p of visiblePieces(ctx)) {
       if (p === sel) continue;
       // Unselected pieces show a faint outline, so they can be found and clicked.

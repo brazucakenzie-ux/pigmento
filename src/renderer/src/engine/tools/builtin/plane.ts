@@ -1,8 +1,8 @@
 import type { Point } from '../../core/geometry';
-import { walkLayers } from '../../doc/Document';
 import { ROTATE_HANDLE_OFFSET } from '../../live/BoxGeom';
 import type { Keyframe, PieceState } from '../../anim/interpolate';
-import { cloneKeyframe, pieceCorners, pieceStateAt, setKey, type Piece } from '../../anim/piece';
+import { cloneKeyframe, pieceStateAt, setKey, type Piece } from '../../anim/piece';
+import { piecesInDrawOrder } from '../../anim/pieceRaster';
 import { insidePiece, moveState, pieceAt, rotateState } from '../../anim/pieceEdit';
 import { depthDrag, movePivot3D, resizeDrag, tiltDrag, turnDrag } from '../../anim/planeEdit';
 import { placementOf, project, unproject } from '../../anim/space';
@@ -51,12 +51,7 @@ function vanishing(ctx: ToolContext): Point {
 const HIT_PX = 7;
 
 function visiblePieces(ctx: ToolContext): Piece[] {
-  const out: Piece[] = [];
-  for (const layer of walkLayers(ctx.doc.layers)) {
-    if (layer.kind !== 'raster' || !ctx.doc.isEffectivelyVisible(layer.id)) continue;
-    for (const p of ctx.doc.pieces) if (p.layerId === layer.id) out.push(p);
-  }
-  return out;
+  return piecesInDrawOrder(ctx.doc, ctx.anim.scene());
 }
 
 interface ScreenGeom {
@@ -70,9 +65,9 @@ interface ScreenGeom {
 
 /** Where the piece's handles show on screen at the frame shown (handles behind the camera are left out). */
 function geometry(ctx: ToolContext, p: Piece): ScreenGeom {
-  const s = pieceStateAt(p, ctx.anim.frame);
+  const scene = ctx.anim.scene();
   const { width: w, height: h } = p.src;
-  const pl = placementOf(s, p.pivot, w, h, ctx.doc.space);
+  const pl = scene.placement(p);
   const at = (q: Point): Point | null => {
     const d = project(pl, q);
     return d && ctx.view.toScreen(d.x, d.y);
@@ -98,7 +93,7 @@ function geometry(ctx: ToolContext, p: Piece): ScreenGeom {
     const len = Math.hypot(top.x - mid.x, top.y - mid.y) || 1;
     spin = { x: top.x + ((top.x - mid.x) / len) * ROTATE_HANDLE_OFFSET, y: top.y + ((top.y - mid.y) / len) * ROTATE_HANDLE_OFFSET };
   }
-  const outline = pieceCorners(p, ctx.anim.frame, ctx.doc.space).map((q) => ctx.view.toScreen(q.x, q.y));
+  const outline = scene.corners(p).map((q) => ctx.view.toScreen(q.x, q.y));
   return { corners, edges, spin, top, pivot: at(p.pivot), outline };
 }
 
@@ -111,7 +106,7 @@ function hitSelected(ctx: ToolContext, p: Piece, e: ToolPointerEvent): Hit | nul
   if (g.pivot && near(sp, g.pivot)) return { kind: 'pivot' };
   for (const c of g.corners) if (near(sp, c.at)) return { kind: 'corner', corner: c.local };
   for (const edge of g.edges) if (near(sp, edge.at)) return edge.hit;
-  if (insidePiece(p, ctx.anim.frame, e, ctx.doc.space)) return { kind: 'body' };
+  if (insidePiece(p, ctx.anim.scene(), e)) return { kind: 'body' };
   return null;
 }
 
@@ -166,11 +161,11 @@ export default registerTool({
     let hit = piece ? hitSelected(ctx, piece, e) : null;
     // A repeating piece's copies reach everywhere: a piece showing on top of them is picked instead.
     if (piece && hit?.kind === 'body' && piece.repeat !== 'none') {
-      const top = pieceAt(visiblePieces(ctx), ctx.anim.frame, e, ctx.doc.space);
+      const top = pieceAt(visiblePieces(ctx), ctx.anim.scene(), e);
       if (top && top.id !== piece.id) hit = null;
     }
     if (!hit) {
-      piece = pieceAt(visiblePieces(ctx), ctx.anim.frame, e, ctx.doc.space);
+      piece = pieceAt(visiblePieces(ctx), ctx.anim.scene(), e);
       ctx.anim.select(piece?.id ?? null);
       if (!piece) return;
       hit = { kind: 'body' };
@@ -255,7 +250,7 @@ export default registerTool({
     }
     const sel = ctx.anim.selected;
     const hit = sel ? hitSelected(ctx, sel, e) : null;
-    const over = hit ? null : pieceAt(visiblePieces(ctx), ctx.anim.frame, e, ctx.doc.space);
+    const over = hit ? null : pieceAt(visiblePieces(ctx), ctx.anim.scene(), e);
     const id = over?.id ?? null;
     if (id !== hovered) {
       hovered = id;

@@ -7,7 +7,7 @@ import type { DabOp } from '../brush/retouch';
 import { stabilize, symmetryAxes, symmetryCenter, symmetryCopies } from '../brush/symmetry';
 import type { BrushSettings } from '../brush/types';
 import { RasterLayer } from '../doc/Document';
-import { pieceStateAt, type Piece } from '../anim/piece';
+import type { Piece } from '../anim/piece';
 import { piecePaintMap, type PiecePaintMap } from '../anim/piecePaint';
 import { applyImage, type MaskView, type PixelView } from '../raster/pixels';
 import { Surface } from '../raster/Surface';
@@ -88,7 +88,7 @@ export function brushOptionsFor(def: BrushDef): ToolOptions {
  */
 export function drawBrushCursor(ctx: ToolContext, ov: Overlay, hover: Point, settings: BrushSettings, size: number): void {
   const piece = ctx.anim.paintTarget;
-  const map = piece ? piecePaintMap(piece, pieceStateAt(piece, ctx.anim.frame), ctx.doc.space, hover) : null;
+  const map = piece ? piecePaintMap(piece, ctx.anim.scene(), hover) : null;
   const c = map?.toPiece(hover);
   if (map && c) {
     const s = forPiece({ settings, size, opacity: 1, pressure: false, smoothing: 0 }, map);
@@ -350,7 +350,7 @@ export function createBrushTool(cfg: BrushToolConfig): Tool {
       if (piece) {
         if (!ctx.anim.canPaint(piece)) return;
         // Nothing is painted where the sheet is seen edge-on, or where the pointer isn't on its plane.
-        map = piecePaintMap(piece, pieceStateAt(piece, ctx.anim.frame), doc.space, { x: e.x, y: e.y });
+        map = piecePaintMap(piece, ctx.anim.scene(), { x: e.x, y: e.y });
         if (!map || !map.toPiece({ x: e.x, y: e.y })) return;
         // Stands in for a layer, so strokes and retouching read and write the piece's pixels.
         layer = new RasterLayer('', piece.src);

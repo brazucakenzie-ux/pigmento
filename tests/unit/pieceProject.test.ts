@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { identityState, type PieceState } from '@engine/anim/interpolate';
-import { makePiece, pieceBounds, setKey, type Piece } from '@engine/anim/piece';
+import { makePiece, setKey, type Piece } from '@engine/anim/piece';
+import { pieceBounds, Scene } from '@engine/anim/scene';
 import { sampleProjective } from '@engine/anim/pieceProject';
 import { drawPiece } from '@engine/anim/pieceRaster';
 import { piecePaintMap } from '@engine/anim/piecePaint';
@@ -79,7 +80,7 @@ describe('the CPU path for pieces in 3D', () => {
     // Flat on the ground, its pivot below the vanishing point.
     p.keyframes = setKey(p.keyframes, 0, { y: 260, tilt: Math.PI / 2 });
     const view = { data: new Uint8ClampedArray(400 * 300 * 4), stride: 400, ox: 0, oy: 0 };
-    drawPiece(view, { x: 0, y: 0, w: 400, h: 300 }, p, 0, space);
+    drawPiece(view, { x: 0, y: 0, w: 400, h: 300 }, p, new Scene([p], 0, space));
     const a = (x: number, y: number) => view.data[(y * 400 + x) * 4 + 3];
     // Above the horizon (the vanishing point's height) there's nothing; below it, floor all the way across.
     expect(a(200, 100)).toBe(0);
@@ -92,7 +93,7 @@ describe('the CPU path for pieces in 3D', () => {
     p.keyframes = setKey(p.keyframes, 0, { turn: Math.PI - 0.2 });
     const draw = () => {
       const view = { data: new Uint8ClampedArray(400 * 300 * 4), stride: 400, ox: 0, oy: 0 };
-      drawPiece(view, { x: 0, y: 0, w: 400, h: 300 }, p, 0, space);
+      drawPiece(view, { x: 0, y: 0, w: 400, h: 300 }, p, new Scene([p], 0, space));
       return view.data[(150 * 400 + 200) * 4 + 3];
     };
     expect(draw()).toBe(255);
@@ -104,8 +105,7 @@ describe('the CPU path for pieces in 3D', () => {
   it('paints a tilted piece under the pointer, and not where it is seen edge-on', () => {
     const p = makePiece('p', '', 'l', gradient(100, 60), { x: 150, y: 120, w: 100, h: 60 }, 0);
     p.keyframes = setKey(p.keyframes, 0, { tilt: 0.9 });
-    const s = p.keyframes[0];
-    const map = piecePaintMap(p, s, space, { x: 200, y: 150 })!;
+    const map = piecePaintMap(p, new Scene([p], 0, space), { x: 200, y: 150 })!;
     const q = map.toPiece({ x: 200, y: 150 })!;
     expect(q.x).toBeCloseTo(50, 6);
     expect(q.y).toBeCloseTo(30, 6);
@@ -114,7 +114,8 @@ describe('the CPU path for pieces in 3D', () => {
     expect(back.y).toBeCloseTo(140, 6);
     // Tilted back, the sheet is squeezed up and down: a brush covers more of it than it is wide.
     expect(map.scale).toBeLessThan(1);
-    expect(piecePaintMap(p, { ...s, tilt: Math.PI / 2 }, space, { x: 200, y: 150 })).toBeNull();
+    p.keyframes = setKey(p.keyframes, 0, { tilt: Math.PI / 2 });
+    expect(piecePaintMap(p, new Scene([p], 0, space), { x: 200, y: 150 })).toBeNull();
   });
 
   it('draws a 4000 × 3000 piece tilted to fill the picture in good time', () => {

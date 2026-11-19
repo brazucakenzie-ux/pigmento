@@ -66,17 +66,19 @@ export interface Placement {
 }
 
 /** Closest a point may come to the camera and still be drawn, as a share of the focal length. */
-const NEAR = 0.01;
+export const NEAR = 0.01;
 
-/** Tilt (round the horizontal axis) then turn (round the upright): columns of the rotation. */
-function rotation(tilt: number, turn: number): { c0: [number, number, number]; c1: [number, number, number] } {
+export type Vec3 = [number, number, number];
+
+/** Tilt (round the horizontal axis) then turn (round the upright): columns of the rotation (c2 is the sheet's normal). */
+export function rotation(tilt: number, turn: number): { c0: Vec3; c1: Vec3; c2: Vec3 } {
   const ct = Math.cos(tilt);
   const st = Math.sin(tilt);
   const cr = Math.cos(turn);
   const sr = Math.sin(turn);
   // R = Ry(turn) · Rx(tilt), with Rx: y' = ct·y + st·z, z' = −st·y + ct·z (the top, y < 0, goes back)
   // and Ry: x' = cr·x − sr·z, z' = sr·x + cr·z (the right edge goes back).
-  return { c0: [cr, 0, sr], c1: [sr * st, ct, -cr * st] };
+  return { c0: [cr, 0, sr], c1: [sr * st, ct, -cr * st], c2: [-sr * ct, st, cr * ct] };
 }
 
 /** Where `s` puts a w × h piece turning about `pivot` (its own pixels), seen by `space`. */
@@ -169,10 +171,18 @@ function lightVector(l: Light): [number, number, number] {
  */
 export function shadeOf(s: PieceState, front: boolean, light: Light, strength: number): number {
   if (strength <= 0 || (s.tilt === 0 && s.turn === 0)) return 1;
-  const { c0, c1 } = rotation(s.tilt, s.turn);
-  // The normal of the side the camera sees (c0 × c1 points away from it while the front faces it).
+  return shadeFor(rotation(s.tilt, s.turn).c2, front, light, strength);
+}
+
+/**
+ * The same for a sheet whose front's normal (a unit vector pointing away from the camera while
+ * the front faces it) is `normal`.
+ */
+export function shadeFor(normal: Vec3, front: boolean, light: Light, strength: number): number {
+  if (strength <= 0) return 1;
+  // The normal of the side the camera sees.
   const k = front ? -1 : 1;
-  const n = [k * (c0[1] * c1[2] - c0[2] * c1[1]), k * (c0[2] * c1[0] - c0[0] * c1[2]), k * (c0[0] * c1[1] - c0[1] * c1[0])];
+  const n = [k * normal[0], k * normal[1], k * normal[2]];
   const L = lightVector(light);
   const lit = Math.max(0, n[0] * L[0] + n[1] * L[1] + n[2] * L[2]);
   // Facing the camera square on counts as fully lit.

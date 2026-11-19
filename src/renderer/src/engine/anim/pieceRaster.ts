@@ -1,21 +1,38 @@
 import { rectIntersect, type Rect } from '../core/geometry';
-import type { Layer, PaintDocument } from '../doc/Document';
+import { walkLayers, type Layer, type PaintDocument } from '../doc/Document';
 import type { LayerExtras } from '../raster/blend';
 import { applyImage, type PixelView } from '../raster/pixels';
 import type { PieceState } from './interpolate';
 import { sampleAffine, type Tiling } from './pieceSample';
 import { sampleProjective } from './pieceProject';
-import { backToFront, pieceBounds, pieceStateAt, pieceTouches, repeatAxes, type Piece } from './piece';
-import { defaultLight, FLAT_SPACE, placementOf, shadeOf, type Light, type Space } from './space';
+import { repeatAxes, type Piece } from './piece';
+import { Scene } from './scene';
+import { defaultLight, type Light } from './space';
 import { celAt } from './cels';
 
-/** Pieces grouped by the layer they belong to, bottom to top. */
+/** The pieces of pixels (not groups, which are never drawn) by the layer they belong to, bottom to top. */
 export function piecesByLayer(pieces: readonly Piece[]): Map<string, Piece[]> {
   const out = new Map<string, Piece[]>();
   for (const p of pieces) {
+    if (p.kind === 'group') continue;
     const list = out.get(p.layerId);
     if (list) list.push(p);
     else out.set(p.layerId, [p]);
+  }
+  return out;
+}
+
+/**
+ * The pieces of pixels on layers that are showing, in the order they're drawn (bottom to top):
+ * layer by layer, and each layer's back to front as `scene` has them.
+ */
+export function piecesInDrawOrder(doc: PaintDocument, scene: Scene): Piece[] {
+  const byLayer = piecesByLayer(doc.pieces);
+  const out: Piece[] = [];
+  for (const layer of walkLayers(doc.layers)) {
+    const list = byLayer.get(layer.id);
+    if (list && layer.kind === 'raster' && doc.isEffectivelyVisible(layer.id))
+      out.push(...scene.backToFront(list));
   }
   return out;
 }
@@ -27,25 +44,23 @@ export function pieceTiling(p: Piece, s: PieceState): Tiling | null {
 }
 
 /**
- * Draw one piece as it is at `frame` into view, inside r (bilinear, premultiplied, like the
+ * Draw one piece as `scene` has it into view, inside r (bilinear, premultiplied, like the
  * screen): flat ones through their affine, ones in 3D through their homography (see pieceProject).
  */
-export function drawPiece(view: PixelView, r: Rect, p: Piece, frame: number, space: Space = FLAT_SPACE, light: Light = defaultLight()): void {
-  const s = pieceStateAt(p, frame);
-  if (s.opacity <= 0) return;
-  const pl = placementOf(s, p.pivot, p.src.width, p.src.height, space);
-  if (!pl.front && p.back === 'hide') return;
+export function drawPiece(view: PixelView, r: Rect, p: Piece, scene: Scene, light: Light = defaultLight()): void {
+  if (!scene.shows(p)) return;
+  const { state: s, placement: pl, opacity } = scene.pose(p);
   const tiling = pieceTiling(p, s);
   let img;
   if (pl.affine) {
-    const area = tiling ? r : rectIntersect(pieceBounds(p, frame, space), r);
+    const area = tiling ? r : rectIntersect(scene.bounds(p), r);
     if (!area) return;
     img = sampleAffine(p.src, pl.affine, area, tiling);
   } else {
-    img = sampleProjective(p.src, pl, r, tiling, tiling ? null : pieceBounds(p, frame, space), shadeOf(s, pl.front, light, p.shade));
+    img = sampleProjective(p.src, pl, r, tiling, tiling ? null : scene.bounds(p), scene.shade(p, light));
   }
   if (img.w === 0 || img.h === 0) return;
-  applyImage(view, { x: img.x, y: img.y, w: img.w, h: img.h }, { data: img.data, stride: img.w, ox: img.x, oy: img.y }, 'over', s.opacity);
+  applyImage(view, { x: img.x, y: img.y, w: img.w, h: img.h }, { data: img.data, stride: img.w, ox: img.x, oy: img.y }, 'over', opacity);
 }
 
 /**
@@ -56,14 +71,14 @@ export function drawPiece(view: PixelView, r: Rect, p: Piece, frame: number, spa
 export function frameExtras(doc: PaintDocument, frame: number): LayerExtras | undefined {
   const cels = doc.hasCels;
   if (!doc.pieces.length && !cels) return undefined;
-  const space = doc.space;
+  const scene = new Scene(doc.pieces, frame, doc.space);
   const byLayer = piecesByLayer(doc.pieces);
   const visibleIn = (layer: Layer, r: Rect): Piece[] =>
-    (byLayer.get(layer.id) ?? []).filter((p) => pieceStateAt(p, frame).opacity > 0 && pieceTouches(p, frame, r, space));
+    (byLayer.get(layer.id) ?? []).filter((p) => scene.shows(p) && scene.touches(p, r));
   return {
     covers: (layer, r) => layer.kind === 'raster' && visibleIn(layer, r).length > 0,
     draw: (layer, r, view) => {
-      for (const p of backToFront(visibleIn(layer, r), frame, space)) drawPiece(view, r, p, frame, space, doc.light);
+      for (const p of scene.backToFront(visibleIn(layer, r))) drawPiece(view, r, p, scene, doc.light);
     },
     surfaceOf: cels ? (layer) => (layer.cels ? celAt(layer.cels, frame).surface : null) : undefined,
   };

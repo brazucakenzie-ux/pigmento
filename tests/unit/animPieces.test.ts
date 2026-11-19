@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { PaintDocument } from '@engine/doc/Document';
 import { History } from '@engine/history/History';
 import { AnimationController, type AnimHost } from '@engine/anim/AnimationController';
-import { makePiece, moveKey, pieceBounds, pieceStateAt, removeKey, setKey } from '@engine/anim/piece';
+import { makePiece, moveKey, pieceStateAt, removeKey, setKey } from '@engine/anim/piece';
+import { pieceBounds } from '@engine/anim/scene';
 import type { ImageBuf } from '@engine/raster/transform';
 
 const img = (w: number, h: number): ImageBuf => ({ w, h, data: new Uint8ClampedArray(w * h * 4).fill(255) });

@@ -16,7 +16,8 @@ import type { CommandHost } from '../history/commands';
 import { LayerPropsCommand, LayerTreeCommand } from '../history/layerCommands';
 import type { I18nKey } from '../../i18n';
 import { cloneNode } from '../vector/model';
-import { copyPiece, newPieceId } from '../anim/piece';
+import { copyPieces, newPieceId } from '../anim/piece';
+import { underGroup } from '../anim/links';
 
 export interface LayerNode {
   id: string;
@@ -196,8 +197,8 @@ export class LayerController {
       // The copy gets copies of the layer's animated pieces.
       const ids = new Map<string, string>();
       pairLayers(src, copy, ids);
-      const pieces = this.doc.pieces.filter((p) => ids.has(p.layerId)).map((p) => copyPiece(p, newPieceId(), ids.get(p.layerId)!));
-      this.doc.pieces.push(...pieces);
+      // Trees are on one layer, so each copies whole, linked as it was.
+      this.doc.pieces.push(...copyPieces(this.doc.pieces.filter((p) => ids.has(p.layerId)), newPieceId, (p) => ids.get(p.layerId)!));
     });
     return copy.id;
   }
@@ -346,13 +347,16 @@ export class LayerController {
     const done = this.edit('history.mergeDown', () => {
       slot.list.splice(slot.index - 1, 2, merged);
       this.doc.activeId = merged.id;
-      this.doc.pieces = this.doc.pieces.flatMap((p) => {
+      const all = this.doc.pieces;
+      this.doc.pieces = all.flatMap((p) => {
         if (!upperIds.has(p.layerId)) return [p];
         const c = carried.get(p.layerId);
         // Pieces of hidden layers go, as their layers' pixels do.
         if (!c) return [];
         if (c.blended) lostBlend = true;
-        return [{ ...p, layerId: merged.id, keyframes: p.keyframes.map((k) => ({ ...k, opacity: k.opacity * c.opacity })) }];
+        // A group's opacity already reaches the pieces under it.
+        const fade = underGroup(all, p) ? 1 : c.opacity;
+        return [{ ...p, layerId: merged.id, keyframes: p.keyframes.map((k) => ({ ...k, opacity: k.opacity * fade })) }];
       });
     });
     if (done && lostBlend) this.host.notify('info', 'notice.mergePiecesBlend');
