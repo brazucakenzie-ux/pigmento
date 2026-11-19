@@ -11,10 +11,10 @@ import { matChain, matTranslate } from '../core/matrix';
 import type { Placement } from '../anim/space';
 import { Scene } from '../anim/scene';
 import { pieceTiling } from '../anim/pieceRaster';
-import { sampleProjective } from '../anim/pieceProject';
+import { sampleProjective, sampleProjectiveBatch } from '../anim/pieceProject';
 import type { Tiling } from '../anim/pieceSample';
 import { PlaneRenderer } from './PlaneRenderer';
-import { piecesByLayer } from '../anim/pieceRaster';
+import { drawRuns, hingedIds, piecesByLayer, runSheets } from '../anim/pieceRaster';
 import { celAt, celIndexAt } from '../anim/cels';
 
 /** Onion-skin tints: drawings before the one shown, and after it. */
@@ -282,8 +282,13 @@ export class Renderer {
     area: Rect = r ?? { x: 0, y: 0, w: this.doc.width, h: this.doc.height },
   ): void {
     const scene = new Scene(this.doc.pieces, frame, this.doc.space);
-    for (const p of scene.backToFront(pieces)) {
-      if (!scene.shows(p) || (r && !scene.touches(p, r))) continue;
+    const order = scene.backToFront(pieces).filter((p) => scene.shows(p) && (!r || scene.touches(p, r)));
+    for (const run of drawRuns(order, hingedIds(this.doc.pieces))) {
+      if (run.length > 1) {
+        this.drawJoined(ctx, run, scene, area, alpha);
+        continue;
+      }
+      const p = run[0];
       const { state: st, placement: pl, opacity } = scene.pose(p);
       ctx.save();
       ctx.globalAlpha = opacity * alpha;
@@ -315,6 +320,29 @@ export class Renderer {
       }
       ctx.restore();
     }
+  }
+
+  /**
+   * Hinged faces next to each other in drawing order, drawn as one picture (on the GPU, or by the
+   * CPU path if it can't), so their seams are as solid as the faces.
+   */
+  private drawJoined(ctx: Ctx2D | CanvasRenderingContext2D, run: readonly Piece[], scene: Scene, area: Rect, alpha: number): void {
+    const sheets = runSheets(run, scene, this.doc.light);
+    let where: Rect | null = null;
+    for (const s of sheets) where = rectUnion(where, s.bounds);
+    where = where && rectIntersect(area, where);
+    if (!where) return;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    if (!this.planes.drawBatch(ctx, sheets, where)) {
+      const img = sampleProjectiveBatch(sheets, where);
+      if (img.w > 0 && img.h > 0) {
+        const c = new OffscreenCanvas(img.w, img.h);
+        ctx2d(c).putImageData(new ImageData(img.data as Uint8ClampedArray<ArrayBuffer>, img.w, img.h), 0, 0);
+        ctx.drawImage(c, img.x, img.y);
+      }
+    }
+    ctx.restore();
   }
 
   /** A piece in 3D drawn by the CPU path when the GPU can't (no WebGL2, or the GPU reset). */

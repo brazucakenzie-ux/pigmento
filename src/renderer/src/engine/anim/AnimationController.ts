@@ -692,6 +692,24 @@ export class AnimationController {
     return this.piece(piece.id);
   }
 
+  /**
+   * Add a tree of linked pieces made elsewhere (a box), on top of their layer's pieces, as one
+   * undo step; its first piece of pixels is selected. False (and says why) if they don't fit.
+   */
+  addTree(pieces: readonly Piece[], label: I18nKey): boolean {
+    if (this.doc.pieces.length + pieces.length > MAX_PIECES) {
+      this.host.notify('error', 'notice.tooManyPieces', { max: MAX_PIECES });
+      return false;
+    }
+    const done = this.change(label, () => {
+      this.doc.pieces.push(...pieces.map(clonePiece));
+      return true;
+    });
+    const first = pieces.find((p) => p.kind === 'piece');
+    if (done && first) this.select(first.id);
+    return done;
+  }
+
   rename(id: string, name: string): boolean {
     const p = this.piece(id);
     const next = name.trim().slice(0, 200);

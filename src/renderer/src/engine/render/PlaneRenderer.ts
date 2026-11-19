@@ -34,6 +34,34 @@ void main() {
   outColor = vec4(c.rgb * uShade, c.a);
 }`;
 
+/**
+ * Sheets drawn together (faces of a box): each corner comes in already projected, in device
+ * pixels times its distance, so faces meeting at a hinge share exactly the same corners and the
+ * GPU leaves no gap or overlap along it.
+ */
+const BATCH_VS = `#version 300 es
+in vec2 aQ;
+in vec3 aP;
+uniform vec4 uView;
+out vec2 vQ;
+void main() {
+  gl_Position = vec4(2.0 * (aP.x - uView.x * aP.z) / uView.z - aP.z, aP.z - 2.0 * (aP.y - uView.y * aP.z) / uView.w, 0.0, aP.z);
+  vQ = aQ;
+}`;
+
+const BATCH_FS = `#version 300 es
+precision highp float;
+in vec2 vQ;
+uniform sampler2D uTex;
+uniform vec2 uSize;
+uniform float uShade;
+uniform float uOpacity;
+out vec4 outColor;
+void main() {
+  vec4 c = texture(uTex, vQ / uSize);
+  outColor = vec4(c.rgb * uShade, c.a) * uOpacity;
+}`;
+
 /** A repeating plane: every pixel of the chunk finds its piece point through the inverse homography. */
 const PLANE_VS = `#version 300 es
 in vec2 aQ;
@@ -75,6 +103,14 @@ interface Program {
   loc: Record<string, WebGLUniformLocation | null>;
 }
 
+/** One sheet of a batch (see drawBatch). */
+export interface GpuSheet {
+  src: Surface;
+  pl: Placement;
+  shade: number;
+  opacity: number;
+}
+
 interface Texture {
   tex: WebGLTexture;
   tiles: (Tile | null)[];
@@ -111,7 +147,9 @@ export class PlaneRenderer {
   private gl: WebGL2RenderingContext | null = null;
   private sheet: Program | null = null;
   private plane: Program | null = null;
+  private batch: Program | null = null;
   private quad: WebGLBuffer | null = null;
+  private batchBuffer: WebGLBuffer | null = null;
   private screenQuad: WebGLBuffer | null = null;
   private textures = new Map<Surface, Texture>();
   private lost = false;
@@ -149,7 +187,9 @@ export class PlaneRenderer {
       this.gl = gl;
       this.sheet = this.program(gl, SHEET_VS, SHEET_FS, ['uH', 'uView', 'uTex', 'uSize', 'uShade']);
       this.plane = this.program(gl, PLANE_VS, PLANE_FS, ['uInv', 'uView', 'uTex', 'uSize', 'uScroll', 'uWrap', 'uShade']);
+      this.batch = this.program(gl, BATCH_VS, BATCH_FS, ['uView', 'uTex', 'uSize', 'uShade', 'uOpacity']);
       this.quad = gl.createBuffer();
+      this.batchBuffer = gl.createBuffer();
       this.screenQuad = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, this.screenQuad);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
@@ -177,6 +217,7 @@ export class PlaneRenderer {
     gl.attachShader(prog, compile(gl.VERTEX_SHADER, vs));
     gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fs));
     gl.bindAttribLocation(prog, 0, 'aQ');
+    gl.bindAttribLocation(prog, 1, 'aP');
     gl.linkProgram(prog);
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS) && !gl.isContextLost()) throw new Error(gl.getProgramInfoLog(prog) ?? 'program');
     return { prog, loc: Object.fromEntries(uniforms.map((u) => [u, gl.getUniformLocation(prog, u)])) };
@@ -305,6 +346,100 @@ export class PlaneRenderer {
         gl.bindTexture(gl.TEXTURE_2D, tex);
         if (tiling && inv) this.drawPlane(gl, normalised(inv), { x: cx, y: cy, w, h: hh }, src, tiling, shade);
         else this.drawSheet(gl, normalised(h), { x: cx, y: cy, w, h: hh }, src, shade);
+        gl.disable(gl.SCISSOR_TEST);
+        target.save();
+        target.setTransform(1, 0, 0, 1, 0, 0);
+        target.drawImage(this.canvas, 0, 0, w, hh, cx, cy, w, hh);
+        target.restore();
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Draw sheets together, back to front, inside `area` (document pixels), as one picture on the
+   * target (with the target's own transform, clip and alpha; each sheet's opacity and shade are
+   * its own). Corners that land on the same point (a hinge's ends) are worked out once and shared,
+   * so the multisampled edge between two faces is solid. False when the GPU can't: nothing drawn.
+   */
+  drawBatch(target: Ctx2D, sheets: readonly GpuSheet[], area: Rect): boolean {
+    const gl = this.init();
+    if (!gl || !this.canvas || !this.batch || gl.isContextLost()) return false;
+    if (sheets.some((s) => s.src.width > this.maxTexture || s.src.height > this.maxTexture)) return false;
+    const m = target.getTransform();
+    const toDevice: Homography = [m.a, m.c, m.e, m.b, m.d, m.f, 0, 0, 1];
+    // Each sheet's corners in device pixels times distance; a corner already seen is reused as it is.
+    const seen: number[][] = [];
+    const shared = (p: number[]): number[] => {
+      const x = p[0] / p[2];
+      const y = p[1] / p[2];
+      for (const q of seen) {
+        if (Math.abs(q[0] / q[2] - x) < 1e-6 && Math.abs(q[1] / q[2] - y) < 1e-6 && Math.abs(q[2] - p[2]) <= 1e-9 * Math.abs(p[2])) return q;
+      }
+      seen.push(p);
+      return p;
+    };
+    const verts = sheets.map((s) => {
+      const h = compose(toDevice, s.pl.h);
+      const { width: w, height: hh } = s.src;
+      // Strip order: top-left, top-right, bottom-left, bottom-right.
+      return [
+        [0, 0],
+        [w, 0],
+        [0, hh],
+        [w, hh],
+      ].map(([qx, qy]) => ({ q: [qx, qy], p: shared([h[0] * qx + h[1] * qy + h[2], h[3] * qx + h[4] * qy + h[5], h[6] * qx + h[7] * qy + h[8]]) }));
+    });
+    const corners = [
+      [area.x, area.y],
+      [area.x + area.w, area.y],
+      [area.x, area.y + area.h],
+      [area.x + area.w, area.y + area.h],
+    ].map(([x, y]) => ({ x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f }));
+    const x0 = Math.max(0, Math.floor(Math.min(...corners.map((p) => p.x))));
+    const y0 = Math.max(0, Math.floor(Math.min(...corners.map((p) => p.y))));
+    const x1 = Math.min(target.canvas.width, Math.ceil(Math.max(...corners.map((p) => p.x))));
+    const y1 = Math.min(target.canvas.height, Math.ceil(Math.max(...corners.map((p) => p.y))));
+    if (x1 <= x0 || y1 <= y0) return true;
+    const textures = sheets.map((s) => this.texture(gl, s.src, false));
+    if (textures.some((t) => !t)) return false;
+    const cw = Math.min(CHUNK, x1 - x0);
+    const ch = Math.min(CHUNK, y1 - y0);
+    if (this.canvas.width < cw || this.canvas.height < ch) {
+      this.canvas.width = Math.max(this.canvas.width, cw);
+      this.canvas.height = Math.max(this.canvas.height, ch);
+    }
+    const H = this.canvas.height;
+    const p = this.batch;
+    const data = new Float32Array(sheets.length * 4 * 5);
+    verts.forEach((vs, i) => vs.forEach((v, k) => data.set([v.q[0], v.q[1], v.p[0], v.p[1], v.p[2]], (i * 4 + k) * 5)));
+    for (let cy = y0; cy < y1; cy += CHUNK) {
+      for (let cx = x0; cx < x1; cx += CHUNK) {
+        const w = Math.min(CHUNK, x1 - cx);
+        const hh = Math.min(CHUNK, y1 - cy);
+        gl.viewport(0, H - hh, w, hh);
+        gl.enable(gl.SCISSOR_TEST);
+        gl.scissor(0, H - hh, w, hh);
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.useProgram(p.prog);
+        gl.uniform4f(p.loc.uView, cx, cy, w, hh);
+        gl.uniform1i(p.loc.uTex, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.batchBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+        gl.enableVertexAttribArray(0);
+        gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 20, 0);
+        gl.enableVertexAttribArray(1);
+        gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 20, 8);
+        gl.activeTexture(gl.TEXTURE0);
+        sheets.forEach((s, i) => {
+          gl.bindTexture(gl.TEXTURE_2D, textures[i]);
+          gl.uniform2f(p.loc.uSize, s.src.width, s.src.height);
+          gl.uniform1f(p.loc.uShade, s.shade);
+          gl.uniform1f(p.loc.uOpacity, s.opacity);
+          gl.drawArrays(gl.TRIANGLE_STRIP, i * 4, 4);
+        });
+        gl.disableVertexAttribArray(1);
         gl.disable(gl.SCISSOR_TEST);
         target.save();
         target.setTransform(1, 0, 0, 1, 0, 0);

@@ -4,7 +4,7 @@ import type { LayerExtras } from '../raster/blend';
 import { applyImage, type PixelView } from '../raster/pixels';
 import type { PieceState } from './interpolate';
 import { sampleAffine, type Tiling } from './pieceSample';
-import { sampleProjective } from './pieceProject';
+import { sampleProjective, sampleProjectiveBatch, type BatchSheet } from './pieceProject';
 import { repeatAxes, type Piece } from './piece';
 import { Scene } from './scene';
 import { defaultLight, type Light } from './space';
@@ -35,6 +35,37 @@ export function piecesInDrawOrder(doc: PaintDocument, scene: Scene): Piece[] {
       out.push(...scene.backToFront(list));
   }
   return out;
+}
+
+/** Pieces that share an edge with another by a hinge (they hang off one, or one hangs off them). */
+export function hingedIds(pieces: readonly Piece[]): Set<string> {
+  const out = new Set<string>();
+  for (const p of pieces) {
+    if (!p.link?.hinge) continue;
+    out.add(p.id);
+    out.add(p.link.parent);
+  }
+  return out;
+}
+
+/**
+ * Pieces in drawing order, with each run of hinged faces next to each other gathered up so the
+ * run is drawn as one picture and its seams stay solid. Repeating pieces are never gathered.
+ */
+export function drawRuns(order: readonly Piece[], hinged: ReadonlySet<string>): Piece[][] {
+  const runs: Piece[][] = [];
+  const joins = (p: Piece) => hinged.has(p.id) && p.repeat === 'none';
+  for (const p of order) {
+    const last = runs[runs.length - 1];
+    if (last && joins(p) && joins(last[0])) last.push(p);
+    else runs.push([p]);
+  }
+  return runs;
+}
+
+/** A run of hinged faces as `scene` has them, ready to draw together. */
+export function runSheets(run: readonly Piece[], scene: Scene, light: Light): BatchSheet[] {
+  return run.map((p) => ({ src: p.src, pl: scene.placement(p), shade: scene.shade(p, light), opacity: scene.opacity(p), bounds: scene.bounds(p) }));
 }
 
 /** How a piece tiles at state s (null when it doesn't repeat). */
@@ -73,12 +104,20 @@ export function frameExtras(doc: PaintDocument, frame: number): LayerExtras | un
   if (!doc.pieces.length && !cels) return undefined;
   const scene = new Scene(doc.pieces, frame, doc.space);
   const byLayer = piecesByLayer(doc.pieces);
+  const hinged = hingedIds(doc.pieces);
   const visibleIn = (layer: Layer, r: Rect): Piece[] =>
     (byLayer.get(layer.id) ?? []).filter((p) => scene.shows(p) && scene.touches(p, r));
   return {
     covers: (layer, r) => layer.kind === 'raster' && visibleIn(layer, r).length > 0,
     draw: (layer, r, view) => {
-      for (const p of scene.backToFront(visibleIn(layer, r))) drawPiece(view, r, p, scene, doc.light);
+      for (const run of drawRuns(scene.backToFront(visibleIn(layer, r)), hinged)) {
+        if (run.length === 1) {
+          drawPiece(view, r, run[0], scene, doc.light);
+          continue;
+        }
+        const img = sampleProjectiveBatch(runSheets(run, scene, doc.light), r);
+        if (img.w > 0 && img.h > 0) applyImage(view, { x: img.x, y: img.y, w: img.w, h: img.h }, { data: img.data, stride: img.w, ox: img.x, oy: img.y }, 'over', 1);
+      }
     },
     surfaceOf: cels ? (layer) => (layer.cels ? celAt(layer.cels, frame).surface : null) : undefined,
   };

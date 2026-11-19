@@ -190,6 +190,7 @@ export const animEn = {
   'piece.followsNone': 'Nothing',
   'history.pieceAttach': 'Attach piece',
   'history.hinge': 'Hinge piece',
+  'history.box': 'Make a box',
   'history.unhinge': 'Unhinge piece',
   'history.pieceDetach': 'Detach piece',
   'history.pieceDuplicate': 'Duplicate piece',

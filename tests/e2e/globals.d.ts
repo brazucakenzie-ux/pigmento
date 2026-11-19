@@ -68,6 +68,9 @@ export interface PigmentoTestHook {
   gpuPlanes(): boolean;
   exportFramePixel(frame: number, x: number, y: number): { r: number; g: number; b: number; a: number };
   pieceHandle(id: string, x: number, y: number): { x: number; y: number };
+  cubeSheet(): Promise<{ ids: string[]; w: number; h: number; png: number[] }>;
+  pieceFront(id: string): boolean;
+  addTestBox(cx: number, cy: number, size: { w: number; h: number; d: number }, tilt: number, turn: number, hideBacks?: boolean): Record<'front' | 'back' | 'top' | 'bottom' | 'left' | 'right' | 'group', string> | null;
   addLayer(): string;
   groupLayers(ids: string[]): string | null;
   setLayerProps(id: string, p: Record<string, unknown>): void;

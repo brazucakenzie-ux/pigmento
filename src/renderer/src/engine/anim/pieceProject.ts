@@ -282,3 +282,128 @@ export function sampleProjective(src: Surface, pl: Placement, area: Rect, tiling
   }
   return { x: x0, y: y0, w: ow, h: oh, data: out };
 }
+
+/** One sheet of a batch drawn together (see sampleProjectiveBatch). */
+export interface BatchSheet {
+  src: Surface;
+  pl: Placement;
+  /** Multiplies its colours (shading by the light). */
+  shade: number;
+  /** Multiplies its alpha (its opacity). */
+  opacity: number;
+  /** Where its box is on the canvas (document pixels, rounded out). */
+  bounds: Rect;
+}
+
+/** The 4 coverage samples' offsets in a pixel (the rotated grid above). */
+const SAMPLES = [0.375, 0.125, 0.875, 0.375, 0.125, 0.625, 0.625, 0.875];
+
+/**
+ * Sheets drawn together inside `area`, back to front, as one image: each of a pixel's 4 coverage
+ * samples takes the sheets over it in turn (as the screen's multisampling does), so where two
+ * sheets meet along an edge (a hinge) the seam is as solid as the faces either side of it, not
+ * lighter, as two pictures each smoothed at that edge would be. Out comes straight RGBA.
+ */
+export function sampleProjectiveBatch(sheets: readonly BatchSheet[], area: Rect): TransformedImage {
+  let r: Rect | null = null;
+  for (const s of sheets) {
+    const b = rectIntersect(area, s.bounds);
+    if (!b) continue;
+    r = r ? { x: Math.min(r.x, b.x), y: Math.min(r.y, b.y), w: Math.max(r.x + r.w, b.x + b.w) - Math.min(r.x, b.x), h: Math.max(r.y + r.h, b.y + b.h) - Math.min(r.y, b.y) } : b;
+  }
+  if (!r) return { x: area.x, y: area.y, w: 0, h: 0, data: new Uint8ClampedArray(0) };
+  const { x: x0, y: y0, w: ow, h: oh } = r;
+  const out = new Uint8ClampedArray(ow * oh * 4);
+  // A row's samples: 4 a pixel, premultiplied RGBA (0–255) each.
+  const row = new Float32Array(ow * 16);
+  const acc: Acc = [0, 0, 0, 0];
+  const levelsOf = new Map<Surface, MipLevel[]>();
+  for (let oy = 0; oy < oh; oy++) {
+    row.fill(0);
+    const cy = y0 + oy + 0.5;
+    let any = false;
+    for (const sheet of sheets) {
+      const inv = sheet.pl.inv;
+      const b = sheet.bounds;
+      if (!inv || cy < b.y || cy > b.y + b.h) continue;
+      const { src, shade, opacity } = sheet;
+      const { width: w, height: h } = src;
+      const [i0, i1, i2, i3, i4, i5, i6, i7, i8] = inv;
+      const onSheet = (px: number, py: number): boolean => {
+        const z = i6 * px + i7 * py + i8;
+        if (!(z > 0)) return false;
+        const u = (i0 * px + i1 * py + i2) / z;
+        if (u < 0 || u > w) return false;
+        const v = (i3 * px + i4 * py + i5) / z;
+        return v >= 0 && v <= h;
+      };
+      const xa = Math.max(x0, b.x);
+      const xb = Math.min(x0 + ow, b.x + b.w);
+      for (let x = xa; x < xb; x++) {
+        const cx = x + 0.5;
+        const z = i6 * cx + i7 * cy + i8;
+        if (!(z > 0)) continue;
+        let u = (i0 * cx + i1 * cy + i2) / z;
+        let v = (i3 * cx + i4 * cy + i5) / z;
+        const ux = (i0 - u * i6) / z;
+        const uy = (i1 - u * i7) / z;
+        const vx = (i3 - v * i6) / z;
+        const vy = (i4 - v * i7) / z;
+        const reach = Math.sqrt(Math.max(ux * ux + vx * vx, uy * uy + vy * vy));
+        let mask = 15;
+        if (!(u > reach && u < w - reach && v > reach && v < h - reach)) {
+          mask = 0;
+          for (let s = 0; s < 4; s++) if (onSheet(x + SAMPLES[s * 2], y0 + oy + SAMPLES[s * 2 + 1])) mask |= 1 << s;
+          if (!mask) continue;
+        }
+        u = u < 0 ? 0 : u > w ? w : u;
+        v = v < 0 ? 0 : v > h ? h : v;
+        acc[0] = acc[1] = acc[2] = acc[3] = 0;
+        if (reach <= 1) sampleBase(src, u, v, false, false, acc, 1);
+        else {
+          let levels = levelsOf.get(src);
+          if (!levels) levelsOf.set(src, (levels = mipLevels(src)));
+          const lod = Math.log2(reach);
+          const lo = Math.min(Math.floor(lod), levels.length);
+          const hi = Math.min(lo + 1, levels.length);
+          const t = Math.min(1, lod - Math.floor(lod));
+          const at = (lv: number, wt: number) => (lv === 0 ? sampleBase(src, u, v, false, false, acc, wt) : sampleLevel(levels[lv - 1], u / 2 ** lv, v / 2 ** lv, false, false, acc, wt));
+          if (lo === hi) at(lo, 1);
+          else {
+            at(lo, 1 - t);
+            at(hi, t);
+          }
+        }
+        const a = acc[3] * opacity;
+        if (a <= 0) continue;
+        const cr = acc[0] * shade * opacity;
+        const cg = acc[1] * shade * opacity;
+        const cb = acc[2] * shade * opacity;
+        const keep = 1 - a / 255;
+        const base = (x - x0) * 16;
+        for (let s = 0; s < 4; s++) {
+          if (!(mask & (1 << s))) continue;
+          const o = base + s * 4;
+          row[o] = cr + row[o] * keep;
+          row[o + 1] = cg + row[o + 1] * keep;
+          row[o + 2] = cb + row[o + 2] * keep;
+          row[o + 3] = a + row[o + 3] * keep;
+        }
+        any = true;
+      }
+    }
+    if (!any) continue;
+    for (let ox = 0; ox < ow; ox++) {
+      const o = ox * 16;
+      const a = (row[o + 3] + row[o + 7] + row[o + 11] + row[o + 15]) / 4;
+      if (a <= 0) continue;
+      const k = 255 / (4 * a);
+      const di = (oy * ow + ox) * 4;
+      out[di] = (row[o] + row[o + 4] + row[o + 8] + row[o + 12]) * k;
+      out[di + 1] = (row[o + 1] + row[o + 5] + row[o + 9] + row[o + 13]) * k;
+      out[di + 2] = (row[o + 2] + row[o + 6] + row[o + 10] + row[o + 14]) * k;
+      out[di + 3] = a;
+    }
+  }
+  return { x: x0, y: y0, w: ow, h: oh, data: out };
+}
