@@ -18,7 +18,10 @@ import {
 } from '../../anim/pieceEdit';
 import type { Overlay } from '../../render/Overlay';
 import type { EdgeSnap } from '../../anim/edgeSnap';
+import { foldHandle, foldToward } from '../../anim/edgeSnap';
+import { project } from '../../anim/space';
 import { drawHingeSnap, hingeOnRelease, hingeSnap } from '../hingeSnap';
+import { slideOnParent, treePieces, treeTop } from '../treeEdit';
 import { registerTool } from '../ToolRegistry';
 import type { ToolContext, ToolPointerEvent } from '../Tool';
 
@@ -53,6 +56,10 @@ interface Drag {
   adding: boolean;
   /** The edge it hinges onto if it's let go now (dragging the whole piece). */
   snap: EdgeSnap | null;
+  /** The piece that was grabbed (a drag on a linked piece moves the top of its tree). */
+  face: string;
+  /** Alt-dragging a linked piece changes just it: a hinged one folds, one that follows another slides on it. */
+  mode: 'own' | 'fold' | 'slide';
 }
 
 let drag: Drag | null = null;
@@ -102,10 +109,15 @@ const near = (a: Point, b: Point, px = HIT_PX): boolean => Math.abs(a.x - b.x) <
 /** The piece has depth, tilt or turn at the frame shown. */
 function in3d(ctx: ToolContext, p: Piece): boolean {
   const s = pieceStateAt(p, ctx.anim.frame);
-  return s.depth !== 0 || s.tilt !== 0 || s.turn !== 0 || p.link !== null;
+  return s.depth !== 0 || s.tilt !== 0 || s.turn !== 0 || p.link !== null || p.kind === 'group';
 }
 
 function hitSelected(ctx: ToolContext, p: Piece, e: ToolPointerEvent): Hit | null {
+  // A group is grabbed by any of its pieces.
+  if (p.kind === 'group') {
+    const over = pieceAt(visiblePieces(ctx), ctx.anim.scene(), e);
+    return over && treePieces(ctx, p).includes(over) ? { kind: 'body' } : null;
+  }
   const g = geometry(ctx, p);
   const sp = { x: e.sx, y: e.sy };
   const frame = ctx.anim.frame;
@@ -207,8 +219,21 @@ export default registerTool({
     }
     if (!piece) return;
     const frame = ctx.anim.frame;
+    const face = piece;
+    // Grabbing a linked piece moves its whole tree; with Alt, just that piece.
+    let mode: Drag['mode'] = 'own';
+    let foldGrab = { x: 0, y: 0 };
+    if (hit.kind === 'body' && piece.link) {
+      if (!e.alt) piece = treeTop(ctx, piece) ?? piece;
+      else if (piece.link.hinge) {
+        mode = 'fold';
+        const handle = foldHandle(piece);
+        const at = handle && project(ctx.anim.scene().placement(piece), handle);
+        if (at) foldGrab = { x: at.x - e.x, y: at.y - e.y };
+      } else mode = 'slide';
+    }
     const s0 = pieceStateAt(piece, frame);
-    let grab = { x: 0, y: 0 };
+    let grab = foldGrab;
     if (hit.kind === 'handle') {
       const d = localToDoc(s0, piece.pivot, handleLocal(piece, hit.handle));
       grab = { x: d.x - e.x, y: d.y - e.y };
@@ -223,6 +248,8 @@ export default registerTool({
       pivot0: { ...piece.pivot },
       adding: !piece.keyframes.some((k) => k.frame === frame),
       snap: null,
+      face: face.id,
+      mode,
     };
     // Pulling a bend handle grabs it where the pointer is.
     if (hit.kind === 'tangent') drag.grab = { x: 0, y: 0 };
@@ -234,6 +261,14 @@ export default registerTool({
     const frame = ctx.anim.frame;
     const p = { x: e.x + d.grab.x, y: e.y + d.grab.y };
     const hit = d.hit;
+    if (d.mode !== 'own') {
+      const piece = ctx.anim.piece(d.id);
+      if (!piece) return;
+      const scene = ctx.anim.scene();
+      const change = d.mode === 'fold' ? { fold: foldToward(scene, piece, p, d.s0.fold, e.shift) } : slideOnParent(scene, piece, d.s0, d.start, { x: e.x, y: e.y }, e.shift);
+      if (change) ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, frame, change)));
+      return;
+    }
     if (hit.kind === 'key') {
       const k = d.keys0.find((q) => q.frame === hit.frame);
       if (!k) return;
@@ -350,7 +385,10 @@ export default registerTool({
     }
     if (!sel || !ctx.doc.isEffectivelyVisible(sel.layerId)) return;
     drawPath(ctx, ov, sel);
-    ov.outlineScreen(outline(sel), true, false);
+    // A tree's pieces are outlined together (a group has no pixels of its own).
+    const top = treeTop(ctx, sel);
+    if (top) for (const p of treePieces(ctx, top)) if (p !== sel) ov.outlineScreen(outline(p), true, true);
+    if (sel.kind === 'piece') ov.outlineScreen(outline(sel), true, false);
     if (drag?.snap) drawHingeSnap(ctx, ov, drag.snap);
     if (in3d(ctx, sel)) return;
     const g = geometry(ctx, sel);

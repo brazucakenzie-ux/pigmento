@@ -9,7 +9,8 @@ import { movePivot, type Easing } from './interpolate';
 import { movePivot3D } from './planeEdit';
 import { MAX_STRENGTH, MIN_STRENGTH, type Camera, type Light } from './space';
 import type { Hinge } from './frames';
-import { attach, detach, duplicateTree, hinge, movePivotLocal, moveTree, removeTree, subtree, type LinkRefusal } from './links';
+import { attach, centrePivot, detach, duplicateTree, hinge, movePivotLocal, moveTree, removeTree, rootOf, subtree, type LinkRefusal } from './links';
+import { BOX_FACES, faceSize, makeBox, MAX_BOX_SIDE, type BoxFace, type BoxSize } from './box';
 import { MAX_TREE, Scene } from './scene';
 import { MAX_PIXELS } from '../io/protocol';
 import {
@@ -103,6 +104,8 @@ export interface PieceFields {
   group: boolean;
   /** What it follows: nothing, another piece's pixels, or an edge it's hinged to. */
   link: 'none' | 'follows' | 'hinged';
+  /** It's in a group's tree (or is the group): Centre pivot applies. */
+  inGroup: boolean;
   /** Tilted or turned at this frame, or linked (the Animate tool's flat handles don't apply). */
   in3d: boolean;
   /** Easing from this frame's keyframe (or the one before it) to the next. */
@@ -184,6 +187,8 @@ export class AnimationController {
   selectedId: string | null = null;
   /** Default names for new pieces and groups, supplied by the UI (the engine never stores English text). */
   namer: (n: number, kind: PieceKind) => string = () => '';
+  /** Names for a new box's faces, supplied by the UI. */
+  faceNamer: (face: BoxFace) => string = () => '';
   private drag: AnimSnapshot | null = null;
   /** Paint on piece: painting tools paint the selected piece's own pixels (view state, not undoable). */
   private paintOn = false;
@@ -299,6 +304,7 @@ export class AnimationController {
       fold: s.fold * DEG,
       group: p.kind === 'group',
       link: p.link ? (p.link.hinge ? 'hinged' : 'follows') : 'none',
+      inGroup: rootOf(this.doc.pieces, p).kind === 'group',
       back: p.back,
       shade: p.shade * 100,
       in3d: s.tilt !== 0 || s.turn !== 0 || s.depth !== 0 || p.link !== null,
@@ -310,7 +316,7 @@ export class AnimationController {
   }
 
   /** Set the selected piece's values at the current frame (auto-key), in the options bar's units. */
-  setFields(change: Partial<Omit<PieceFields, 'keyed' | 'curved' | 'repeat' | 'back' | 'in3d' | 'shade' | 'group' | 'link'>>): boolean {
+  setFields(change: Partial<Omit<PieceFields, 'keyed' | 'curved' | 'repeat' | 'back' | 'in3d' | 'shade' | 'group' | 'link' | 'inGroup'>>): boolean {
     const p = this.selected;
     if (!p) return false;
     const k: KeyChange = {};
@@ -708,6 +714,44 @@ export class AnimationController {
     const first = pieces.find((p) => p.kind === 'piece');
     if (done && first) this.select(first.id);
     return done;
+  }
+
+  /**
+   * Box maker: six blank faces of `size` (pixels), hinged and folded into a box in the middle of
+   * the picture on the active layer, turned a little so its sides show, ready to paint. One undo
+   * step; its front is selected. False (saying why) when it can't be made there.
+   */
+  makeBox(size: BoxSize): boolean {
+    const active = this.doc.layerById(this.doc.activeId);
+    if (active?.kind !== 'raster') {
+      this.host.notify('info', 'notice.animatePixelsOnly');
+      return false;
+    }
+    const layer = this.rasterLayer(active.id);
+    if (!layer) return false;
+    const side = (v: number) => Math.max(1, Math.min(MAX_BOX_SIDE, Math.round(Number.isFinite(v) ? v : 1)));
+    const s = { w: side(size.w), h: side(size.h), d: side(size.d) };
+    for (const f of BOX_FACES) {
+      const fs = faceSize(f, s);
+      if (!this.fits(fs.w, fs.h)) return false;
+    }
+    const groups = this.doc.pieces.filter((p) => p.kind === 'group').length;
+    const pieces = makeBox(newPieceId, layer.id, { x: this.doc.width / 2, y: this.doc.height / 2 }, s, this.frame, { names: this.faceNamer, group: this.namer(groups + 1, 'group') });
+    // Tilted and turned a little, so the top and the right side show beside the front.
+    pieces[0].keyframes = setKey(pieces[0].keyframes, this.frame, { tilt: (-20 * Math.PI) / 180, turn: (-30 * Math.PI) / 180 });
+    return this.addTree(pieces, 'history.box');
+  }
+
+  /** Move the pivot of the group a piece is in to the middle of its pieces, so it turns about it (one undo step). */
+  centrePivot(id: string): boolean {
+    const p = this.piece(id);
+    if (!p) return false;
+    const top = rootOf(this.doc.pieces, p);
+    if (top.kind !== 'group') return false;
+    return this.change('history.centrePivot', () => {
+      this.doc.pieces = centrePivot(this.doc.pieces, top.id, this.frame, this.doc.space);
+      return true;
+    });
   }
 
   rename(id: string, name: string): boolean {

@@ -24,6 +24,7 @@ export type DialogState =
   | { kind: 'resize' }
   | { kind: 'canvasSize' }
   | { kind: 'rotate' }
+  | { kind: 'box' }
   | { kind: 'properties' }
   | { kind: 'editColors'; target: 'primary' | 'secondary' }
   | { kind: 'quality'; format: ImageFormat; transparent: boolean; layers: boolean; selections: boolean; resolve: (q: number | null) => void }

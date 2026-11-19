@@ -88,3 +88,34 @@ describe('the box', () => {
     }
   });
 });
+
+describe('centring a group’s pivot', () => {
+  it('keeps every piece where it is on every keyframe, and turns the tree about its middle', async () => {
+    const { hinge: hingeTo, centrePivot } = await import('@engine/anim/links');
+    const { makePiece } = await import('@engine/anim/piece');
+    const img = (w: number, h: number) => ({ w, h, data: new Uint8ClampedArray(w * h * 4).fill(255) });
+    const a = makePiece('a', '', 'L', img(100, 80), { x: 100, y: 100, w: 100, h: 80 }, 0);
+    const b = makePiece('b', '', 'L', img(60, 80), { x: 0, y: 0, w: 60, h: 80 }, 0);
+    a.keyframes = setKey(a.keyframes, 0, { tilt: 0.3, depth: 20 });
+    a.keyframes = setKey(a.keyframes, 12, { x: 250, turn: -0.5 });
+    const linked = hingeTo([a, b], 'b', 'a', { edge: 'e', childEdge: 'w', offset: 0, along: 1, across: 1 }, Math.PI / 2, () => 'g');
+    if (typeof linked === 'string') throw new Error(linked);
+    const centred = centrePivot(linked.pieces, 'g', 0, space);
+    const at = (pieces: Piece[], id: string, frame: number) => {
+      const scene = new Scene(pieces, frame, space);
+      const p = pieces.find((q) => q.id === id)!;
+      return [{ x: 0, y: 0 }, { x: p.src.width, y: p.src.height }].flatMap((q) => scene.worldOf(p, q));
+    };
+    // Exactly on the keyframes; in between, the new pivot's path is eased in other terms, so nearly.
+    for (const f of [0, 12]) for (const id of ['a', 'b']) at(centred, id, f).forEach((v, i) => expect(v).toBeCloseTo(at(linked.pieces, id, f)[i], 6));
+    for (const id of ['a', 'b']) at(centred, id, 6).forEach((v, i) => expect(Math.abs(v - at(linked.pieces, id, 6)[i])).toBeLessThan(2));
+    // The pivot is now the middle: turning the group a quarter keeps that point still.
+    const g = centred.find((p) => p.id === 'g')!;
+    const middle = new Scene(centred, 0, space).worldOf(g, g.pivot);
+    const turned = centred.map((p) => (p.id === 'g' ? { ...p, keyframes: setKey(p.keyframes, 0, { turn: 1.2 }) } : p));
+    new Scene(turned, 0, space).worldOf(g, g.pivot).forEach((v, i) => expect(v).toBeCloseTo(middle[i], 6));
+    // Halfway through the box: half the side's width behind the front (it folds back 60 px).
+    const local = centred.find((p) => p.id === 'a')!.keyframes[0];
+    expect(local.depth).toBeCloseTo(-30, 6);
+  });
+});

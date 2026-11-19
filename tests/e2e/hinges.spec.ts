@@ -163,3 +163,62 @@ test('a box’s hinges show no line, on screen or in the picture, at any angle',
     await page.keyboard.press('Control+z');
   }
 });
+
+test('the box maker folds a box; dragging a face moves it all, Alt-dragging folds just that face', async () => {
+  const { page } = h;
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  await page.getByRole('button', { name: 'Box…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Make a box' });
+  await dialog.getByRole('textbox', { name: 'Width' }).fill('160');
+  await dialog.getByRole('textbox', { name: 'Height' }).fill('120');
+  await dialog.getByRole('textbox', { name: 'Depth' }).fill('100');
+  await dialog.getByRole('button', { name: 'Make' }).click();
+  await expect(dialog).toBeHidden();
+  const anim = () => page.evaluate(() => window.__pigmentoTest!.anim());
+  const pieces = (await anim()).pieces;
+  expect(pieces).toHaveLength(7);
+  expect(pieces.map((p) => p.name)).toEqual(['Group 1', 'Front', 'Top', 'Bottom', 'Left', 'Right', 'Back']);
+  expect(await page.evaluate(() => window.__pigmentoTest!.tool())).toBe('plane');
+  const [group, front, , , , right] = pieces.map((p) => p.id);
+  expect((await anim()).selectedId).toBe(front);
+  const state = (id: string) => page.evaluate((pid) => window.__pigmentoTest!.pieceAt(pid, 0)!, id);
+  // Its sides show beside the front, and it came as one undo step.
+  expect(await page.evaluate((id) => window.__pigmentoTest!.pieceFront(id), right)).toBe(true);
+  const steps = (await page.evaluate(() => window.__pigmentoTest!.history())).index;
+  // Centre pivot is there for a box's face; a box is made with its pivot in the middle, so nothing changes.
+  const before = await corner(page, front, 0, 0);
+  await page.getByRole('button', { name: 'Centre pivot' }).click();
+  const after = await corner(page, front, 0, 0);
+  expect(after.x).toBeCloseTo(before.x, 6);
+  expect(after.y).toBeCloseTo(before.y, 6);
+  expect((await page.evaluate(() => window.__pigmentoTest!.history())).index).toBe(steps);
+  // Dragging the front (away from the handles round the box's middle) moves the whole box.
+  const g0 = await state(group);
+  const f0 = await state(front);
+  const grab = await corner(page, front, 24, 100);
+  await drag(page, [
+    [grab.x, grab.y],
+    [grab.x + 30, grab.y + 15],
+    [grab.x + 60, grab.y + 30],
+  ]);
+  const g1 = await state(group);
+  expect(g1.x - g0.x).toBeCloseTo(60, 0);
+  expect(g1.y - g0.y).toBeCloseTo(30, 0);
+  expect(await state(front)).toEqual(f0);
+  // Alt-dragging the right side (high up, clear of the handles round the box's middle) folds just it, out from the box.
+  const side = await corner(page, right, 60, 18);
+  const fold0 = (await state(right)).fold;
+  await page.keyboard.down('Alt');
+  await drag(page, [
+    [side.x, side.y],
+    [side.x + 40, side.y],
+    [side.x + 80, side.y],
+  ]);
+  await page.keyboard.up('Alt');
+  expect((await state(right)).fold).toBeLessThan(fold0 - 0.2);
+  expect(await state(group)).toEqual(g1);
+  // Back through the fold and the move: the box is where it was made.
+  for (let i = 0; i < 2; i++) await page.keyboard.press('Control+z');
+  expect(await state(group)).toEqual(g0);
+  expect((await page.evaluate(() => window.__pigmentoTest!.history())).index).toBe(steps);
+});

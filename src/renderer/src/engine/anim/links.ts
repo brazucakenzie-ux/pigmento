@@ -5,6 +5,7 @@ import {
   frameInvert,
   localFrame,
   localParts,
+  rootFrame,
   rootParts,
   type Frame,
   type Hinge,
@@ -12,7 +13,7 @@ import {
 import type { Easing, Keyframe } from './interpolate';
 import { cloneKeyframe, copyPieces, makeGroup, MAX_KEYFRAMES, type Piece } from './piece';
 import { MAX_TREE, Scene } from './scene';
-import type { Space } from './space';
+import { NEAR, type Space } from './space';
 
 /**
  * Trees of linked pieces, as pure functions over a picture's piece list (each returns a new list
@@ -355,5 +356,50 @@ export function movePivotLocal(
   return keyframes.map((k) => {
     const [x, y, depth] = frameApply(localFrame(k, pivot), next.x, next.y);
     return { ...cloneKeyframe(k), x, y, depth };
+  });
+}
+
+/**
+ * A group's pivot moved to the middle of its pieces (the middle of their boxes in the group's own
+ * space, depth included) as they are at `frame`, so the group turns about it; nothing moves on any
+ * keyframe. The group's keyframes take the new pivot's place, and the pieces right under it move
+ * back by its depth (they're placed relative to the group's own plane, which moves with it).
+ */
+export function centrePivot(pieces: readonly Piece[], groupId: string, frame: number, space: Space): Piece[] {
+  const map = byId(pieces);
+  const g = map.get(groupId);
+  if (!g || g.kind !== 'group') return [...pieces];
+  const scene = new Scene(pieces, frame, space);
+  const inv = frameInvert(scene.pose(g).frame);
+  const members = subtree(pieces, groupId).filter((p) => p.kind === 'piece');
+  if (!inv || !members.length) return [...pieces];
+  const lo = [Infinity, Infinity, Infinity];
+  const hi = [-Infinity, -Infinity, -Infinity];
+  for (const p of members) {
+    const { width: w, height: h } = p.src;
+    for (const q of [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: 0, y: h }, { x: w, y: h }]) {
+      const L = frameApply(inv, ...scene.worldOf(p, q));
+      for (let i = 0; i < 3; i++) {
+        lo[i] = Math.min(lo[i], L[i]);
+        hi[i] = Math.max(hi[i], L[i]);
+      }
+    }
+  }
+  const [mx, my, mz] = [0, 1, 2].map((i) => (lo[i] + hi[i]) / 2);
+  // Already in the middle (a box as made): nothing to change.
+  const tiny = 1e-6 * Math.max(1, ...hi.map((v, i) => v - lo[i]));
+  if (Math.abs(mx - g.pivot.x) < tiny && Math.abs(my - g.pivot.y) < tiny && Math.abs(mz) < tiny) return [...pieces];
+  const { cx, cy, f } = space;
+  const keyframes = g.keyframes.map((k) => {
+    // Where the middle is in 3D on this keyframe becomes the group's place.
+    const P = frameApply(rootFrame(k, g.pivot, space), mx, my, mz);
+    const depth = Math.max(P[2], -f * (1 - NEAR));
+    const s = f / (f + depth);
+    return { ...cloneKeyframe(k), x: cx + (P[0] - cx) * s, y: cy + (P[1] - cy) * s, depth };
+  });
+  return pieces.map((p) => {
+    if (p.id === groupId) return { ...p, pivot: { x: mx, y: my }, keyframes };
+    if (p.link?.parent === groupId && !p.link.hinge) return { ...p, keyframes: p.keyframes.map((k) => ({ ...cloneKeyframe(k), depth: k.depth - mz })) };
+    return p;
   });
 }

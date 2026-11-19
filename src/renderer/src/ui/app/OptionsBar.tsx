@@ -519,6 +519,19 @@ function PieceFields({ plane = false }: { plane?: boolean }) {
           </button>
         </>
       )}
+      {info.inGroup ? (
+        <button
+          type="button"
+          className="btn"
+          data-tip={t('piece.centrePivotTip')}
+          onClick={() => {
+            const id = engine.anim.selectedId;
+            if (id) engine.anim.centrePivot(id);
+          }}
+        >
+          {t('piece.centrePivot')}
+        </button>
+      ) : null}
       {hinged ? (
         <button
           type="button"
