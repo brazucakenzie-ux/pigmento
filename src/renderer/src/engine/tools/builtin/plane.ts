@@ -6,6 +6,8 @@ import { piecesInDrawOrder } from '../../anim/pieceRaster';
 import { insidePiece, moveState, pieceAt, rotateState } from '../../anim/pieceEdit';
 import { depthDrag, movePivot3D, resizeDrag, tiltDrag, turnDrag } from '../../anim/planeEdit';
 import { placementOf, project, unproject } from '../../anim/space';
+import { foldHandle, foldToward, type EdgeSnap } from '../../anim/edgeSnap';
+import { drawHingeSnap, hingeOnRelease, hingeSnap } from '../hingeSnap';
 import { registerTool } from '../ToolRegistry';
 import type { ToolContext, ToolPointerEvent } from '../Tool';
 
@@ -14,7 +16,9 @@ import type { ToolContext, ToolPointerEvent } from '../Tool';
  * (Ctrl-drag pushes it away or pulls it closer), drag its top or bottom handle to tilt it back
  * or forward, a side handle to turn it like a door, the round handle to spin it, a corner to
  * resize it on its own plane (Shift keeps the proportions), or the pivot to change what it turns
- * about. Shift snaps tilt and turn to 15°. Every change keys the piece at the frame shown.
+ * about. Shift snaps tilt and turn to 15°. Dragged near another piece's edge, a piece's edge lights
+ * up and letting go hinges it there (Alt: no snapping); a hinged piece has a fold handle instead.
+ * Every change keys the piece at the frame shown.
  */
 type Hit =
   | { kind: 'body' }
@@ -22,7 +26,9 @@ type Hit =
   | { kind: 'turn'; handle: 'e' | 'w' }
   | { kind: 'spin' }
   | { kind: 'corner'; corner: Point }
-  | { kind: 'pivot' };
+  | { kind: 'pivot' }
+  /** A hinged piece's fold handle. */
+  | { kind: 'fold' };
 
 interface Drag {
   id: string;
@@ -36,6 +42,8 @@ interface Drag {
   /** Ctrl when a body drag began: it changes the depth. */
   depth: boolean;
   adding: boolean;
+  /** The edge it hinges onto if it's let go now. */
+  snap: EdgeSnap | null;
 }
 
 let drag: Drag | null = null;
@@ -60,6 +68,8 @@ interface ScreenGeom {
   spin: Point | null;
   top: Point | null;
   pivot: Point | null;
+  /** A hinged piece's only handle. */
+  fold: Point | null;
   outline: Point[];
 }
 
@@ -72,6 +82,10 @@ function geometry(ctx: ToolContext, p: Piece): ScreenGeom {
     const d = project(pl, q);
     return d && ctx.view.toScreen(d.x, d.y);
   };
+  const outline = scene.corners(p).map((q) => ctx.view.toScreen(q.x, q.y));
+  // A hinged piece is placed by its hinge: it only folds.
+  const fold = foldHandle(p);
+  if (fold) return { corners: [], edges: [], spin: null, top: null, pivot: null, fold: at(fold), outline };
   const corners: ScreenGeom['corners'] = [];
   for (const local of [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: h }, { x: 0, y: h }]) {
     const sp = at(local);
@@ -93,8 +107,8 @@ function geometry(ctx: ToolContext, p: Piece): ScreenGeom {
     const len = Math.hypot(top.x - mid.x, top.y - mid.y) || 1;
     spin = { x: top.x + ((top.x - mid.x) / len) * ROTATE_HANDLE_OFFSET, y: top.y + ((top.y - mid.y) / len) * ROTATE_HANDLE_OFFSET };
   }
-  const outline = scene.corners(p).map((q) => ctx.view.toScreen(q.x, q.y));
-  return { corners, edges, spin, top, pivot: at(p.pivot), outline };
+  // A piece following another turns about its own pivot in that piece's space (moving it there is for later).
+  return { corners, edges, spin, top, pivot: p.link ? null : at(p.pivot), fold: null, outline };
 }
 
 const near = (a: Point, b: Point, px = HIT_PX): boolean => Math.abs(a.x - b.x) <= px && Math.abs(a.y - b.y) <= px;
@@ -102,6 +116,7 @@ const near = (a: Point, b: Point, px = HIT_PX): boolean => Math.abs(a.x - b.x) <
 function hitSelected(ctx: ToolContext, p: Piece, e: ToolPointerEvent): Hit | null {
   const g = geometry(ctx, p);
   const sp = { x: e.sx, y: e.sy };
+  if (g.fold && near(sp, g.fold)) return { kind: 'fold' };
   if (g.spin && near(sp, g.spin)) return { kind: 'spin' };
   if (g.pivot && near(sp, g.pivot)) return { kind: 'pivot' };
   for (const c of g.corners) if (near(sp, c.at)) return { kind: 'corner', corner: c.local };
@@ -120,6 +135,7 @@ function cursorFor(hit: Hit | null, ctrl: boolean): string {
     case 'turn':
       return 'ew-resize';
     case 'spin':
+    case 'fold':
       return 'grab';
     case 'corner':
       return 'nwse-resize';
@@ -182,6 +198,7 @@ export default registerTool({
       pivot0: { ...piece.pivot },
       depth: e.ctrl,
       adding: !piece.keyframes.some((k) => k.frame === frame),
+      snap: null,
     };
     ctx.anim.beginDrag();
   },
@@ -223,6 +240,11 @@ export default registerTool({
       });
       return;
     }
+    if (hit.kind === 'fold') {
+      const fold = foldToward(ctx.anim.scene(), piece, { x: e.x, y: e.y }, d.s0.fold, e.shift);
+      ctx.anim.preview(d.id, (p) => (p.keyframes = setKey(d.keys0, frame, { fold })));
+      return;
+    }
     let s: PieceState;
     if (hit.kind === 'body') s = d.depth ? depthDrag(d.s0, dys, space) : moveState(d.s0, e.x - d.start.x, e.y - d.start.y, e.shift);
     else if (hit.kind === 'tilt') s = tiltDrag(d.s0, hit.handle, dys, e.shift);
@@ -231,6 +253,10 @@ export default registerTool({
     else s = resizeDrag(d.s0, { pivot: d.pivot0, w: piece.src.width, h: piece.src.height }, hit.corner, { x: e.x, y: e.y }, space, e.shift);
     const change = stateChange(s);
     ctx.anim.preview(d.id, (p) => (p.keyframes = setKey(d.keys0, frame, change)));
+    if (hit.kind === 'body' && !d.depth) {
+      d.snap = hingeSnap(ctx, piece, e.alt);
+      ctx.invalidateOverlay();
+    }
   },
   pointerUp(ctx) {
     if (camDrag) {
@@ -241,6 +267,10 @@ export default registerTool({
     const d = drag;
     drag = null;
     if (!d) return;
+    if (d.snap) {
+      hingeOnRelease(ctx, d.id, d.snap);
+      return;
+    }
     ctx.anim.endDrag(d.hit.kind === 'pivot' ? 'history.pivot' : d.adding ? 'history.keyframeAdd' : 'history.keyframe');
   },
   hover(ctx, e) {
@@ -277,6 +307,14 @@ export default registerTool({
       ctx.anim.remove(p.id);
       return true;
     }
+    // A hinged piece folds: up folds it back, down forward (Shift: 15°).
+    if (p.link?.hinge) {
+      const dir = e.key === 'ArrowUp' ? 1 : e.key === 'ArrowDown' ? -1 : 0;
+      if (!dir) return false;
+      const fold = pieceStateAt(p, ctx.anim.frame).fold + (dir * (e.shiftKey ? 15 : 1) * Math.PI) / 180;
+      ctx.anim.setKey(p.id, ctx.anim.frame, { fold });
+      return true;
+    }
     const step = e.shiftKey ? 10 : 1;
     const move: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
     const m = move[e.key];
@@ -311,5 +349,7 @@ export default registerTool({
       ov.handle(g.spin, 'circle', active?.kind === 'spin');
     }
     if (g.pivot) ov.pivot(g.pivot, active?.kind === 'pivot');
+    if (g.fold) ov.handle(g.fold, 'circle', active?.kind === 'fold');
+    if (drag?.snap) drawHingeSnap(ctx, ov, drag.snap);
   },
 });

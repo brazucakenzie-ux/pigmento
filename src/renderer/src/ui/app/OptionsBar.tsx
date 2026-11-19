@@ -381,7 +381,10 @@ function PieceFields({ plane = false }: { plane?: boolean }) {
   const keys = useUi((s) => s.animation.pieces.find((p) => p.id === s.animation.selectedId)?.keys.length ?? 0);
   if (!info) return <span className="opt-hint">{t('piece.noneSelected')}</span>;
   const axes = repeatAxes(info.repeat);
-  const field = (key: 'x' | 'y' | 'w' | 'h' | 'angle' | 'skew' | 'opacity' | 'scrollX' | 'scrollY' | 'depth' | 'tilt' | 'turn', labelKey: I18nKey, unit: string, min: number, max: number, decimals: number) => {
+  // A hinged piece is placed by its hinge (it only folds); a group carries pieces and has no pixels.
+  const hinged = info.link === 'hinged';
+  const group = info.group;
+  const field = (key: 'x' | 'y' | 'w' | 'h' | 'angle' | 'skew' | 'opacity' | 'scrollX' | 'scrollY' | 'depth' | 'tilt' | 'turn' | 'fold', labelKey: I18nKey, unit: string, min: number, max: number, decimals: number, shiftStep?: number) => {
     const label = t(labelKey);
     return (
       <span className="opt tf-field">
@@ -392,6 +395,7 @@ function PieceFields({ plane = false }: { plane?: boolean }) {
           decimals={decimals}
           min={min}
           max={max}
+          shiftStep={shiftStep}
           label={label}
           onChange={(v) => engine.anim.setFields({ [key]: v })}
           onEnter={() => (document.activeElement as HTMLElement | null)?.blur()}
@@ -425,9 +429,10 @@ function PieceFields({ plane = false }: { plane?: boolean }) {
       >
         <Icon name="keyframe-delete" size={16} />
       </button>
-      {field('x', 'transform.x', 'px', -100000, 100000, 0)}
-      {field('y', 'transform.y', 'px', -100000, 100000, 0)}
-      {plane ? (
+      {hinged ? null : field('x', 'transform.x', 'px', -100000, 100000, 0)}
+      {hinged ? null : field('y', 'transform.y', 'px', -100000, 100000, 0)}
+      {hinged ? field('fold', 'piece.fold', '°', -36000, 36000, 1, 15) : null}
+      {plane && !hinged ? (
         <>
           {field('depth', 'piece.depth', 'px', -100000, 1000000, 0)}
           {field('tilt', 'piece.tilt', '°', -36000, 36000, 1)}
@@ -435,12 +440,12 @@ function PieceFields({ plane = false }: { plane?: boolean }) {
           {field('angle', 'piece.spin', '°', -36000, 36000, 1)}
         </>
       ) : null}
-      {field('w', 'transform.w', '%', -100000, 100000, 1)}
-      {field('h', 'transform.h', '%', -100000, 100000, 1)}
-      {plane ? null : field('angle', 'transform.angle', '°', -36000, 36000, 1)}
-      {plane ? null : field('skew', 'transform.skew', '°', -85, 85, 1)}
+      {hinged ? null : field('w', 'transform.w', '%', -100000, 100000, 1)}
+      {hinged ? null : field('h', 'transform.h', '%', -100000, 100000, 1)}
+      {plane || hinged ? null : field('angle', 'transform.angle', '°', -36000, 36000, 1)}
+      {plane || hinged ? null : field('skew', 'transform.skew', '°', -85, 85, 1)}
       {field('opacity', 'opt.opacity', '%', 0, 100, 0)}
-      {plane ? (
+      {plane && !group ? (
         <span className="opt tf-field" data-tip={t('piece.shadeTip')}>
           <span>{t('piece.shade')}</span>
           <NumberField
@@ -459,7 +464,7 @@ function PieceFields({ plane = false }: { plane?: boolean }) {
           <span className="unit">%</span>
         </span>
       ) : null}
-      {plane ? (
+      {plane && !group ? (
         <label className="opt">
           <span>{t('piece.back')}</span>
           <select
@@ -489,60 +494,131 @@ function PieceFields({ plane = false }: { plane?: boolean }) {
           ))}
         </select>
       </label>
-      <button
-        type="button"
-        className="icon-btn"
-        aria-label={t('piece.straighten')}
-        data-tip={t('piece.straighten')}
-        disabled={!info.curved}
-        onClick={() => {
-          const id = engine.anim.selectedId;
-          if (id) engine.anim.straighten(id, engine.anim.frame);
-        }}
-      >
-        <Icon name="line" size={16} />
-      </button>
-      <button type="button" className="icon-btn" aria-label={t('transform.flipH')} data-tip={t('transform.flipH')} onClick={() => engine.anim.setFields({ w: -info.w })}>
-        <Icon name="flip-h" size={16} />
-      </button>
-      <button type="button" className="icon-btn" aria-label={t('transform.flipV')} data-tip={t('transform.flipV')} onClick={() => engine.anim.setFields({ h: -info.h })}>
-        <Icon name="flip-v" size={16} />
-      </button>
-      <label className="opt">
-        <span>{t('piece.repeat')}</span>
-        <select
-          className="select"
-          aria-label={t('piece.repeat')}
-          value={info.repeat}
-          onChange={(e) => {
-            const id = engine.anim.selectedId;
-            if (id) engine.anim.setRepeat(id, e.target.value as Repeat);
-          }}
-        >
-          {REPEATS.map((r) => (
-            <option key={r} value={r}>
-              {t(`repeat.${r}` as I18nKey)}
-            </option>
-          ))}
-        </select>
-      </label>
-      {axes.x ? field('scrollX', 'piece.scrollX', 'px', -1e6, 1e6, 0) : null}
-      {axes.y ? field('scrollY', 'piece.scrollY', 'px', -1e6, 1e6, 0) : null}
-      {info.repeat !== 'none' ? (
+      {info.link === 'none' ? (
         <button
           type="button"
           className="icon-btn"
-          aria-label={t('piece.loopScroll')}
-          data-tip={t('piece.loopScroll')}
+          aria-label={t('piece.straighten')}
+          data-tip={t('piece.straighten')}
+          disabled={!info.curved}
           onClick={() => {
             const id = engine.anim.selectedId;
-            if (id) engine.anim.loopScroll(id);
+            if (id) engine.anim.straighten(id, engine.anim.frame);
           }}
         >
-          <Icon name="loop" size={16} />
+          <Icon name="line" size={16} />
         </button>
       ) : null}
+      {hinged ? null : (
+        <>
+          <button type="button" className="icon-btn" aria-label={t('transform.flipH')} data-tip={t('transform.flipH')} onClick={() => engine.anim.setFields({ w: -info.w })}>
+            <Icon name="flip-h" size={16} />
+          </button>
+          <button type="button" className="icon-btn" aria-label={t('transform.flipV')} data-tip={t('transform.flipV')} onClick={() => engine.anim.setFields({ h: -info.h })}>
+            <Icon name="flip-v" size={16} />
+          </button>
+        </>
+      )}
+      {hinged ? (
+        <button
+          type="button"
+          className="btn"
+          data-tip={t('piece.unhingeTip')}
+          onClick={() => {
+            const id = engine.anim.selectedId;
+            if (id) engine.anim.detach(id);
+          }}
+        >
+          {t('piece.unhinge')}
+        </button>
+      ) : (
+        <FollowsField />
+      )}
+      {group ? null : (
+        <>
+          <label className="opt">
+            <span>{t('piece.repeat')}</span>
+            <select
+              className="select"
+              aria-label={t('piece.repeat')}
+              value={info.repeat}
+              onChange={(e) => {
+                const id = engine.anim.selectedId;
+                if (id) engine.anim.setRepeat(id, e.target.value as Repeat);
+              }}
+            >
+              {REPEATS.map((r) => (
+                <option key={r} value={r}>
+                  {t(`repeat.${r}` as I18nKey)}
+                </option>
+              ))}
+            </select>
+          </label>
+          {axes.x ? field('scrollX', 'piece.scrollX', 'px', -1e6, 1e6, 0) : null}
+          {axes.y ? field('scrollY', 'piece.scrollY', 'px', -1e6, 1e6, 0) : null}
+          {info.repeat !== 'none' ? (
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label={t('piece.loopScroll')}
+              data-tip={t('piece.loopScroll')}
+              onClick={() => {
+                const id = engine.anim.selectedId;
+                if (id) engine.anim.loopScroll(id);
+              }}
+            >
+              <Icon name="loop" size={16} />
+            </button>
+          ) : null}
+        </>
+      )}
     </>
+  );
+}
+
+/**
+ * The piece the selected one follows (moving with it): nothing, or another piece or group on its
+ * layer that isn't one of the pieces under it.
+ */
+function FollowsField() {
+  const pieces = useUi((s) => s.animation.pieces);
+  const id = useUi((s) => s.animation.selectedId);
+  const me = pieces.find((p) => p.id === id);
+  if (!me || me.kind === 'group' || me.hinged) return null;
+  // The pieces under it can't be followed: that would be a loop.
+  const under = new Set([me.id]);
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const p of pieces) {
+      if (p.parent && under.has(p.parent) && !under.has(p.id)) {
+        under.add(p.id);
+        grew = true;
+      }
+    }
+  }
+  const name = (i: number) => pieces[i].name || t(pieces[i].kind === 'group' ? 'piece.groupName' : 'piece.defaultName', { n: i + 1 });
+  return (
+    <label className="opt" data-tip={t('piece.followsTip')}>
+      <span>{t('piece.follows')}</span>
+      <select
+        className="select"
+        aria-label={t('piece.follows')}
+        value={me.parent ?? ''}
+        onChange={(e) => {
+          if (e.target.value) engine.anim.attach(me.id, e.target.value);
+          else engine.anim.detach(me.id);
+        }}
+      >
+        <option value="">{t('piece.followsNone')}</option>
+        {pieces.map((p, i) =>
+          p.layerId === me.layerId && !under.has(p.id) ? (
+            <option key={p.id} value={p.id}>
+              {name(i)}
+            </option>
+          ) : null,
+        )}
+      </select>
+    </label>
   );
 }
 

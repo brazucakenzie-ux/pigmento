@@ -17,6 +17,8 @@ import {
   type PieceHandle,
 } from '../../anim/pieceEdit';
 import type { Overlay } from '../../render/Overlay';
+import type { EdgeSnap } from '../../anim/edgeSnap';
+import { drawHingeSnap, hingeOnRelease, hingeSnap } from '../hingeSnap';
 import { registerTool } from '../ToolRegistry';
 import type { ToolContext, ToolPointerEvent } from '../Tool';
 
@@ -49,6 +51,8 @@ interface Drag {
   keys0: Keyframe[];
   pivot0: Point;
   adding: boolean;
+  /** The edge it hinges onto if it's let go now (dragging the whole piece). */
+  snap: EdgeSnap | null;
 }
 
 let drag: Drag | null = null;
@@ -218,6 +222,7 @@ export default registerTool({
       keys0: piece.keyframes.map(cloneKeyframe),
       pivot0: { ...piece.pivot },
       adding: !piece.keyframes.some((k) => k.frame === frame),
+      snap: null,
     };
     // Pulling a bend handle grabs it where the pointer is.
     if (hit.kind === 'tangent') drag.grab = { x: 0, y: 0 };
@@ -279,11 +284,20 @@ export default registerTool({
     else s = scaleState(d.s0, geom, hit.handle, p, { shift: e.shift, alt: e.alt });
     const change = stateChange(s);
     ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, frame, change)));
+    // Dragged near another piece's edge, it hinges there when let go (Alt: it doesn't).
+    if (hit.kind === 'body') {
+      d.snap = hingeSnap(ctx, piece, e.alt);
+      ctx.invalidateOverlay();
+    }
   },
   pointerUp(ctx) {
     const d = drag;
     drag = null;
     if (!d) return;
+    if (d.snap) {
+      hingeOnRelease(ctx, d.id, d.snap);
+      return;
+    }
     const k = d.hit.kind;
     ctx.anim.endDrag(k === 'pivot' ? 'history.pivot' : k === 'pull' || k === 'tangent' ? 'history.motionPath' : d.adding && k !== 'key' ? 'history.keyframeAdd' : 'history.keyframe');
   },
@@ -337,6 +351,7 @@ export default registerTool({
     if (!sel || !ctx.doc.isEffectivelyVisible(sel.layerId)) return;
     drawPath(ctx, ov, sel);
     ov.outlineScreen(outline(sel), true, false);
+    if (drag?.snap) drawHingeSnap(ctx, ov, drag.snap);
     if (in3d(ctx, sel)) return;
     const g = geometry(ctx, sel);
     const active = drag?.hit;

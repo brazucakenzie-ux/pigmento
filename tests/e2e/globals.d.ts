@@ -42,8 +42,8 @@ export interface PigmentoTestHook {
     loop: 'loop' | 'once' | 'pingpong';
     frame: number;
     selectedId: string | null;
-    pieces: { id: string; name: string; layerId: string; keys: { frame: number; easing: string }[] }[];
-    current: { x: number; y: number; w: number; h: number; angle: number; skew: number; opacity: number; easing: string; keyed: boolean; curved: boolean } | null;
+    pieces: { id: string; name: string; layerId: string; keys: { frame: number; easing: string }[]; kind: 'piece' | 'group'; parent: string | null; hinged: boolean }[];
+    current: { x: number; y: number; w: number; h: number; angle: number; skew: number; opacity: number; easing: string; keyed: boolean; curved: boolean; fold: number; group: boolean; link: 'none' | 'follows' | 'hinged' } | null;
     playing: boolean;
     cels: Record<string, number[]>;
     paintOnPiece: boolean;

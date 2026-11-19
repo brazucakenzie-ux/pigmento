@@ -175,8 +175,8 @@ export function handleGlobalKey(e: KeyboardEvent): void {
     return;
   }
 
-  // The Animate tool nudges and deletes the selected piece itself.
-  if (state.tool === 'animate' && (NUDGE[e.key] || e.key === 'Delete') && engine.handleKey(e)) {
+  // The Animate and Perspective plane tools nudge (or fold) and delete the selected piece themselves.
+  if ((state.tool === 'animate' || state.tool === 'plane') && (NUDGE[e.key] || e.key === 'Delete') && engine.handleKey(e)) {
     e.preventDefault();
     return;
   }
