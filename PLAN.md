@@ -448,7 +448,15 @@ Decisions (agreed for Stop 7A; the rest proposed, to agree with the user at thei
 - [x] 7.1 Follow path: a piece follows a path from a shape layer on its own or another layer. Its progress (0–100 %) is keyed with the usual easings, distance along the path is even, and closed paths can go round more than once. The link survives editing the path; deleting the path bakes the motion into keyframes. Undoable (+ unit tests)
 - [x] 7.2 Face direction: on/off with an angle offset, smoothed at stops and sharp corners, for keyframed and followed motion alike; flips and turns of the picture keep it right (+ unit tests)
 - [x] 7.3 Motion path to shape: a piece's curved motion path becomes a path on a shape layer, and the piece then follows it (one undo step) (+ unit tests)
-- [ ] 7.4 E2e: draw a curved path, make a rocket follow it and face its way, save and reopen, export a GIF; `npm run check` green; report
+- [x] 7.4 E2e: draw a curved path, make a rocket follow it and face its way, save and reopen, export a GIF; `npm run check` green; report
+- Stop 7A notes:
+  - **Tests:** lint, type-check, 586 unit and 144 e2e tests pass (19 opt-in skipped). The 100-megapixel open test failed in the full run, on its own, and on an untouched `main` build alike, with 3.2 GB of 13.9 GB of memory free.
+  - **Following a path:** **Path** in the options bar lists every shape's outline on the shape layers (pen paths by their subpaths; other shapes by the outline Convert to path would give). **Along** replaces X and Y while a piece follows one. Dragging the piece slides it along the path, the arrow keys step it 1 % (Shift: 10 %), and its keyframes' dots sit on the path. A piece with no progress keyed yet is spread from the start at its first keyframe to the end at its last (or at the timeline's end, if it had one keyframe).
+  - **Links:** a piece that follows another piece can't follow a path or face its way, and one that does either can't be linked to a piece; hinging onto one makes the new group take its path and facing, so the tree goes along together.
+  - **Deleting a path:** the piece keeps its motion as one keyframe a frame, in the same undo step as the deletion. History gained an `amend` hook for this: the engine notes the followed paths after every change, undo and redo, and fills in what a change took away.
+  - **Facing:** the heading is the motion over 0.2 s either side (at the picture's frame rate), so a 90° corner turns over 0.4 s. Stopped, the piece keeps the way it was going, and before it starts it faces the way it will go. Flipping or turning the picture takes the turn, and any change in how a flipped piece's scale is kept, off a facing piece's keyed angle, so it shows exactly as before.
+  - **Motion path to shape:** the new shape layer goes just under the piece's layer, so the piece shows over the line. It's drawn with the Pen tool's style as an outline.
+  - **Save format:** `.pigm` version 4 (`follow`, `face` and each keyframe's `progress`), written only when a picture uses them; documented in `docs/project-format.md`.
 
 **Stop 7B — Draw on and erase behind**
 - [ ] 7.5 Trim: Start, End and Offset on any path or shape outline on a shape layer, dashes and arrowheads included (an arrowhead stays at the visible end), drawn the same on screen and in exports (+ unit tests, golden sheet)
