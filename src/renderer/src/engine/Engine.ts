@@ -9,6 +9,7 @@ import { LayerController, type LayersInfo } from './doc/LayerController';
 import { AnimationController, type AnimHost, type AnimationInfo } from './anim/AnimationController';
 import { compositeLayers } from './raster/blend';
 import { frameExtras } from './anim/pieceRaster';
+import { motionToPath } from './anim/follow';
 import type { Piece } from './anim/piece';
 import { docToPixel } from './anim/pieceEdit';
 import { PiecePixelsCommand } from './anim/piecePaint';
@@ -1916,6 +1917,39 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     if (!layer) return false;
     this.vectorChanged(layer);
     this.setVectorSelection([node.id]);
+    return true;
+  }
+
+  /**
+   * Motion path to shape: a piece's motion path becomes a path on a new shape layer just under
+   * the piece's layer (to style, trim or reshape), which the piece then follows, keeping its
+   * timing. One undo step. Says why not when it can't (it follows something, or doesn't move).
+   */
+  motionPathToShape(id: string): boolean {
+    const p = this.anim.piece(id);
+    if (!p) return false;
+    if (p.link || p.follow) {
+      this.notify('info', 'notice.motionToShapeFollows');
+      return false;
+    }
+    const made = motionToPath(p);
+    if (!made) {
+      this.notify('info', 'notice.motionToShapeStill');
+      return false;
+    }
+    this.commitLive();
+    const node: VectorShape = { type: 'shape', id: vectorId(), shape: 'path', box: null, points: [], style: { ...shapeStyle(this, 'pen', false), mode: 'outline' }, subpaths: [made.sub], fillRule: 'nonzero' };
+    let layer: VectorLayer | null = null;
+    this.history.group('history.motionToShape', () => {
+      const added = this.doc.layerById(this.layers.addVector(p.layerId));
+      if (added?.kind !== 'vector') return;
+      layer = added;
+      layer.setObjects([node]);
+      this.history.push(new VectorEditCommand('history.motionToShape', this, layer, [], layer.objects));
+      this.anim.followWith(id, { layerId: layer.id, objectId: node.id, sub: 0 }, made.progress);
+    });
+    if (!layer) return false;
+    this.vectorChanged(layer);
     return true;
   }
 

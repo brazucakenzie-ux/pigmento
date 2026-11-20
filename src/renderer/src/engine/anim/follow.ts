@@ -1,6 +1,7 @@
 import type { PaintDocument } from '../doc/Document';
 import { shapeOutline } from '../vector/convert';
 import { walkShapes, type VectorShape } from '../vector/model';
+import type { PathAnchor, SubPath } from '../vector/pathData';
 import { measurePath, type PathMeasure } from './pathMeasure';
 import { MAX_KEYFRAMES, pieceStateAt, type Follow, type Piece } from './piece';
 import type { Keyframe } from './interpolate';
@@ -73,6 +74,49 @@ export class FollowedPaths {
     const paths = docPaths(doc);
     return doc.pieces.filter((p) => p.follow && !paths(p.follow)).map((p) => ({ piece: p, path: this.last.get(keyOf(p.follow!)) ?? null }));
   }
+}
+
+const same = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.abs(a.x - b.x) < 1e-9 && Math.abs(a.y - b.y) < 1e-9;
+
+/**
+ * A piece's motion path as a path it can follow: an anchor at each keyframe (one for a run of
+ * keyframes where it stays put), the keyframes' bends as the anchors' handles, closed if it ends
+ * where it started. With it, how far along the path each keyframe is, so following it keeps the
+ * timing (a piece already moves along a bent motion path by distance). Null if it doesn't move.
+ */
+export function motionToPath(p: Piece): { sub: SubPath; progress: number[] } | null {
+  const abs = (k: Keyframe, v: { x: number; y: number } | null) => v && { x: k.x + v.x, y: k.y + v.y };
+  const anchors: PathAnchor[] = [];
+  /** Which anchor each keyframe is at. */
+  const at: number[] = [];
+  p.keyframes.forEach((k, i) => {
+    const last = anchors[anchors.length - 1];
+    const first = i === 0;
+    const end = i === p.keyframes.length - 1;
+    // The bends that matter: arriving at a keyframe (not the first) and leaving it (not the last).
+    const inn = first ? null : abs(k, k.in);
+    const out = end ? null : abs(k, k.out);
+    if (last && same(last, k) && !last.out && !inn) {
+      anchors[anchors.length - 1] = { ...last, out, smooth: !!(last.in && out) };
+    } else anchors.push({ x: k.x, y: k.y, in: inn, out, smooth: !!(inn && out) });
+    at.push(anchors.length - 1);
+  });
+  // Ending where it started makes a loop (the start takes the bend arriving back at it).
+  let closed = false;
+  const n = anchors.length;
+  if (n >= 3 && same(anchors[0], anchors[n - 1])) {
+    anchors[0] = { ...anchors[0], in: anchors[n - 1].in, smooth: !!(anchors[n - 1].in && anchors[0].out) };
+    anchors.pop();
+    closed = true;
+  }
+  if (anchors.length < 2) return null;
+  // How far along each anchor is, measured as a followed path is (segment by segment).
+  const cum = [0];
+  for (let i = 0; i + 1 < anchors.length; i++) cum.push(cum[i] + (measurePath({ anchors: [anchors[i], anchors[i + 1]], closed: false })?.length ?? 0));
+  const total = closed ? cum[cum.length - 1] + (measurePath({ anchors: [anchors[anchors.length - 1], anchors[0]], closed: false })?.length ?? 0) : cum[cum.length - 1];
+  if (total <= 1e-9) return null;
+  const progress = at.map((a) => (a >= anchors.length ? 1 : cum[a] / total));
+  return { sub: { anchors, closed }, progress };
 }
 
 /**

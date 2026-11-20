@@ -447,7 +447,7 @@ Decisions (agreed for Stop 7A; the rest proposed, to agree with the user at thei
 **Stop 7A — Along a path**
 - [x] 7.1 Follow path: a piece follows a path from a shape layer on its own or another layer. Its progress (0–100 %) is keyed with the usual easings, distance along the path is even, and closed paths can go round more than once. The link survives editing the path; deleting the path bakes the motion into keyframes. Undoable (+ unit tests)
 - [x] 7.2 Face direction: on/off with an angle offset, smoothed at stops and sharp corners, for keyframed and followed motion alike; flips and turns of the picture keep it right (+ unit tests)
-- [ ] 7.3 Motion path to shape: a piece's curved motion path becomes a path on a shape layer, and the piece then follows it (one undo step) (+ unit tests)
+- [x] 7.3 Motion path to shape: a piece's curved motion path becomes a path on a shape layer, and the piece then follows it (one undo step) (+ unit tests)
 - [ ] 7.4 E2e: draw a curved path, make a rocket follow it and face its way, save and reopen, export a GIF; `npm run check` green; report
 
 **Stop 7B — Draw on and erase behind**

@@ -239,6 +239,21 @@ const base: Action[] = [
     enabled: rasterActive,
   },
   {
+    id: 'motionToShape',
+    labelKey: 'action.motionToShape',
+    icon: 'pen',
+    group: 'animation',
+    run: () => {
+      const id = engine.anim.selectedId;
+      if (id) engine.motionPathToShape(id);
+    },
+    enabled: (s) => {
+      const c = s.animation.current;
+      const keys = s.animation.pieces.find((p) => p.id === s.animation.selectedId)?.keys.length ?? 0;
+      return c !== null && c.link === 'none' && c.follow === null && keys >= 2;
+    },
+  },
+  {
     id: 'pasteAsPiece',
     labelKey: 'action.pasteAsPiece',
     icon: 'paste',

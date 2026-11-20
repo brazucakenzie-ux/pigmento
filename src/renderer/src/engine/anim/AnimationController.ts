@@ -1029,6 +1029,20 @@ export class AnimationController {
     });
   }
 
+  /**
+   * `id` follows `target` from now on with each keyframe `progress[i]` of the way along: for a path
+   * made from its own motion path (see motionToPath), whose bends the path now holds. One undo step.
+   */
+  followWith(id: string, target: Follow, progress: readonly number[]): boolean {
+    const p = this.piece(id);
+    if (!p || p.link || progress.length !== p.keyframes.length) return false;
+    return this.change('history.motionToShape', () => {
+      p.keyframes = p.keyframes.map((k, i) => ({ ...k, progress: clampProgress(progress[i]), in: null, out: null }));
+      p.follow = { ...target };
+      return true;
+    });
+  }
+
   /** The path `p` follows, measured (null: it follows none, follows another piece instead, or the path is gone). */
   pathOf(p: Piece): PathMeasure | null {
     return p.follow && !p.link ? docPaths(this.doc)(p.follow) : null;

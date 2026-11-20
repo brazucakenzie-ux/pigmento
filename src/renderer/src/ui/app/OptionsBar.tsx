@@ -515,6 +515,11 @@ function PieceFields({ plane = false }: { plane?: boolean }) {
           <Icon name="line" size={16} />
         </button>
       ) : null}
+      {info.link === 'none' && !onPath ? (
+        <button type="button" className="icon-btn" aria-label={t('action.motionToShape')} data-tip={t('piece.motionToShapeTip')} disabled={keys < 2} onClick={() => runAction('motionToShape')}>
+          <Icon name="pen" size={16} />
+        </button>
+      ) : null}
       {hinged ? null : (
         <>
           <button type="button" className="icon-btn" aria-label={t('transform.flipH')} data-tip={t('transform.flipH')} onClick={() => engine.anim.setFields({ w: -info.w })}>

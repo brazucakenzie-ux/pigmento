@@ -192,6 +192,8 @@ Dragging the piece slides it along its path (Shift: in steps of 10 %), and the a
 
 Edit the path at any time (move its points, reshape it) and the piece follows the new one. Set **Path** to **None**, or delete the path, and the piece keeps moving exactly as it did, as ordinary keyframes (one on each frame). A piece that follows another piece can't follow a path too, but the top of its tree can: hinge pieces onto one that follows a path, and the whole tree goes along it.
 
+Already animated a piece with keyframes? **Motion path to shape** (the pen button in the options bar, or on the Animate tab) turns its motion path, bends and all, into a path on a new shape layer just under the piece's layer, and the piece then follows it with the same timing. Style the path like any shape, or reshape it with the Pen tool, and the motion changes with it. A piece's stops become single points it waits at, and a motion path that ends where it started becomes a closed loop. It's one undo step.
+
 ### Facing the way it goes
 
 Tick **Face its way** in the options bar and the piece turns to point where it's heading, along a path or along its own motion path. It turns smoothly through sharp corners. When it stops, it keeps facing the way it was going, and before it sets off it already faces the way it will go. **Art points** says which way your drawing points as drawn: 0° if the rocket points right, −90° if it points up, 90° if down, 180° if left. The piece's own angle (or spin) is added on top, so you can still key a wobble or a lean. A flipped piece still points its way, and so does one in a picture you flip or turn. Like a path, facing is only for a piece that follows no other piece (or the group at the top of its tree).
