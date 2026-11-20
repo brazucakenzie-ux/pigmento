@@ -5,13 +5,16 @@ import { celAt, celIndexAt, celSurfaces, insertCel, MAX_CELS, moveCelStart, remo
 import type { Command, History } from '../history/History';
 import type { ImageBuf } from '../raster/transform';
 import type { I18nKey, I18nParams } from '../../i18n';
-import { movePivot, type Easing } from './interpolate';
+import { movePivot, type Easing, type PieceState } from './interpolate';
 import { movePivot3D } from './planeEdit';
 import { MAX_STRENGTH, MIN_STRENGTH, type Camera, type Light } from './space';
 import type { Hinge } from './frames';
 import { attach, centrePivot, detach, duplicateTree, hinge, movePivotLocal, moveTree, removeTree, rootOf, subtree, type LinkRefusal } from './links';
 import { BOX_FACES, faceSize, makeBox, MAX_BOX_SIDE, type BoxFace, type BoxSize } from './box';
-import { MAX_TREE, Scene } from './scene';
+import { MAX_TREE, type Scene } from './scene';
+import { bakeFollow, docMotion, docPaths, FollowedPaths, outlinesOf, sceneOf } from './follow';
+import type { PathMeasure } from './pathMeasure';
+import { walkShapes } from '../vector/model';
 import { cameraMoveAt, MAX_CAMERA_KEYS, moveCameraKey, removeCameraKey, setCameraKey, type CameraKey, type CameraMove } from './cameraMove';
 import { MAX_PIXELS } from '../io/protocol';
 import {
@@ -20,6 +23,7 @@ import {
   MAX_KEYFRAMES,
   MAX_PIECE_SIDE,
   MAX_PIECES,
+  MAX_PROGRESS,
   MAX_SCROLL,
   moveKey,
   newPieceId,
@@ -30,6 +34,8 @@ import {
   type KeyChange,
   type Piece,
   type PieceKind,
+  type Follow,
+  type Face,
   type Back,
   type Repeat,
 } from './piece';
@@ -129,6 +135,23 @@ export interface PieceFields {
   curved: boolean;
   /** Which way copies of it tile on (not keyframed). */
   repeat: Repeat;
+  /** The path it follows (null: none; only pieces that follow no other piece can). */
+  follow: Follow | null;
+  /** How far along that path, in percent (past 100 goes round a closed path again). */
+  progress: number;
+  /** It turns to face the way it goes (only pieces that follow no other piece can; not keyframed). */
+  face: boolean;
+  /** Which way its art points as drawn, in degrees (0 = right, 90 = down). */
+  faceAngle: number;
+}
+
+/** A path a piece can follow: one outline of a shape on a shape layer. */
+export interface PathChoice extends Follow {
+  layerName: string;
+  /** The shape's place on its layer (1 = the bottom one). */
+  shape: number;
+  /** Which of its outlines, when it has more than one (1 = the first), else null. */
+  part: number | null;
 }
 
 const DEG = 180 / Math.PI;
@@ -227,7 +250,7 @@ export class AnimationController {
 
   /** Every piece's pose at `frame` (the frame shown by default), as the picture's camera sees it. */
   scene(frame = this.frame): Scene {
-    return new Scene(this.doc.pieces, frame, this.doc.spaceAt(frame));
+    return sceneOf(this.doc, frame);
   }
 
   piece(id: string | null): Piece | null {
@@ -365,7 +388,8 @@ export class AnimationController {
     const p = this.selected;
     if (!p) return null;
     const f = this.frame;
-    const s = pieceStateAt(p, f);
+    // Where it is (on a path, where the path puts it); its angle as keyed (facing its way turns it on top of that).
+    const s = { ...pieceStateAt(p, f), ...xyOf(this.scene().stateAt(p, f)) };
     const at = p.keyframes.find((k) => k.frame === f);
     const before = [...p.keyframes].reverse().find((k) => k.frame <= f) ?? p.keyframes[0];
     return {
@@ -392,11 +416,15 @@ export class AnimationController {
       keyed: at !== undefined,
       curved: at !== undefined && (at.in !== null || at.out !== null),
       repeat: p.repeat,
+      follow: p.follow && !p.link ? { ...p.follow } : null,
+      progress: s.progress * 100,
+      face: p.face.on,
+      faceAngle: p.face.angle * DEG,
     };
   }
 
   /** Set the selected piece's values at the current frame (auto-key), in the options bar's units. */
-  setFields(change: Partial<Omit<PieceFields, 'keyed' | 'curved' | 'repeat' | 'back' | 'in3d' | 'shade' | 'group' | 'link' | 'inGroup'>>): boolean {
+  setFields(change: Partial<Omit<PieceFields, 'keyed' | 'curved' | 'repeat' | 'back' | 'in3d' | 'shade' | 'group' | 'link' | 'inGroup' | 'follow' | 'face' | 'faceAngle'>>): boolean {
     const p = this.selected;
     if (!p) return false;
     const k: KeyChange = {};
@@ -412,10 +440,31 @@ export class AnimationController {
     if (change.tilt !== undefined) k.tilt = change.tilt / DEG;
     if (change.turn !== undefined) k.turn = change.turn / DEG;
     if (change.fold !== undefined) k.fold = change.fold / DEG;
+    if (change.progress !== undefined) k.progress = clampProgress(change.progress / 100);
     // Never at or past the camera.
     if (change.depth !== undefined) k.depth = Math.max(-this.doc.space.f * 0.99, Math.min(1e6, change.depth));
     if (change.easing !== undefined) k.easing = change.easing;
     return this.setKey(p.id, this.frame, k);
+  }
+
+  /**
+   * Face the way it goes, or not, and which way its art points as drawn (radians): one undo step,
+   * not keyframed. Says why not for a piece that follows another piece.
+   */
+  setFace(id: string, change: Partial<Face>): boolean {
+    const p = this.piece(id);
+    if (!p) return false;
+    const next = { on: change.on ?? p.face.on, angle: change.angle ?? p.face.angle };
+    next.angle = Number.isFinite(next.angle) ? Math.atan2(Math.sin(next.angle), Math.cos(next.angle)) : 0;
+    if (next.on === p.face.on && next.angle === p.face.angle) return false;
+    if (next.on && p.link) {
+      this.host.notify('info', 'notice.faceLinked');
+      return false;
+    }
+    return this.change('history.face', () => {
+      p.face = next;
+      return true;
+    });
   }
 
   /** What shows when a piece is turned round in 3D (one undo step; not keyframed). */
@@ -831,7 +880,7 @@ export class AnimationController {
     const top = rootOf(this.doc.pieces, p);
     if (top.kind !== 'group') return false;
     return this.change('history.centrePivot', () => {
-      this.doc.pieces = centrePivot(this.doc.pieces, top.id, this.frame, this.doc.space);
+      this.doc.pieces = centrePivot(this.doc.pieces, top.id, this.frame, this.doc.space, docMotion(this.doc));
       return true;
     });
   }
@@ -863,12 +912,14 @@ export class AnimationController {
     else if (why === 'loop') this.host.notify('info', 'notice.linkLoop');
     else if (why === 'full') this.host.notify('info', 'notice.linkFull', { max: MAX_TREE });
     else if (why === 'group') this.host.notify('info', 'notice.linkGroup');
+    else if (why === 'path') this.host.notify('info', 'notice.linkPath');
+    else if (why === 'face') this.host.notify('info', 'notice.linkFace');
     return false;
   }
 
   /** `id` follows `parentId` from now on, staying where it is at this frame (one undo step). */
   attach(id: string, parentId: string): boolean {
-    const next = attach(this.doc.pieces, id, parentId, this.frame, this.doc.space);
+    const next = attach(this.doc.pieces, id, parentId, this.frame, this.doc.space, docMotion(this.doc));
     if (typeof next === 'string') return this.refused(next);
     return this.change('history.pieceAttach', () => {
       this.doc.pieces = next;
@@ -893,7 +944,7 @@ export class AnimationController {
     const p = this.piece(id);
     if (!p?.link) return false;
     return this.change(p.link.hinge ? 'history.unhinge' : 'history.pieceDetach', () => {
-      this.doc.pieces = detach(this.doc.pieces, id, this.doc.space);
+      this.doc.pieces = detach(this.doc.pieces, id, this.doc.space, docMotion(this.doc));
       return true;
     });
   }
@@ -932,6 +983,103 @@ export class AnimationController {
       this.doc.pieces = moveTree(this.doc.pieces, id, layerId);
       return true;
     });
+  }
+
+  /** The paths pieces follow, as of the picture's last change (see bakeLostPaths). */
+  private followed = new FollowedPaths();
+
+  /**
+   * Follow a path (one undo step). A piece that has no progress yet is spread evenly along it:
+   * from the start at its first keyframe to the end at its last, or at the timeline's last frame
+   * if it has only one keyframe. Following nothing (null) keeps the motion it had, as keyframes.
+   * Says why not when it can't (it follows another piece, or the path is gone).
+   */
+  follow(id: string, target: Follow | null): boolean {
+    const p = this.piece(id);
+    if (!p) return false;
+    const paths = docPaths(this.doc);
+    if (!target) {
+      if (!p.follow) return false;
+      const path = paths(p.follow);
+      return this.change('history.followPath', () => {
+        if (path && !p.link) p.keyframes = bakeFollow(p, path);
+        p.follow = null;
+        return true;
+      });
+    }
+    if (p.link) {
+      this.host.notify('info', 'notice.followLinked');
+      return false;
+    }
+    if (!paths(target)) {
+      this.host.notify('info', 'notice.followNoPath');
+      return false;
+    }
+    return this.change('history.followPath', () => {
+      if (p.keyframes.every((k) => k.progress === 0)) {
+        let keys = p.keyframes;
+        const last = this.doc.timeline.length - 1;
+        if (keys.length === 1 && keys[0].frame < last) keys = setKey(keys, last, {});
+        const f0 = keys[0].frame;
+        const span = keys[keys.length - 1].frame - f0;
+        p.keyframes = keys.map((k) => ({ ...k, progress: span > 0 ? (k.frame - f0) / span : 0 }));
+      }
+      p.follow = { ...target };
+      return true;
+    });
+  }
+
+  /**
+   * `id` follows `target` from now on with each keyframe `progress[i]` of the way along: for a path
+   * made from its own motion path (see motionToPath), whose bends the path now holds. One undo step.
+   */
+  followWith(id: string, target: Follow, progress: readonly number[]): boolean {
+    const p = this.piece(id);
+    if (!p || p.link || progress.length !== p.keyframes.length) return false;
+    return this.change('history.motionToShape', () => {
+      p.keyframes = p.keyframes.map((k, i) => ({ ...k, progress: clampProgress(progress[i]), in: null, out: null }));
+      p.follow = { ...target };
+      return true;
+    });
+  }
+
+  /** The path `p` follows, measured (null: it follows none, follows another piece instead, or the path is gone). */
+  pathOf(p: Piece): PathMeasure | null {
+    return p.follow && !p.link ? docPaths(this.doc)(p.follow) : null;
+  }
+
+  /** Every path a piece could follow: each outline of each shape on the shape layers, bottom to top. */
+  pathChoices(): PathChoice[] {
+    const out: PathChoice[] = [];
+    for (const layer of this.doc.vectorLayers()) {
+      let n = 0;
+      for (const s of walkShapes(layer.objects)) {
+        n++;
+        const subs = outlinesOf(s).flatMap((m, sub) => (m && m.length > 0 ? [sub] : []));
+        for (const sub of subs) out.push({ layerId: layer.id, objectId: s.id, sub, layerName: layer.name, shape: n, part: subs.length > 1 ? sub + 1 : null });
+      }
+    }
+    return out;
+  }
+
+  /** Note the paths pieces follow now (after every change, undo and redo, and opening a picture). */
+  rememberPaths(): void {
+    this.followed.remember(this.doc);
+  }
+
+  /**
+   * Called as each change is recorded: pieces whose path that change deleted keep the motion they
+   * had, as keyframes, in the same undo step. Null when nothing needs it.
+   */
+  bakeLostPaths(): Command | null {
+    const lost = this.followed.lost(this.doc);
+    if (!lost.length || this.drag) return null;
+    const before = captureAnim(this.doc);
+    for (const { piece, path } of lost) {
+      if (path && !piece.link) piece.keyframes = bakeFollow(piece, path);
+      piece.follow = null;
+    }
+    return new AnimationCommand('history.followPath', this.host, before, captureAnim(this.doc));
   }
 
   /** Set values at `frame` (adding a keyframe there if there isn't one). */
@@ -1051,6 +1199,15 @@ function strip(p: Piece): Omit<Piece, 'src'> {
 
 function clampScroll(v: number): number {
   return Number.isFinite(v) ? Math.max(-MAX_SCROLL, Math.min(MAX_SCROLL, v)) : 0;
+}
+
+/** Just where a state puts the piece. */
+function xyOf(s: PieceState): { x: number; y: number } {
+  return { x: s.x, y: s.y };
+}
+
+function clampProgress(v: number): number {
+  return Number.isFinite(v) ? Math.max(-MAX_PROGRESS, Math.min(MAX_PROGRESS, v)) : 0;
 }
 
 /** Scale can't be exactly zero (the piece would vanish and couldn't be grabbed again). */

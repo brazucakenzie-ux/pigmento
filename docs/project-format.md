@@ -232,6 +232,26 @@ Pieces in 1.2 can be bigger than the canvas and sit anywhere, partly or wholly o
   - One key per frame (the last given wins); frames past the end of the timeline move to its last frame.
 - Links that don't hold are dropped when a file is opened (the piece then follows nothing): one to a missing piece or one on another layer, a link from a group, a hinge onto a group, a loop, and pieces past the 64th in one tree.
 
+## Paths in 1.3 (version 4)
+
+Pigmento 1.3 writes version 4 only when a piece follows a path, faces the way it goes (or has a keyed progress or an art angle left over); otherwise it writes the oldest version that holds the picture, as 1.2 did. Pigmento 1.2 refuses a version 4 file with its "made with a newer Pigmento" message. Version 4 adds:
+
+```json
+{
+  "id": "piece-1",
+  "follow": { "layerId": "layer-4", "objectId": "v12-m3k9", "sub": 0 },
+  "face": { "on": true, "angle": -1.5708 },
+  "keyframes": [{ "frame": 0, "progress": 0, "…": "…" }, { "frame": 23, "progress": 1, "…": "…" }]
+}
+```
+
+- **`follow`** (on the piece): the path it moves along, or `null` (the default). `layerId` is a shape layer, `objectId` one of its shapes (in a group or not), and `sub` which of that shape's outlines (0 = the first; 0 to 100,000). Any shape can be followed: a pen path by its own subpaths, and a line, curve, rectangle, ellipse or library shape by the outline Convert to path would give it.
+  - Only a piece that follows no other piece (`link` is `null`) is placed by its path. One that also has a `link` keeps to the link, and its `follow` is ignored.
+  - A path that isn't there (a missing layer or shape, or an outline with fewer than two points) leaves the piece on its own `x` and `y`. Pigmento never writes one: deleting a path turns the motion along it into ordinary keyframes in the same undo step.
+- **`progress`** (on each keyframe, 0 when left out): how far along the path the piece's pivot is, by distance along it, so an even progress moves it at an even speed. 0 is the path's start and 1 its end; an open path holds at its ends, and a closed one goes round again past 1 or below 0 (2.5 is half way round the third time). From −1,000,000 to 1,000,000. It eases between keyframes like any other value, and replaces the keyframe's `x` and `y` while the piece follows a path (they're kept, but don't place it).
+- **`face`** (on the piece, default `{ "on": false, "angle": 0 }`): facing the way it goes. While `on`, a piece that follows no other piece is turned so its art points the way its pivot is moving on the canvas (along its path, or by its own `x` and `y`). `angle` (radians, −10,000 to 10,000; Pigmento writes −π to π) is which way the art points in the piece's own pixels before it's scaled or turned: 0 right, π/2 down. The turn is the heading minus that direction once scaled by the keyframe's `sx` and `sy` (atan2(sy·sin angle, sx·cos angle)), added to the keyframe's `angle`.
+  - The heading at a frame is the direction from where the pivot is 0.2 seconds earlier to where it is 0.2 seconds later (at the animation's `fps`; at least half a frame each way). Where that's no movement at all, it's the last heading before (where the piece stopped), else the first one after (where it starts). A piece that never moves isn't turned.
+
 ## Limits and safety
 - Width and height are at most 30,000 px each and 250 megapixels in total. Files may hold at most 2,000 layers, nested at most 64 deep, 200 saved selections and 256 pictures (each at most 4096 × 4096 px; bigger pictures are scaled down when chosen).
 - Each archive entry is capped at 1 GB uncompressed and the whole archive at 2 GB. PNG sizes must match the sizes recorded for them.

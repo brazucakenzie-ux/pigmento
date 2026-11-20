@@ -293,6 +293,7 @@ function AnimateTab() {
         </div>
         <div className="rb-stack">
           <ActionButton id="animKeepOriginal" variant="small" />
+          <ActionButton id="motionToShape" variant="small" />
         </div>
       </RibbonGroup>
       <RibbonGroup label={t('group.space')}>

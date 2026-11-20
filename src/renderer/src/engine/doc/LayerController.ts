@@ -159,10 +159,15 @@ export class LayerController {
     return layer.id;
   }
 
-  /** A new, empty shape layer above the active one. */
-  addVector(): string {
+  /** A new, empty shape layer above the active one (or just under the layer `below`), made active. */
+  addVector(below?: string): string {
     const layer = new VectorLayer(this.namer('shapes', this.nextNumber('vector')), this.doc.width, this.doc.height);
-    this.edit('history.layerAddShapes', () => this.insertAboveActive(layer));
+    const slot = below === undefined ? null : this.doc.slotOf(below);
+    this.edit('history.layerAddShapes', () => {
+      if (!slot) return this.insertAboveActive(layer);
+      slot.list.splice(slot.index, 0, layer);
+      this.doc.activeId = layer.id;
+    });
     return layer.id;
   }
 

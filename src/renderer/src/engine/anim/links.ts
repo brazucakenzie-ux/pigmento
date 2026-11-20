@@ -12,7 +12,7 @@ import {
 } from './frames';
 import type { Easing, Keyframe } from './interpolate';
 import { cloneKeyframe, copyPieces, makeGroup, MAX_KEYFRAMES, type Piece } from './piece';
-import { MAX_TREE, Scene } from './scene';
+import { MAX_TREE, Scene, type Motion } from './scene';
 import { NEAR, type Space } from './space';
 
 /**
@@ -22,8 +22,12 @@ import { NEAR, type Space } from './space';
  * other pieces simply follow. Hinges hang a piece off an edge of a piece of pixels, never a group.
  */
 
+/** What places pieces besides their keyframes, for poses at other frames (see Scene). */
+type Moves = Motion | undefined;
+
 /** Why a link can't be made. */
-export type LinkRefusal = 'missing' | 'layer' | 'loop' | 'full' | 'group';
+/** Why a link can't be made ('path' and 'face': the piece follows a path or faces the way it goes, which a linked piece can't). */
+export type LinkRefusal = 'missing' | 'layer' | 'loop' | 'full' | 'group' | 'path' | 'face';
 
 export interface LinkResult {
   pieces: Piece[];
@@ -141,6 +145,8 @@ function refusal(
   if (!p || !parent) return 'missing';
   if (p.layerId !== parent.layerId) return 'layer';
   if (p.kind === 'group' || (hinged && parent.kind !== 'piece')) return 'group';
+  if (p.follow) return 'path';
+  if (p.face.on) return 'face';
   const moving = subtree(pieces, id);
   if (moving.some((q) => q.id === parentId)) return 'loop';
   const target = treeOf(pieces, parent);
@@ -183,18 +189,19 @@ export function attach(
   parentId: string,
   frame: number,
   space: Space,
+  motion: Moves = undefined,
 ): Piece[] | LinkRefusal {
   const why = refusal(pieces, id, parentId, false, 0);
   if (why) return why;
   const map = byId(pieces);
   const p = map.get(id)!;
   const parent = map.get(parentId)!;
-  const inv = frameInvert(new Scene(pieces, frame, space).pose(parent).frame);
+  const inv = frameInvert(new Scene(pieces, frame, space, motion).pose(parent).frame);
   if (!inv) return 'missing';
   const carry = handleMap(inv);
   let near = { tilt: 0, turn: 0, angle: 0 };
   const keyframes = p.keyframes.map((k) => {
-    const world = new Scene(pieces, k.frame, space).pose(p).frame;
+    const world = new Scene(pieces, k.frame, space, motion).pose(p).frame;
     const parts = localParts(frameChain(inv, world), p.pivot, near);
     near = parts;
     return { ...cloneKeyframe(k), ...parts, in: carry(k.in), out: carry(k.out) };
@@ -227,7 +234,7 @@ export function hinge(
   const out: Piece[] = [];
   for (const q of pieces) {
     if (q.id === parentId && needsGroup) {
-      // The group moves as the parent did (its opacity stays with the parent, as does its scroll).
+      // The group moves as the parent did, along its path and facing its way too (its opacity stays with the parent, as does its scroll).
       group = makeGroup(
         newId(),
         '',
@@ -236,10 +243,14 @@ export function hinge(
         q.pivot,
         q.keyframes.map((k) => ({ ...k, opacity: 1, scrollX: 0, scrollY: 0, fold: 0 })),
       );
+      group.follow = q.follow && { ...q.follow };
+      group.face = { ...q.face };
       out.push(group, {
         ...q,
-        keyframes: q.keyframes.map((k) => placeNeutral(k, q.pivot)),
+        keyframes: q.keyframes.map((k) => ({ ...placeNeutral(k, q.pivot), progress: 0 })),
         link: { parent: group.id, hinge: null },
+        follow: null,
+        face: { ...q.face, on: false },
       });
     } else if (q.id === id) {
       out.push({
@@ -257,7 +268,7 @@ export function hinge(
  * frame where it or anything above it has one. The pieces under it stay with it; a group left
  * with no pieces goes.
  */
-export function detach(pieces: readonly Piece[], id: string, space: Space): Piece[] {
+export function detach(pieces: readonly Piece[], id: string, space: Space, motion: Moves = undefined): Piece[] {
   const map = byId(pieces);
   const p = map.get(id);
   if (!p || !parentIn(map, p)) return [...pieces];
@@ -275,7 +286,7 @@ export function detach(pieces: readonly Piece[], id: string, space: Space): Piec
   };
   let near = { tilt: 0, turn: 0, angle: 0 };
   const keyframes = frames.map((f): Keyframe => {
-    const pose = new Scene(pieces, f, space).pose(p);
+    const pose = new Scene(pieces, f, space, motion).pose(p);
     const parts = rootParts(pose.frame, p.pivot, space, near);
     near = parts;
     return {
@@ -365,11 +376,11 @@ export function movePivotLocal(
  * keyframe. The group's keyframes take the new pivot's place, and the pieces right under it move
  * back by its depth (they're placed relative to the group's own plane, which moves with it).
  */
-export function centrePivot(pieces: readonly Piece[], groupId: string, frame: number, space: Space): Piece[] {
+export function centrePivot(pieces: readonly Piece[], groupId: string, frame: number, space: Space, motion: Moves = undefined): Piece[] {
   const map = byId(pieces);
   const g = map.get(groupId);
   if (!g || g.kind !== 'group') return [...pieces];
-  const scene = new Scene(pieces, frame, space);
+  const scene = new Scene(pieces, frame, space, motion);
   const inv = frameInvert(scene.pose(g).frame);
   const members = subtree(pieces, groupId).filter((p) => p.kind === 'piece');
   if (!inv || !members.length) return [...pieces];

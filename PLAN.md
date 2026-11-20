@@ -410,8 +410,8 @@ Decisions (agreed with the user):
   - **Keyboard:** the Animate and Perspective plane tools share one key handler, so the Animate tool now folds hinged faces too, and the arrow keys slide the camera while its row is selected.
   - **Performance:** flat repeating pieces now draw on the GPU (see 6.23).
 
-### Milestone 7 — Paths, trails and loops, version 1.3.0 (requested after 1.2.0; not started)
-Things that travel leave marks. A piece can follow a path drawn on a shape layer and face the way it's going. A path can be drawn on, or eaten away right behind the piece travelling it, like a burning fuse or a route on a map. A piece can leave a trail: smoke, sparks, a comet tail, speed lines. Short cycles repeat by themselves: a layer's drawings (cloth waving in the wind, a flag, a flickering flame) and a piece's keyframes (a swinging sign, a bobbing boat) loop however long the timeline is, and things that never stop turning (wind turbines, waterwheels, fans, gears) spin forever at a steady speed. The user asked for this plan but not for the work yet, so nothing starts until they say so. Before 7.1, go through the decisions below with them. Split into five stops; each ends with a working app, `npm run check` green and a report, then waits for "continue". Each item is ticked in the same commit as its work.
+### Milestone 7 — Paths, trails and loops, version 1.3.0 (requested after 1.2.0; in progress)
+Things that travel leave marks. A piece can follow a path drawn on a shape layer and face the way it's going. A path can be drawn on, or eaten away right behind the piece travelling it, like a burning fuse or a route on a map. A piece can leave a trail: smoke, sparks, a comet tail, speed lines. Short cycles repeat by themselves: a layer's drawings (cloth waving in the wind, a flag, a flickering flame) and a piece's keyframes (a swinging sign, a bobbing boat) loop however long the timeline is, and things that never stop turning (wind turbines, waterwheels, fans, gears) spin forever at a steady speed. Started on 2026-11-20, when the user agreed the decisions below for Stop 7A as proposed; agree each later stop's decisions with them as it comes up. Split into five stops; each ends with a working app, `npm run check` green and a report, then waits for "continue". Each item is ticked in the same commit as its work.
 
 Words used in the UI:
 - **Follow path:** a piece travels along a path from a shape layer, its **progress** (0–100 %) keyed on the timeline instead of its position.
@@ -422,13 +422,13 @@ Words used in the UI:
 - **Loop keyframes:** after its last keyframe, a piece starts its moves again from the first (**Loop**) or plays them backwards and forwards (**Back and forth**).
 - **Spin forever:** a piece turns about its pivot at a steady **speed** (turns a second, either way), on and on, without keyframes. **Tilt forever** and **Turn forever** do the same in 3D, so a coin can flip or a sign revolve.
 
-Decisions proposed (to agree with the user before starting):
+Decisions (agreed for Stop 7A; the rest proposed, to agree with the user at their stop):
 - **Deterministic trails:** a trail is worked out from the timeline alone. Each puff's birth, place, size and colour come from the frame and a seed, so scrubbing, playback and exports always show the same smoke, and no simulation state is saved. Puffs are emitted by distance travelled as well as by time, so a fast piece still leaves an unbroken trail.
 - **Trail art:** puffs use any brush tip from the library (built-in or the user's own), or a small picture. An echo uses the piece's own pixels.
 - **Where trails draw:** on the piece's layer, behind the piece (or in front, as an option). In 3D, puffs face the camera at the emitter's depth, so they shrink with distance.
 - **Keyed emission:** emission is keyed on and off, with its rate and the colours over life, so smoke can start at ignition and stop at burn-out. A trail on a piece that doesn't move, given drift, makes a chimney or a candle.
 - **Keyed shape paths:** a path on a shape layer can follow, or be followed by, a piece on the timeline. In 1.3.0 a shape object gains keyframes for its trim only (Start, End, Offset), so its row shows in the timeline. Animating a shape's points, style or size is left for later.
-- **Following a path:** the piece keeps a link to the path, so editing the path changes the motion. If the path is deleted, the piece keeps the motion it had, baked into keyframes. Following ignores the piece's own x and y keys; a curved motion path can also be turned into a shape path (**Motion path to shape**) to style or trim it.
+- **Following a path:** the piece keeps a link to the path, so editing the path changes the motion. If the path is deleted, the piece keeps the motion it had, baked into keyframes. Following ignores the piece's own x and y keys: a keyed **progress** places it instead, by distance along the path. Any shape's outline can be followed. Only a piece that follows no other piece can follow a path (the top of a tree can, carrying the tree); a curved motion path can also be turned into a shape path (**Motion path to shape**) to style or trim it.
 - **Face direction** uses the direction on the canvas, smoothed so a stop or a sharp corner doesn't flick the piece round. It adds to the piece's spin.
 - **Loops:**
   - A loop is a setting on the layer or piece, not copies, so changing drawing A changes every repeat of it.
@@ -445,10 +445,18 @@ Decisions proposed (to agree with the user before starting):
 - **Left out of 1.3.0:** physics (gravity, bouncing, collisions), emitters that aren't on a piece, wind fields, motion blur, and trails on frame-by-frame drawings.
 
 **Stop 7A — Along a path**
-- [ ] 7.1 Follow path: a piece follows a path from a shape layer on its own or another layer. Its progress (0–100 %) is keyed with the usual easings, distance along the path is even, and closed paths can go round more than once. The link survives editing the path; deleting the path bakes the motion into keyframes. Undoable (+ unit tests)
-- [ ] 7.2 Face direction: on/off with an angle offset, smoothed at stops and sharp corners, for keyframed and followed motion alike; flips and turns of the picture keep it right (+ unit tests)
-- [ ] 7.3 Motion path to shape: a piece's curved motion path becomes a path on a shape layer, and the piece then follows it (one undo step) (+ unit tests)
-- [ ] 7.4 E2e: draw a curved path, make a rocket follow it and face its way, save and reopen, export a GIF; `npm run check` green; report
+- [x] 7.1 Follow path: a piece follows a path from a shape layer on its own or another layer. Its progress (0–100 %) is keyed with the usual easings, distance along the path is even, and closed paths can go round more than once. The link survives editing the path; deleting the path bakes the motion into keyframes. Undoable (+ unit tests)
+- [x] 7.2 Face direction: on/off with an angle offset, smoothed at stops and sharp corners, for keyframed and followed motion alike; flips and turns of the picture keep it right (+ unit tests)
+- [x] 7.3 Motion path to shape: a piece's curved motion path becomes a path on a shape layer, and the piece then follows it (one undo step) (+ unit tests)
+- [x] 7.4 E2e: draw a curved path, make a rocket follow it and face its way, save and reopen, export a GIF; `npm run check` green; report
+- Stop 7A notes:
+  - **Tests:** lint, type-check, 586 unit and 144 e2e tests pass (19 opt-in skipped). The 100-megapixel open test failed in the full run, on its own, and on an untouched `main` build alike, with 3.2 GB of 13.9 GB of memory free.
+  - **Following a path:** **Path** in the options bar lists every shape's outline on the shape layers (pen paths by their subpaths; other shapes by the outline Convert to path would give). **Along** replaces X and Y while a piece follows one. Dragging the piece slides it along the path, the arrow keys step it 1 % (Shift: 10 %), and its keyframes' dots sit on the path. A piece with no progress keyed yet is spread from the start at its first keyframe to the end at its last (or at the timeline's end, if it had one keyframe).
+  - **Links:** a piece that follows another piece can't follow a path or face its way, and one that does either can't be linked to a piece; hinging onto one makes the new group take its path and facing, so the tree goes along together.
+  - **Deleting a path:** the piece keeps its motion as one keyframe a frame, in the same undo step as the deletion. History gained an `amend` hook for this: the engine notes the followed paths after every change, undo and redo, and fills in what a change took away.
+  - **Facing:** the heading is the motion over 0.2 s either side (at the picture's frame rate), so a 90° corner turns over 0.4 s. Stopped, the piece keeps the way it was going, and before it starts it faces the way it will go. Flipping or turning the picture takes the turn, and any change in how a flipped piece's scale is kept, off a facing piece's keyed angle, so it shows exactly as before.
+  - **Motion path to shape:** the new shape layer goes just under the piece's layer, so the piece shows over the line. It's drawn with the Pen tool's style as an outline.
+  - **Save format:** `.pigm` version 4 (`follow`, `face` and each keyframe's `progress`), written only when a picture uses them; documented in `docs/project-format.md`.
 
 **Stop 7B — Draw on and erase behind**
 - [ ] 7.5 Trim: Start, End and Offset on any path or shape outline on a shape layer, dashes and arrowheads included (an arrowhead stays at the visible end), drawn the same on screen and in exports (+ unit tests, golden sheet)

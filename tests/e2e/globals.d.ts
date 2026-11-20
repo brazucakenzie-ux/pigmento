@@ -43,7 +43,7 @@ export interface PigmentoTestHook {
     frame: number;
     selectedId: string | null;
     pieces: { id: string; name: string; layerId: string; keys: { frame: number; easing: string }[]; kind: 'piece' | 'group'; parent: string | null; hinged: boolean }[];
-    current: { x: number; y: number; w: number; h: number; angle: number; skew: number; opacity: number; easing: string; keyed: boolean; curved: boolean; fold: number; group: boolean; link: 'none' | 'follows' | 'hinged' } | null;
+    current: { x: number; y: number; w: number; h: number; angle: number; skew: number; opacity: number; easing: string; keyed: boolean; curved: boolean; fold: number; group: boolean; link: 'none' | 'follows' | 'hinged'; follow: { layerId: string; objectId: string; sub: number } | null; progress: number; face: boolean; faceAngle: number } | null;
     playing: boolean;
     cels: Record<string, number[]>;
     paintOnPiece: boolean;
@@ -57,7 +57,7 @@ export interface PigmentoTestHook {
   setTimeline(change: { fps?: number; length?: number }): boolean;
   renderTimes(frames: number[]): number[];
   encodeAnimation(format: 'gif' | 'mp4', count: number): Promise<{ ms: number; bytes: number }>;
-  pieceKeys(id: string): { frame: number; x: number; y: number; in: { x: number; y: number } | null; out: { x: number; y: number } | null; easing: string }[];
+  pieceKeys(id: string): { frame: number; x: number; y: number; in: { x: number; y: number } | null; out: { x: number; y: number } | null; easing: string; progress: number }[];
   pieceAt(id: string, frame: number): { x: number; y: number; sx: number; sy: number; angle: number; skew: number; opacity: number; scrollX: number; scrollY: number; depth: number; tilt: number; turn: number; fold: number } | null;
   setFrame(frame: number): void;
   setPieceKey(id: string, frame: number, change: Partial<Record<'x' | 'y' | 'sx' | 'sy' | 'angle' | 'skew' | 'opacity' | 'scrollX' | 'scrollY' | 'depth' | 'tilt' | 'turn', number>>): boolean;

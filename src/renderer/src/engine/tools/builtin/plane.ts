@@ -1,14 +1,14 @@
 import type { Point } from '../../core/geometry';
 import { ROTATE_HANDLE_OFFSET } from '../../live/BoxGeom';
 import type { Keyframe, PieceState } from '../../anim/interpolate';
-import { cloneKeyframe, pieceStateAt, setKey, type Piece } from '../../anim/piece';
+import { cloneKeyframe, setKey, type Piece } from '../../anim/piece';
 import { piecesInDrawOrder } from '../../anim/pieceRaster';
 import { insidePiece, moveState, pieceAt, rotateState } from '../../anim/pieceEdit';
 import { depthDrag, movePivot3D, resizeDrag, tiltDrag, turnDrag } from '../../anim/planeEdit';
 import { placementOf, project, unproject } from '../../anim/space';
 import { foldHandle, foldToward, type EdgeSnap } from '../../anim/edgeSnap';
 import { drawHingeSnap, hingeOnRelease, hingeSnap } from '../hingeSnap';
-import { drawTree, selectionKeys, slideOnParent, topPivot, treeHandles, treePieces, treeTop, type TreeHandle } from '../treeEdit';
+import { alongPath, drawTree, keyedAngle, selectionKeys, slideOnParent, topPivot, treeHandles, treePieces, treeTop, type TreeHandle } from '../treeEdit';
 import { registerTool } from '../ToolRegistry';
 import type { ToolContext, ToolPointerEvent } from '../Tool';
 
@@ -56,6 +56,8 @@ interface Drag {
   adding: boolean;
   /** The edge it hinges onto if it's let go now. */
   snap: EdgeSnap | null;
+  /** Which way it was heading when the drag began, if it faces the way it goes. */
+  heading: number | null;
 }
 
 let drag: Drag | null = null;
@@ -171,8 +173,8 @@ function cursorFor(hit: Hit | null, ctrl: boolean): string {
   }
 }
 
-function stateChange(s: PieceState): Partial<PieceState> {
-  return { x: s.x, y: s.y, sx: s.sx, sy: s.sy, angle: s.angle, depth: s.depth, tilt: s.tilt, turn: s.turn };
+function stateChange(p: Piece, s: PieceState, heading: number | null): Partial<PieceState> {
+  return { x: s.x, y: s.y, sx: s.sx, sy: s.sy, angle: keyedAngle(p, s, heading), depth: s.depth, tilt: s.tilt, turn: s.turn };
 }
 
 export default registerTool({
@@ -235,12 +237,13 @@ export default registerTool({
       start: { x: e.x, y: e.y },
       startScreen: { x: e.sx, y: e.sy },
       grab,
-      s0: pieceStateAt(target, frame),
+      s0: ctx.anim.scene().stateAt(target, frame),
       keys0: target.keyframes.map(cloneKeyframe),
       pivot0: { ...target.pivot },
       depth: e.ctrl,
       adding: !target.keyframes.some((k) => k.frame === frame),
       snap: null,
+      heading: ctx.anim.scene().headingOf(target, frame),
     };
     ctx.anim.beginDrag();
   },
@@ -293,6 +296,13 @@ export default registerTool({
       return;
     }
     const handle = hit.kind === 'tree' ? hit.handle : hit;
+    // On a path, it's dragged along it (Ctrl still pushes it back or brings it forward).
+    const path = handle.kind === 'body' && !d.depth ? ctx.anim.pathOf(piece) : null;
+    if (path) {
+      const progress = alongPath(path, d.s0, d.start, { x: e.x, y: e.y }, e.shift);
+      ctx.anim.preview(d.id, (p) => (p.keyframes = setKey(d.keys0, frame, { progress })));
+      return;
+    }
     let s: PieceState;
     if (handle.kind === 'body') s = d.depth ? depthDrag(d.s0, dys, space) : moveState(d.s0, e.x - d.start.x, e.y - d.start.y, e.shift);
     else if (handle.kind === 'tilt') s = tiltDrag(d.s0, handle.handle, dys, e.shift);
@@ -300,7 +310,7 @@ export default registerTool({
     else if (handle.kind === 'spin') s = rotateState(d.s0, d.start, { x: e.x, y: e.y }, e.shift);
     else if (handle.kind === 'corner') s = resizeDrag(d.s0, { pivot: d.pivot0, w: piece.src.width, h: piece.src.height }, handle.corner, { x: e.x, y: e.y }, space, e.shift);
     else return;
-    const change = stateChange(s);
+    const change = stateChange(piece, s, d.heading);
     ctx.anim.preview(d.id, (p) => (p.keyframes = setKey(d.keys0, frame, change)));
     if (hit.kind === 'body' && !d.depth) {
       d.snap = hingeSnap(ctx, piece, e.alt);

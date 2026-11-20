@@ -21,7 +21,8 @@ import type { EdgeSnap } from '../../anim/edgeSnap';
 import { foldHandle, foldToward } from '../../anim/edgeSnap';
 import { project } from '../../anim/space';
 import { drawHingeSnap, hingeOnRelease, hingeSnap } from '../hingeSnap';
-import { selectionKeys, slideOnParent, treePieces, treeTop } from '../treeEdit';
+import { alongPath, keyedAngle, selectionKeys, slideOnParent, treePieces, treeTop } from '../treeEdit';
+import type { PathMeasure } from '../../anim/pathMeasure';
 import { registerTool } from '../ToolRegistry';
 import type { ToolContext, ToolPointerEvent } from '../Tool';
 
@@ -60,6 +61,8 @@ interface Drag {
   face: string;
   /** Alt-dragging a linked piece changes just it: a hinged one folds, one that follows another slides on it. */
   mode: 'own' | 'fold' | 'slide';
+  /** Which way it was heading when the drag began, if it faces the way it goes. */
+  heading: number | null;
 }
 
 let drag: Drag | null = null;
@@ -83,7 +86,7 @@ interface ScreenGeom {
 }
 
 function geometry(ctx: ToolContext, p: Piece): ScreenGeom {
-  const s = pieceStateAt(p, ctx.anim.frame);
+  const s = ctx.anim.scene().stateAt(p, ctx.anim.frame);
   const toScreen = (q: Point): Point => {
     const d = localToDoc(s, p.pivot, q);
     return ctx.view.toScreen(d.x, d.y);
@@ -123,15 +126,17 @@ function hitSelected(ctx: ToolContext, p: Piece, e: ToolPointerEvent): Hit | nul
   const frame = ctx.anim.frame;
   // A linked piece's keyframes are relative to what it follows, so its path isn't on the canvas.
   const keys = p.keyframes.length > 1 && !p.link ? p.keyframes : [];
-  const dot = (k: Keyframe) => ctx.view.toScreen(k.x, k.y);
+  // One on a path has its keyframes where the path puts them (and no bends of its own).
+  const path = ctx.anim.pathOf(p);
+  const dot = (k: Keyframe) => keyDot(ctx, k, path);
   // Bend handles first: they sit off the path, where nothing else is.
-  for (const k of keys) {
+  for (const k of path ? [] : keys) {
     for (const side of ['out', 'in'] as const) {
       const v = k[side];
       if (v && near(sp, ctx.view.toScreen(k.x + v.x, k.y + v.y))) return { kind: 'tangent', frame: k.frame, side };
     }
   }
-  if (e.alt) for (const k of keys) if (near(sp, dot(k))) return { kind: 'pull', frame: k.frame };
+  if (e.alt && !path) for (const k of keys) if (near(sp, dot(k))) return { kind: 'pull', frame: k.frame };
   // A piece in 3D is moved here, and shaped with the Perspective plane tool (its box isn't flat).
   if (!in3d(ctx, p)) {
     if (near(sp, g.pivot)) return { kind: 'pivot' };
@@ -152,25 +157,29 @@ function cursorFor(hit: Hit | null, g: ScreenGeom | null): string {
   return handleCursor(hit.handle, g?.angle ?? 0);
 }
 
-function stateChange(s: PieceState): Partial<PieceState> {
-  return { x: s.x, y: s.y, sx: s.sx, sy: s.sy, angle: s.angle, skew: s.skew };
+function stateChange(p: Piece, s: PieceState, heading: number | null): Partial<PieceState> {
+  return { x: s.x, y: s.y, sx: s.sx, sy: s.sy, angle: keyedAngle(p, s, heading), skew: s.skew };
+}
+
+/** Where a keyframe's dot is on screen: at its x and y, or where its progress puts it on the path it follows. */
+function keyDot(ctx: ToolContext, k: PieceState, path: PathMeasure | null): Point {
+  const at = path ? path.at(k.progress) : k;
+  return ctx.view.toScreen(at.x, at.y);
 }
 
 function drawPath(ctx: ToolContext, ov: Overlay, p: Piece): void {
   if (p.keyframes.length < 2 || p.link) return;
+  const path = ctx.anim.pathOf(p);
   const first = p.keyframes[0].frame;
   const last = p.keyframes[p.keyframes.length - 1].frame;
   const pts: Point[] = [];
   // A point per frame, plus in-between ones on long jumps so curves stay smooth.
   const steps = Math.min(2000, Math.max(last - first, 1) * 2);
-  for (let i = 0; i <= steps; i++) {
-    const s = pieceStateAt(p, first + ((last - first) * i) / steps);
-    pts.push(ctx.view.toScreen(s.x, s.y));
-  }
+  for (let i = 0; i <= steps; i++) pts.push(keyDot(ctx, pieceStateAt(p, first + ((last - first) * i) / steps), path));
   ov.outlineScreen(pts, false, true);
   for (const k of p.keyframes) {
-    const at = ctx.view.toScreen(k.x, k.y);
-    for (const side of ['in', 'out'] as const) {
+    const at = keyDot(ctx, k, path);
+    for (const side of path ? [] : (['in', 'out'] as const)) {
       const v = k[side];
       if (!v) continue;
       const h = ctx.view.toScreen(k.x + v.x, k.y + v.y);
@@ -232,7 +241,7 @@ export default registerTool({
         if (at) foldGrab = { x: at.x - e.x, y: at.y - e.y };
       } else mode = 'slide';
     }
-    const s0 = pieceStateAt(piece, frame);
+    const s0 = ctx.anim.scene().stateAt(piece, frame);
     let grab = foldGrab;
     if (hit.kind === 'handle') {
       const d = localToDoc(s0, piece.pivot, handleLocal(piece, hit.handle));
@@ -250,6 +259,7 @@ export default registerTool({
       snap: null,
       face: face.id,
       mode,
+      heading: ctx.anim.scene().headingOf(piece, frame),
     };
     // Pulling a bend handle grabs it where the pointer is.
     if (hit.kind === 'tangent') drag.grab = { x: 0, y: 0 };
@@ -269,9 +279,16 @@ export default registerTool({
       if (change) ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, frame, change)));
       return;
     }
+    const held = ctx.anim.piece(d.id);
+    const path = held && ctx.anim.pathOf(held);
     if (hit.kind === 'key') {
       const k = d.keys0.find((q) => q.frame === hit.frame);
       if (!k) return;
+      if (path) {
+        const progress = alongPath(path, k, d.start, { x: e.x, y: e.y }, e.shift);
+        ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, hit.frame, { progress })));
+        return;
+      }
       const at = moveState(k, e.x - d.start.x, e.y - d.start.y, e.shift);
       ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, hit.frame, { x: at.x, y: at.y })));
       return;
@@ -309,15 +326,21 @@ export default registerTool({
       return;
     }
     let s: PieceState;
-    const piece = ctx.anim.piece(d.id);
+    const piece = held;
     if (!piece) return;
+    // On a path, it's dragged along it.
+    if (hit.kind === 'body' && path) {
+      const progress = alongPath(path, d.s0, d.start, { x: e.x, y: e.y }, e.shift);
+      ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, frame, { progress })));
+      return;
+    }
     const geom = { src: piece.src, pivot: d.pivot0 };
     if (hit.kind === 'body') s = moveState(d.s0, e.x - d.start.x, e.y - d.start.y, e.shift);
     else if (hit.kind === 'rotate') s = rotateState(d.s0, d.start, { x: e.x, y: e.y }, e.shift);
     else if (hit.kind !== 'handle') return;
     else if (e.ctrl && (hit.handle === 'n' || hit.handle === 's')) s = skewState(d.s0, geom, hit.handle, p);
     else s = scaleState(d.s0, geom, hit.handle, p, { shift: e.shift, alt: e.alt });
-    const change = stateChange(s);
+    const change = stateChange(piece, s, d.heading);
     ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, frame, change)));
     // Dragged near another piece's edge, it hinges there when let go (Alt: it doesn't).
     if (hit.kind === 'body') {

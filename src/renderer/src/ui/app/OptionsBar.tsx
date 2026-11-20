@@ -17,7 +17,7 @@ import { SelectedShapeParams, ShapeOption, ShapeToolParams } from './ShapeGaller
 import { BrushPicker } from './BrushPicker';
 import { CameraField, LightFields } from './CameraField';
 import { EASINGS, type Easing } from '@engine/anim/interpolate';
-import { BACKS, REPEATS, repeatAxes, type Back, type Repeat } from '@engine/anim/piece';
+import { BACKS, REPEATS, repeatAxes, type Back, type Follow, type Repeat } from '@engine/anim/piece';
 import type { CameraMoveFields } from '@engine/anim/AnimationController';
 
 const FALLBACK_FONTS = ['Segoe UI', 'Arial', 'Calibri', 'Cambria', 'Comic Sans MS', 'Consolas', 'Georgia', 'Impact', 'Segoe Print', 'Times New Roman', 'Trebuchet MS', 'Verdana'];
@@ -387,10 +387,12 @@ function PieceFields({ plane = false }: { plane?: boolean }) {
   // A hinged piece is placed by its hinge (it only folds); a group carries pieces and has no pixels.
   const hinged = info.link === 'hinged';
   const group = info.group;
-  const field = (key: 'x' | 'y' | 'w' | 'h' | 'angle' | 'skew' | 'opacity' | 'scrollX' | 'scrollY' | 'depth' | 'tilt' | 'turn' | 'fold', labelKey: I18nKey, unit: string, min: number, max: number, decimals: number, shiftStep?: number) => {
+  // On a path, it's placed along the path (by how far along it is) instead of by x and y.
+  const onPath = info.follow !== null;
+  const field = (key: 'x' | 'y' | 'w' | 'h' | 'angle' | 'skew' | 'opacity' | 'scrollX' | 'scrollY' | 'depth' | 'tilt' | 'turn' | 'fold' | 'progress', labelKey: I18nKey, unit: string, min: number, max: number, decimals: number, shiftStep?: number, tip?: I18nKey) => {
     const label = t(labelKey);
     return (
-      <span className="opt tf-field">
+      <span className="opt tf-field" data-tip={tip ? t(tip) : undefined}>
         <span>{label}</span>
         <NumberField
           className="num tf-num"
@@ -432,8 +434,9 @@ function PieceFields({ plane = false }: { plane?: boolean }) {
       >
         <Icon name="keyframe-delete" size={16} />
       </button>
-      {hinged ? null : field('x', 'transform.x', 'px', -100000, 100000, 0)}
-      {hinged ? null : field('y', 'transform.y', 'px', -100000, 100000, 0)}
+      {hinged || onPath ? null : field('x', 'transform.x', 'px', -100000, 100000, 0)}
+      {hinged || onPath ? null : field('y', 'transform.y', 'px', -100000, 100000, 0)}
+      {onPath ? field('progress', 'piece.progress', '%', -100000, 100000, 1, 10, 'piece.progressTip') : null}
       {hinged ? field('fold', 'piece.fold', '°', -36000, 36000, 1, 15) : null}
       {plane && !hinged ? (
         <>
@@ -497,7 +500,7 @@ function PieceFields({ plane = false }: { plane?: boolean }) {
           ))}
         </select>
       </label>
-      {info.link === 'none' ? (
+      {info.link === 'none' && !onPath ? (
         <button
           type="button"
           className="icon-btn"
@@ -510,6 +513,11 @@ function PieceFields({ plane = false }: { plane?: boolean }) {
           }}
         >
           <Icon name="line" size={16} />
+        </button>
+      ) : null}
+      {info.link === 'none' && !onPath ? (
+        <button type="button" className="icon-btn" aria-label={t('action.motionToShape')} data-tip={t('piece.motionToShapeTip')} disabled={keys < 2} onClick={() => runAction('motionToShape')}>
+          <Icon name="pen" size={16} />
         </button>
       ) : null}
       {hinged ? null : (
@@ -548,7 +556,11 @@ function PieceFields({ plane = false }: { plane?: boolean }) {
           {t('piece.unhinge')}
         </button>
       ) : (
-        <FollowsField />
+        <>
+          {onPath ? null : <FollowsField />}
+          {info.link === 'none' ? <PathField follow={info.follow} /> : null}
+          {info.link === 'none' ? <FaceField on={info.face} angle={info.faceAngle} /> : null}
+        </>
       )}
       {group ? null : (
         <>
@@ -684,6 +696,70 @@ function FollowsField() {
         )}
       </select>
     </label>
+  );
+}
+
+/** The path a piece that follows no other piece moves along: none, or an outline of a shape on a shape layer. */
+function PathField({ follow }: { follow: Follow | null }) {
+  // Read again whenever the picture or its layers change (shapes come and go with them).
+  useUi((s) => s.history);
+  useUi((s) => s.layers);
+  const id = useUi((s) => s.animation.selectedId);
+  const choices = engine.anim.pathChoices();
+  if (!id || (!choices.length && !follow)) return null;
+  const same = (c: Follow) => follow !== null && c.layerId === follow.layerId && c.objectId === follow.objectId && c.sub === follow.sub;
+  const current = choices.findIndex(same);
+  return (
+    <label className="opt" data-tip={t('piece.pathTip')}>
+      <span>{t('piece.path')}</span>
+      <select
+        className="select"
+        aria-label={t('piece.path')}
+        value={current < 0 ? '' : String(current)}
+        onChange={(e) => {
+          const c = e.target.value === '' ? null : choices[Number(e.target.value)];
+          engine.anim.follow(id, c ? { layerId: c.layerId, objectId: c.objectId, sub: c.sub } : null);
+        }}
+      >
+        <option value="">{t('piece.pathNone')}</option>
+        {choices.map((c, i) => (
+          <option key={`${c.layerId}/${c.objectId}/${c.sub}`} value={String(i)}>
+            {c.part === null ? t('piece.pathItem', { layer: c.layerName, n: c.shape }) : t('piece.pathPart', { layer: c.layerName, n: c.shape, part: c.part })}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/** Facing the way it goes, and which way the art points as drawn (shown while it's on). */
+function FaceField({ on, angle }: { on: boolean; angle: number }) {
+  const id = useUi((s) => s.animation.selectedId);
+  if (!id) return null;
+  return (
+    <>
+      <label className="check opt" data-tip={t('piece.faceTip')}>
+        <input type="checkbox" checked={on} onChange={() => engine.anim.setFace(id, { on: !on })} />
+        {t('piece.face')}
+      </label>
+      {on ? (
+        <span className="opt tf-field" data-tip={t('piece.faceAngleTip')}>
+          <span>{t('piece.faceAngle')}</span>
+          <NumberField
+            className="num tf-num"
+            value={Math.round(angle * 10) / 10}
+            decimals={1}
+            min={-180}
+            max={180}
+            shiftStep={15}
+            label={t('piece.faceAngle')}
+            onChange={(v) => engine.anim.setFace(id, { angle: (v * Math.PI) / 180 })}
+            onEnter={() => (document.activeElement as HTMLElement | null)?.blur()}
+          />
+          <span className="unit">°</span>
+        </span>
+      ) : null}
+    </>
   );
 }
 

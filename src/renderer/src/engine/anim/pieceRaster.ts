@@ -6,7 +6,8 @@ import type { PieceState } from './interpolate';
 import { sampleAffine, type Tiling } from './pieceSample';
 import { sampleProjective, sampleProjectiveBatch, type BatchSheet } from './pieceProject';
 import { repeatAxes, type Piece } from './piece';
-import { Scene } from './scene';
+import type { Scene } from './scene';
+import { sceneOf } from './follow';
 import { defaultLight, type Light } from './space';
 import { celAt } from './cels';
 
@@ -102,7 +103,7 @@ export function drawPiece(view: PixelView, r: Rect, p: Piece, scene: Scene, ligh
 export function frameExtras(doc: PaintDocument, frame: number): LayerExtras | undefined {
   const cels = doc.hasCels;
   if (!doc.pieces.length && !cels) return undefined;
-  const scene = new Scene(doc.pieces, frame, doc.spaceAt(frame));
+  const scene = sceneOf(doc, frame);
   const byLayer = piecesByLayer(doc.pieces);
   const hinged = hingedIds(doc.pieces);
   const visibleIn = (layer: Layer, r: Rect): Piece[] =>

@@ -11,7 +11,9 @@ import {
   type Frame,
 } from './frames';
 import type { PieceState } from './interpolate';
-import { pieceStateAt, type Piece } from './piece';
+import { pieceStateAt, type Follow, type Piece } from './piece';
+import type { PathMeasure } from './pathMeasure';
+import { artDirection, faceSpan, heading } from './face';
 import {
   FLAT_SPACE,
   placementOf,
@@ -26,6 +28,16 @@ import {
 
 /** Most pieces one tree of linked pieces can hold (its group included). */
 export const MAX_TREE = 64;
+
+/** What places pieces that follow paths or face the way they go, besides their keyframes. */
+export interface Motion {
+  /** Finds the paths pieces follow (without it, they keep to their own x and y). */
+  readonly paths: ((f: Follow) => PathMeasure | null) | null;
+  /** The picture's frames a second (facing pieces turn over a set time, not a set number of frames). */
+  readonly fps: number;
+}
+
+const NO_MOTION: Motion = { paths: null, fps: 12 };
 
 /** Where a piece is at one moment, with what it follows taken into account. */
 export interface Pose {
@@ -51,11 +63,13 @@ export interface Pose {
 export class Scene {
   private byId: Map<string, Piece> | null = null;
   private readonly poses = new Map<string, Pose>();
+  private readonly paths = new Map<string, PathMeasure | null>();
 
   constructor(
     readonly pieces: readonly Piece[],
     readonly frame: number,
     readonly space: Space = FLAT_SPACE,
+    readonly motion: Motion = NO_MOTION,
   ) {}
 
   piece(id: string): Piece | null {
@@ -94,8 +108,54 @@ export class Scene {
     return this.poses.get(p.id)!;
   }
 
+  /** The path a piece follows (null: none, it follows another piece instead, or the path is gone). */
+  pathOf(p: Piece): PathMeasure | null {
+    if (!p.follow || p.link || !this.motion.paths) return null;
+    let m = this.paths.get(p.id);
+    if (m === undefined) {
+      m = this.motion.paths(p.follow);
+      this.paths.set(p.id, m);
+    }
+    return m;
+  }
+
+  /** Where a piece following nothing is at `frame` by its own motion: along its path, or at its keyed x and y. */
+  private placeAt(p: Piece, frame: number): Point {
+    const s = pieceStateAt(p, frame);
+    return this.pathOf(p)?.at(s.progress) ?? s;
+  }
+
+  /**
+   * How much a piece facing the way it goes is turned at `frame`, on top of its keyed angle, at
+   * scale sx and sy (0 when it doesn't face, follows another piece, or never moves).
+   */
+  facing(p: Piece, frame: number, sx: number, sy: number): number {
+    const d = this.headingOf(p, frame);
+    return d === null ? 0 : d - artDirection(p.face.angle, sx, sy);
+  }
+
+  /** Which way a piece facing the way it goes is heading at `frame` (radians on the canvas), or null (it doesn't face, or never moves). */
+  headingOf(p: Piece, frame: number): number | null {
+    if (!p.face.on || p.link) return null;
+    const keys = p.keyframes;
+    return heading((t) => this.placeAt(p, t), frame, keys[0].frame, keys[keys.length - 1].frame, faceSpan(this.motion.fps));
+  }
+
+  /**
+   * A piece's own state at `frame`. One that follows nothing else is placed along its path by its
+   * progress, if it follows one, and turned to face the way it goes, if it does.
+   */
+  stateAt(p: Piece, frame: number): PieceState {
+    const s = pieceStateAt(p, frame);
+    if (p.link) return s;
+    const at = this.pathOf(p)?.at(s.progress);
+    const turn = this.facing(p, frame, s.sx, s.sy);
+    if (!at && turn === 0) return s;
+    return { ...s, x: at?.x ?? s.x, y: at?.y ?? s.y, angle: s.angle + turn };
+  }
+
   private compute(p: Piece, parent: Pose | null): Pose {
-    const state = pieceStateAt(p, this.frame);
+    const state = this.stateAt(p, this.frame);
     const { width: w, height: h } = p.src;
     if (!parent) {
       const opacity = state.opacity;
