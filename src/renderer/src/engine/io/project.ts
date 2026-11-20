@@ -47,11 +47,12 @@ import { MAX_CELS, type Cel } from '../anim/cels';
  */
 export const PROJECT_MAGIC = 'pigmento-project';
 /**
- * Version 2 adds animation, version 3 what 1.2 adds to pieces (repeat, scroll, 3D, links). A picture is
- * written as the oldest version that holds everything in it, so older Pigmentos open whatever
- * they can show correctly: 1 without animation, 2 with 1.1's animation only.
+ * Version 2 adds animation, version 3 what 1.2 adds to pieces (repeat, scroll, 3D, links),
+ * version 4 what 1.3 adds (following paths). A picture is written as the oldest version that
+ * holds everything in it, so older Pigmentos open whatever they can show correctly: 1 without
+ * animation, 2 with 1.1's animation only, 3 with nothing from 1.3.
  */
-export const PROJECT_VERSION = 3;
+export const PROJECT_VERSION = 4;
 
 /** Furthest a piece can be pushed behind the canvas, or pulled in front of it, in pixels. */
 export const MAX_PIECE_DEPTH = 1e6;
@@ -69,7 +70,8 @@ function lightMoved(doc: PaintDocument): boolean {
 }
 
 /** The oldest version that holds everything in `doc`. */
-export function versionFor(doc: PaintDocument): 1 | 2 | 3 {
+export function versionFor(doc: PaintDocument): 1 | 2 | 3 | 4 {
+  if (doc.pieces.some((p) => p.follow !== null || p.keyframes.some((k) => k.progress !== 0))) return 4;
   const v3 = doc.pieces.some(
     (p) =>
       p.kind !== 'piece' ||
@@ -340,6 +342,8 @@ const KeyframeJson = z.object({
   turn: z.number().min(-1e6).max(1e6).default(0),
   /** Version 3: how far a hinged piece is folded (radians, not wrapped). */
   fold: z.number().min(-1e6).max(1e6).default(0),
+  /** Version 4: how far along the path it follows (0 … 1, past 1 going round a closed path again). */
+  progress: z.number().min(-1e6).max(1e6).default(0),
   easing: z.enum(EASINGS as [Easing, ...Easing[]]),
   in: PointJson.nullable(),
   out: PointJson.nullable(),
@@ -373,6 +377,15 @@ const PieceJson = z.object({
           across: z.number().min(1e-4).max(1e4),
         })
         .nullable(),
+    })
+    .nullable()
+    .default(null),
+  /** Version 4: the path it follows, an outline of a shape on a shape layer (one that's gone leaves it on its own x and y). */
+  follow: z
+    .object({
+      layerId: z.string().min(1).max(100),
+      objectId: z.string().min(1).max(100),
+      sub: int.min(0).max(100_000),
     })
     .nullable()
     .default(null),
@@ -510,6 +523,7 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
   const pieces: z.input<typeof PieceJson>[] = [];
   // A version 2 file is written exactly as 1.1 wrote it, without the fields 1.2 added.
   const v3 = versionFor(doc) >= 3;
+  const v4 = versionFor(doc) >= 4;
   for (const p of doc.pieces) {
     if (!rasterIds.has(p.layerId)) continue;
     const file = `pieces/${String(pieces.length + 1).padStart(4, '0')}.png`;
@@ -521,11 +535,12 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
       image: { file, w: p.src.width, h: p.src.height },
       home: { ...p.home },
       pivot: { ...p.pivot },
-      keyframes: p.keyframes.map(({ scrollX, scrollY, depth, tilt, turn, fold, ...k }) => ({
+      keyframes: p.keyframes.map(({ scrollX, scrollY, depth, tilt, turn, fold, progress, ...k }) => ({
         ...k,
         in: k.in && { ...k.in },
         out: k.out && { ...k.out },
         ...(v3 ? { scrollX, scrollY, depth, tilt, turn, fold } : {}),
+        ...(v4 ? { progress } : {}),
       })),
       ...(v3
         ? {
@@ -536,6 +551,7 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
             link: p.link && { parent: p.link.parent, hinge: p.link.hinge && { ...p.link.hinge } },
           }
         : {}),
+      ...(v4 ? { follow: p.follow && { ...p.follow } } : {}),
     });
   }
   const t = doc.timeline;
@@ -754,6 +770,7 @@ async function readAnimation(doc: PaintDocument, a: NonNullable<DocumentJson['an
       shade: p.shade,
       kind: p.kind,
       link: p.link && { parent: p.link.parent, hinge: p.link.hinge && { ...p.link.hinge } },
+      follow: p.follow && { ...p.follow },
     });
   }
   doc.pieces = checkLinks(pieces);

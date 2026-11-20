@@ -110,6 +110,13 @@ export class History extends Emitter<HistoryEvents> {
 
   private collecting: Command[] | null = null;
 
+  /**
+   * Looks at each step as it's recorded (already applied) and may add a follow-on change that
+   * belongs to it (pieces that followed a path the step deleted keep their motion), so undo takes
+   * both back together.
+   */
+  amend: ((cmd: Command) => Command | null) | null = null;
+
   /** Record everything pushed while `fn` runs as one undoable step. */
   group<T>(label: I18nKey, fn: () => T): T {
     if (this.collecting) return fn();
@@ -131,6 +138,8 @@ export class History extends Emitter<HistoryEvents> {
       this.collecting.push(cmd);
       return;
     }
+    const extra = this.amend?.(cmd) ?? null;
+    if (extra) cmd = new CompoundCommand(cmd.label, [cmd, extra]);
     const top = this._index === this.items.length ? this.items[this._index - 1] : undefined;
     if (top?.mergeWith?.(cmd)) {
       // The merged step no longer matches a save made right after it.

@@ -35,6 +35,11 @@ export interface PieceState {
    * beside it; positive folds it back, away from the viewer). Only hinged pieces use it.
    */
   fold: number;
+  /**
+   * How far along the path it follows (0 = the start, 1 = the end; a closed path goes round again
+   * past 1). Only pieces that follow a path use it; their x and y come from the path instead.
+   */
+  progress: number;
 }
 
 export interface Keyframe extends PieceState {
@@ -50,10 +55,10 @@ export interface Keyframe extends PieceState {
   in: Point | null;
 }
 
-export const STATE_KEYS = ['x', 'y', 'sx', 'sy', 'angle', 'skew', 'opacity', 'scrollX', 'scrollY', 'depth', 'tilt', 'turn', 'fold'] as const;
+export const STATE_KEYS = ['x', 'y', 'sx', 'sy', 'angle', 'skew', 'opacity', 'scrollX', 'scrollY', 'depth', 'tilt', 'turn', 'fold', 'progress'] as const;
 
 export function identityState(x: number, y: number): PieceState {
-  return { x, y, sx: 1, sy: 1, angle: 0, skew: 0, opacity: 1, scrollX: 0, scrollY: 0, depth: 0, tilt: 0, turn: 0, fold: 0 };
+  return { x, y, sx: 1, sy: 1, angle: 0, skew: 0, opacity: 1, scrollX: 0, scrollY: 0, depth: 0, tilt: 0, turn: 0, fold: 0, progress: 0 };
 }
 
 /** Eased progress (0 … 1) for linear progress u (0 … 1). */
@@ -136,11 +141,12 @@ export function blendStates(a: Keyframe, b: Keyframe, e: number): PieceState {
     tilt: lerp(a.tilt, b.tilt, e),
     turn: lerp(a.turn, b.turn, e),
     fold: lerp(a.fold, b.fold, e),
+    progress: lerp(a.progress, b.progress, e),
   };
 }
 
 function stateOf(k: Keyframe): PieceState {
-  return { x: k.x, y: k.y, sx: k.sx, sy: k.sy, angle: k.angle, skew: k.skew, opacity: k.opacity, scrollX: k.scrollX, scrollY: k.scrollY, depth: k.depth, tilt: k.tilt, turn: k.turn, fold: k.fold };
+  return { x: k.x, y: k.y, sx: k.sx, sy: k.sy, angle: k.angle, skew: k.skew, opacity: k.opacity, scrollX: k.scrollX, scrollY: k.scrollY, depth: k.depth, tilt: k.tilt, turn: k.turn, fold: k.fold, progress: k.progress };
 }
 
 /**

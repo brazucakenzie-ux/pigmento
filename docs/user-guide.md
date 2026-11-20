@@ -180,6 +180,18 @@ More things you can do:
 - **Curves:** Alt-drag a dot to bend the path there, then drag its handles to shape the curve. Double-click a dot, or use **Straighten**, to make it straight again.
 - **Rename, duplicate or delete a piece:** double-click its name in the timeline to rename it, or right-click the name for its menu.
 
+### Following a path
+
+A piece can move along a path you draw, such as a rocket's flight or a car on a winding road:
+
+1. Draw the path on a shape layer with the **Pen**, **Line** or **Curve** tool. Any shape works: a rectangle or ellipse makes a closed loop.
+2. Select the piece with the Animate or Perspective plane tool. In the options bar, pick the shape under **Path**. If the piece had no progress keyed yet, it goes from the start of the path at its first keyframe to the end at its last one, or at the end of the timeline if it had only one.
+3. **Along** (in place of X and Y) says how far along the path the piece is, from 0 % at the start to 100 % at the end. Key it as you would any value, with any easing. The piece moves at an even speed for an even change, however the path bends. On a closed path, go past 100 % to go round again: 250 % ends half way round the third time.
+
+Dragging the piece slides it along its path (Shift: in steps of 10 %), and the arrow keys move it 1 % on or back (Shift: 10 %). Its keyframes' dots sit on the path; drag one to change where that keyframe is. Turning, resizing and the rest work as usual; the piece's pivot is the point that rides the path.
+
+Edit the path at any time (move its points, reshape it) and the piece follows the new one. Set **Path** to **None**, or delete the path, and the piece keeps moving exactly as it did, as ordinary keyframes (one on each frame). A piece that follows another piece can't follow a path too, but the top of its tree can: hinge pieces onto one that follows a path, and the whole tree goes along it.
+
 ### More ways to make a piece
 
 - **Piece from layer** turns a whole pixel layer into a piece.

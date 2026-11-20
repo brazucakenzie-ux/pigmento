@@ -11,7 +11,8 @@ import {
   type Frame,
 } from './frames';
 import type { PieceState } from './interpolate';
-import { pieceStateAt, type Piece } from './piece';
+import { pieceStateAt, type Follow, type Piece } from './piece';
+import type { PathMeasure } from './pathMeasure';
 import {
   FLAT_SPACE,
   placementOf,
@@ -56,6 +57,8 @@ export class Scene {
     readonly pieces: readonly Piece[],
     readonly frame: number,
     readonly space: Space = FLAT_SPACE,
+    /** Finds the paths pieces follow (without it, they keep to their own x and y). */
+    readonly paths: ((f: Follow) => PathMeasure | null) | null = null,
   ) {}
 
   piece(id: string): Piece | null {
@@ -94,8 +97,21 @@ export class Scene {
     return this.poses.get(p.id)!;
   }
 
+  /**
+   * A piece's own state at `frame`. One following a path (and nothing else) is placed along it by
+   * its progress.
+   */
+  stateAt(p: Piece, frame: number): PieceState {
+    const s = pieceStateAt(p, frame);
+    if (!p.follow || p.link || !this.paths) return s;
+    const path = this.paths(p.follow);
+    if (!path) return s;
+    const at = path.at(s.progress);
+    return { ...s, x: at.x, y: at.y };
+  }
+
   private compute(p: Piece, parent: Pose | null): Pose {
-    const state = pieceStateAt(p, this.frame);
+    const state = this.stateAt(p, this.frame);
     const { width: w, height: h } = p.src;
     if (!parent) {
       const opacity = state.opacity;

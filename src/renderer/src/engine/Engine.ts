@@ -346,7 +346,12 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.view.setDocSize(this.doc.width, this.doc.height);
     this.renderer = new Renderer(this.doc, this.view);
     this.overlay = new Overlay(this.view);
-    this.history.on('change', () => this.emitHistory());
+    this.history.on('change', () => {
+      // Pieces keep the motion of a path a change deletes: the paths as they were before it.
+      this.anim.rememberPaths();
+      this.emitHistory();
+    });
+    this.history.amend = () => this.anim.bakeLostPaths();
     // Shapes filled with a saved pattern find its tile here.
     setSavedPatternSource((id, scale) => this.patternTile({ pattern: id, fg: { r: 0, g: 0, b: 0, a: 255 }, bg: null, scale }));
   }
@@ -1117,6 +1122,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.emitHistory();
     this.emit('layers', this.layers.info());
     this.anim.reset();
+    this.anim.rememberPaths();
     this.emit('animation', this.anim.info());
     this.requestRender();
     this.notifyPixels();

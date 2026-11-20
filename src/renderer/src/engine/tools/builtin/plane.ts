@@ -1,14 +1,14 @@
 import type { Point } from '../../core/geometry';
 import { ROTATE_HANDLE_OFFSET } from '../../live/BoxGeom';
 import type { Keyframe, PieceState } from '../../anim/interpolate';
-import { cloneKeyframe, pieceStateAt, setKey, type Piece } from '../../anim/piece';
+import { cloneKeyframe, setKey, type Piece } from '../../anim/piece';
 import { piecesInDrawOrder } from '../../anim/pieceRaster';
 import { insidePiece, moveState, pieceAt, rotateState } from '../../anim/pieceEdit';
 import { depthDrag, movePivot3D, resizeDrag, tiltDrag, turnDrag } from '../../anim/planeEdit';
 import { placementOf, project, unproject } from '../../anim/space';
 import { foldHandle, foldToward, type EdgeSnap } from '../../anim/edgeSnap';
 import { drawHingeSnap, hingeOnRelease, hingeSnap } from '../hingeSnap';
-import { drawTree, selectionKeys, slideOnParent, topPivot, treeHandles, treePieces, treeTop, type TreeHandle } from '../treeEdit';
+import { alongPath, drawTree, selectionKeys, slideOnParent, topPivot, treeHandles, treePieces, treeTop, type TreeHandle } from '../treeEdit';
 import { registerTool } from '../ToolRegistry';
 import type { ToolContext, ToolPointerEvent } from '../Tool';
 
@@ -235,7 +235,7 @@ export default registerTool({
       start: { x: e.x, y: e.y },
       startScreen: { x: e.sx, y: e.sy },
       grab,
-      s0: pieceStateAt(target, frame),
+      s0: ctx.anim.scene().stateAt(target, frame),
       keys0: target.keyframes.map(cloneKeyframe),
       pivot0: { ...target.pivot },
       depth: e.ctrl,
@@ -293,6 +293,13 @@ export default registerTool({
       return;
     }
     const handle = hit.kind === 'tree' ? hit.handle : hit;
+    // On a path, it's dragged along it (Ctrl still pushes it back or brings it forward).
+    const path = handle.kind === 'body' && !d.depth ? ctx.anim.pathOf(piece) : null;
+    if (path) {
+      const progress = alongPath(path, d.s0, d.start, { x: e.x, y: e.y }, e.shift);
+      ctx.anim.preview(d.id, (p) => (p.keyframes = setKey(d.keys0, frame, { progress })));
+      return;
+    }
     let s: PieceState;
     if (handle.kind === 'body') s = d.depth ? depthDrag(d.s0, dys, space) : moveState(d.s0, e.x - d.start.x, e.y - d.start.y, e.shift);
     else if (handle.kind === 'tilt') s = tiltDrag(d.s0, handle.handle, dys, e.shift);

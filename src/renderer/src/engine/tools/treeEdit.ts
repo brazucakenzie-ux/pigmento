@@ -2,6 +2,7 @@ import type { Point } from '../core/geometry';
 import { rootOf, subtree } from '../anim/links';
 import { pieceStateAt, type Piece } from '../anim/piece';
 import type { PieceState } from '../anim/interpolate';
+import type { PathMeasure } from '../anim/pathMeasure';
 import type { Scene } from '../anim/scene';
 import { project, unproject } from '../anim/space';
 import type { Overlay } from '../render/Overlay';
@@ -91,10 +92,21 @@ export function slideOnParent(scene: Scene, piece: Piece, s0: PieceState, start:
 }
 
 /**
+ * Dragging a piece that follows a path: how far along it (its progress) the point it was grabbed
+ * by is nearest the pointer, going on round a closed path rather than jumping back. Shift keeps to
+ * tenths of the way.
+ */
+export function alongPath(path: PathMeasure, s0: PieceState, start: Point, now: Point, shift: boolean): number {
+  const at = path.at(s0.progress);
+  const t = path.nearest({ x: now.x + at.x - start.x, y: now.y + at.y - start.y }, s0.progress);
+  return shift ? Math.round(t * 10) / 10 : t;
+}
+
+/**
  * Keys for what the Animate and Perspective plane tools have selected, keyed at the frame shown:
- * Delete removes the piece; the arrows nudge it (Shift: 10 px), fold a hinged one (Up folds it
- * back, Down forward; Shift: 15°), or slide the camera while its timeline row is selected. False
- * when the key isn't one of these.
+ * Delete removes the piece; the arrows nudge it (Shift: 10 px), move one on a path along it (Right
+ * or Up onward, 1 %; Shift: 10 %), fold a hinged one (Up folds it back, Down forward; Shift: 15°),
+ * or slide the camera while its timeline row is selected. False when the key isn't one of these.
  */
 export function selectionKeys(ctx: ToolContext, e: KeyboardEvent): boolean {
   if (e.ctrlKey || e.altKey || e.metaKey) return false;
@@ -121,6 +133,11 @@ export function selectionKeys(ctx: ToolContext, e: KeyboardEvent): boolean {
   }
   if (!m) return false;
   const s = pieceStateAt(p, ctx.anim.frame);
+  if (ctx.anim.pathOf(p)) {
+    const dir = m[0] > 0 || m[1] < 0 ? 1 : -1;
+    ctx.anim.setKey(p.id, ctx.anim.frame, { progress: s.progress + dir * (e.shiftKey ? 0.1 : 0.01) });
+    return true;
+  }
   ctx.anim.setKey(p.id, ctx.anim.frame, { x: s.x + m[0], y: s.y + m[1] });
   return true;
 }

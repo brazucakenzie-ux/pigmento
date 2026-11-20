@@ -38,6 +38,19 @@ export interface Piece {
    * piece's own pixels, or, hinged, it hangs off one of that piece's edges at its fold angle.
    */
   link: Link | null;
+  /**
+   * The path it follows (a shape on a shape layer; null = none): while it does, its keyframes'
+   * progress places it along the path, and their x and y aren't used. Only a piece that follows
+   * no other piece can follow a path.
+   */
+  follow: Follow | null;
+}
+
+/** A shape a piece follows: on which shape layer, which object, and which of its outlines. */
+export interface Follow {
+  layerId: string;
+  objectId: string;
+  sub: number;
 }
 
 export type PieceKind = 'piece' | 'group';
@@ -75,6 +88,8 @@ export const MAX_KEYFRAMES = 2000;
 export const MAX_PIECE_SIDE = 16384;
 /** Most a repeating piece's scroll can be either way (far more than any loop needs). */
 export const MAX_SCROLL = 1e6;
+/** Most a piece's progress along a path can be either way, in whole paths (far more turns than any loop needs). */
+export const MAX_PROGRESS = 1e6;
 
 /** The pixels as a piece's surface (an image is copied into a new one). */
 export function pieceSurface(src: ImageBuf | Surface): Surface {
@@ -102,6 +117,7 @@ export function makePiece(id: string, name: string, layerId: string, src: ImageB
     shade: 0,
     kind: 'piece',
     link: null,
+    follow: null,
   };
 }
 
@@ -120,6 +136,7 @@ export function makeGroup(id: string, name: string, layerId: string, home: Rect,
     shade: 0,
     kind: 'group',
     link: null,
+    follow: null,
   };
 }
 
@@ -129,7 +146,7 @@ export function cloneLink(l: Link | null): Link | null {
 
 /** The same piece (for undo snapshots: the pixels are shared, not copied). */
 export function clonePiece(p: Piece): Piece {
-  return { ...p, home: { ...p.home }, pivot: { ...p.pivot }, keyframes: p.keyframes.map(cloneKeyframe), link: cloneLink(p.link) };
+  return { ...p, home: { ...p.home }, pivot: { ...p.pivot }, keyframes: p.keyframes.map(cloneKeyframe), link: cloneLink(p.link), follow: p.follow && { ...p.follow } };
 }
 
 /**
