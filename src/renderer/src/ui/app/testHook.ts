@@ -318,6 +318,7 @@ export function installTestHook(): void {
     },
     /** Where a point of a piece (its own pixels) shows in the document at the frame shown. */
     cubeSheet,
+    selectCamera: () => engine.anim.selectCamera(),
     pieceFront: (id: string) => {
       const p = engine.anim.piece(id);
       return p ? engine.anim.scene().placement(p).front : false;

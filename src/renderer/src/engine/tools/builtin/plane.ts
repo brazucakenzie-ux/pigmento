@@ -8,7 +8,7 @@ import { depthDrag, movePivot3D, resizeDrag, tiltDrag, turnDrag } from '../../an
 import { placementOf, project, unproject } from '../../anim/space';
 import { foldHandle, foldToward, type EdgeSnap } from '../../anim/edgeSnap';
 import { drawHingeSnap, hingeOnRelease, hingeSnap } from '../hingeSnap';
-import { drawTree, slideOnParent, topPivot, treeHandles, treePieces, treeTop, type TreeHandle } from '../treeEdit';
+import { drawTree, selectionKeys, slideOnParent, topPivot, treeHandles, treePieces, treeTop, type TreeHandle } from '../treeEdit';
 import { registerTool } from '../ToolRegistry';
 import type { ToolContext, ToolPointerEvent } from '../Tool';
 
@@ -345,32 +345,15 @@ export default registerTool({
         drag = null;
         return true;
       }
-      if (p) {
+      if (p || ctx.anim.cameraSelected) {
         ctx.anim.select(null);
+        ctx.anim.selectCamera(false);
         return true;
       }
       return false;
     }
-    if (!p || drag || e.ctrlKey || e.altKey || e.metaKey) return false;
-    if (e.key === 'Delete' || e.key === 'Backspace') {
-      ctx.anim.remove(p.id);
-      return true;
-    }
-    // A hinged piece folds: up folds it back, down forward (Shift: 15°).
-    if (p.link?.hinge) {
-      const dir = e.key === 'ArrowUp' ? 1 : e.key === 'ArrowDown' ? -1 : 0;
-      if (!dir) return false;
-      const fold = pieceStateAt(p, ctx.anim.frame).fold + (dir * (e.shiftKey ? 15 : 1) * Math.PI) / 180;
-      ctx.anim.setKey(p.id, ctx.anim.frame, { fold });
-      return true;
-    }
-    const step = e.shiftKey ? 10 : 1;
-    const move: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
-    const m = move[e.key];
-    if (!m) return false;
-    const s = pieceStateAt(p, ctx.anim.frame);
-    ctx.anim.setKey(p.id, ctx.anim.frame, { x: s.x + m[0], y: s.y + m[1] });
-    return true;
+    if (drag) return false;
+    return selectionKeys(ctx, e);
   },
   drawOverlay(ctx, ov) {
     // The horizon (the vanishing point's height) across the view, and the point itself.

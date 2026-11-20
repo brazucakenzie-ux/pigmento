@@ -132,3 +132,51 @@ test('meets WCAG 2.1 AA in every tab and the main dialogs, in light, dark and hi
   }
   expect(findings.map((f) => `${f.where}: ${f.rule}`)).toEqual([]);
 });
+
+test('the 3D, hinge, box and camera controls meet WCAG 2.1 AA in light, dark and high-contrast themes', async () => {
+  test.setTimeout(300_000);
+  h = await launchApp();
+  const { page } = h;
+  await ready(page);
+  const findings: Finding[] = [];
+  const ribbon = page.locator('.ribbon');
+  // A box (its group, a face following the group, hinged faces) and a camera move on the timeline.
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  await ribbon.getByRole('button', { name: 'Box…' }).click();
+  await page.getByRole('dialog', { name: 'Make a box' }).getByRole('button', { name: 'Make' }).click();
+  const ids = Object.fromEntries((await page.evaluate(() => window.__pigmentoTest!.anim().pieces)).map((p) => [p.name, p.id]));
+  await page.evaluate(() => window.__pigmentoTest!.selectCamera());
+  await page.evaluate(() => window.__pigmentoTest!.setFrame(6));
+  const pan = page.locator('.optionsbar').getByRole('textbox', { name: 'Pan X', exact: true });
+  await pan.fill('40');
+  await pan.press('Enter');
+  // Each selection shows its own controls, which are what's audited.
+  const options = async (label: string, select: () => Promise<void>, shows: { role: 'textbox' | 'combobox' | 'button'; name: string }) => {
+    await select();
+    await expect(page.locator('.optionsbar').getByRole(shows.role, { name: shows.name, exact: true })).toBeVisible();
+    findings.push(...(await audit(page, label, '.optionsbar')));
+  };
+  for (const [family, mode] of [
+    [null, 'Light'],
+    [null, 'Dark'],
+    ['High contrast', 'Dark'],
+  ] as const) {
+    await theme(page, family, mode);
+    const label = `${family ?? 'Pigmento'} ${mode}`;
+    await page.getByRole('tab', { name: 'Animate' }).click();
+    findings.push(...(await audit(page, `${label} · Animate tab`, '.ribbon')), ...(await audit(page, `${label} · Timeline (groups, camera)`, '.timeline')));
+    findings.push(...(await auditDialog(page, `${label} · Make a box`, () => ribbon.getByRole('button', { name: 'Box…' }).click())));
+    for (const tool of ['m', 'a'] as const) {
+      await page.locator('.canvas-host').focus();
+      await page.keyboard.press(tool);
+      const name = tool === 'm' ? 'Perspective plane' : 'Animate';
+      await options(`${label} · ${name} options (group)`, () => page.evaluate((id) => window.__pigmentoTest!.selectPiece(id), ids['Group 1']), { role: 'button', name: 'Centre pivot' });
+      await options(`${label} · ${name} options (a face that follows)`, () => page.evaluate((id) => window.__pigmentoTest!.selectPiece(id), ids.Front), { role: 'combobox', name: 'Follows' });
+      await options(`${label} · ${name} options (a hinged face)`, () => page.evaluate((id) => window.__pigmentoTest!.selectPiece(id), ids.Right), { role: 'textbox', name: 'Fold' });
+      await options(`${label} · ${name} options (camera)`, () => page.evaluate(() => window.__pigmentoTest!.selectCamera()), { role: 'textbox', name: 'Pan X' });
+    }
+    await page.getByRole('tab', { name: 'Home' }).click();
+  }
+  for (const f of findings) console.warn(`[a11y] ${f.where} — ${f.rule} (${f.impact}): ${f.help} :: ${f.targets.join(' | ')}`);
+  expect(findings.map((f) => `${f.where}: ${f.rule}`)).toEqual([]);
+});

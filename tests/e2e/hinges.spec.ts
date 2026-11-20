@@ -378,3 +378,47 @@ test('a box: made, a face painted, spun over the timeline, saved and reopened, a
   expect(decoded.painted).toBeGreaterThan(50);
   expect(decoded.differ).toBeGreaterThan(20);
 });
+
+test('boxes, folds and the camera work from the keyboard alone', async () => {
+  const { page } = h;
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  await page.getByRole('button', { name: 'Box…' }).focus();
+  await page.keyboard.press('Enter');
+  const dialog = page.getByRole('dialog', { name: 'Make a box' });
+  await expect(dialog.getByRole('textbox', { name: 'Width' })).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(dialog).toBeHidden();
+  const ids = Object.fromEntries((await page.evaluate(() => window.__pigmentoTest!.anim().pieces)).map((p) => [p.name, p.id]));
+  const names = page.locator('.tl-names');
+  // The camera's row, then the arrows slide the camera (keyed at the frame shown).
+  await names.getByRole('button', { name: 'Camera' }).focus();
+  await page.keyboard.press('Enter');
+  expect((await page.evaluate(() => window.__pigmentoTest!.anim())).cameraSelected).toBe(true);
+  await page.locator('.canvas-host').focus();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('Shift+ArrowDown');
+  const camera = page.locator('.optionsbar');
+  await expect(camera.getByRole('textbox', { name: 'Pan X', exact: true })).toHaveValue('1');
+  await expect(camera.getByRole('textbox', { name: 'Pan Y', exact: true })).toHaveValue('10');
+  // A hinged face: Up and Down fold it with either piece tool, and its Fold field steps 15° with Shift.
+  await names.getByRole('button', { name: 'Right', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  expect(await page.evaluate(() => window.__pigmentoTest!.tool())).toBe('animate');
+  await page.locator('.canvas-host').focus();
+  await page.keyboard.press('ArrowUp');
+  expect(await page.evaluate(() => window.__pigmentoTest!.anim().current!.fold)).toBeCloseTo(91, 6);
+  const fold = page.locator('.optionsbar').getByRole('textbox', { name: 'Fold', exact: true });
+  await fold.focus();
+  await page.keyboard.press('Shift+ArrowDown');
+  expect(await page.evaluate(() => window.__pigmentoTest!.anim().current!.fold)).toBeCloseTo(76, 6);
+  // The group's row, then the arrows move the whole box.
+  await names.getByRole('button', { name: 'Group 1', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  const x0 = (await page.evaluate((id) => window.__pigmentoTest!.pieceAt(id, 0)!, ids['Group 1'])).x;
+  await page.locator('.canvas-host').focus();
+  await page.keyboard.press('Shift+ArrowLeft');
+  expect((await page.evaluate((id) => window.__pigmentoTest!.pieceAt(id, 0)!, ids['Group 1'])).x).toBeCloseTo(x0 - 10, 6);
+  // Escape lets go of the selection.
+  await page.keyboard.press('Escape');
+  expect((await page.evaluate(() => window.__pigmentoTest!.anim())).selectedId).toBeNull();
+});

@@ -1,6 +1,6 @@
 import type { Point } from '../core/geometry';
 import { rootOf, subtree } from '../anim/links';
-import type { Piece } from '../anim/piece';
+import { pieceStateAt, type Piece } from '../anim/piece';
 import type { PieceState } from '../anim/interpolate';
 import type { Scene } from '../anim/scene';
 import { project, unproject } from '../anim/space';
@@ -88,4 +88,39 @@ export function slideOnParent(scene: Scene, piece: Piece, s0: PieceState, start:
     else dx = 0;
   }
   return { x: s0.x + dx, y: s0.y + dy };
+}
+
+/**
+ * Keys for what the Animate and Perspective plane tools have selected, keyed at the frame shown:
+ * Delete removes the piece; the arrows nudge it (Shift: 10 px), fold a hinged one (Up folds it
+ * back, Down forward; Shift: 15°), or slide the camera while its timeline row is selected. False
+ * when the key isn't one of these.
+ */
+export function selectionKeys(ctx: ToolContext, e: KeyboardEvent): boolean {
+  if (e.ctrlKey || e.altKey || e.metaKey) return false;
+  const p = ctx.anim.selected;
+  const step = e.shiftKey ? 10 : 1;
+  const move: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+  const m = move[e.key];
+  if (!p) {
+    if (!ctx.anim.cameraSelected || !m) return false;
+    const c = ctx.anim.cameraFields();
+    ctx.anim.setCameraKey(ctx.anim.frame, { panX: c.panX + m[0], panY: c.panY + m[1] });
+    return true;
+  }
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    ctx.anim.remove(p.id);
+    return true;
+  }
+  if (p.link?.hinge) {
+    const dir = e.key === 'ArrowUp' ? 1 : e.key === 'ArrowDown' ? -1 : 0;
+    if (!dir) return false;
+    const fold = pieceStateAt(p, ctx.anim.frame).fold + (dir * (e.shiftKey ? 15 : 1) * Math.PI) / 180;
+    ctx.anim.setKey(p.id, ctx.anim.frame, { fold });
+    return true;
+  }
+  if (!m) return false;
+  const s = pieceStateAt(p, ctx.anim.frame);
+  ctx.anim.setKey(p.id, ctx.anim.frame, { x: s.x + m[0], y: s.y + m[1] });
+  return true;
 }
