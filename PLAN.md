@@ -410,14 +410,16 @@ Decisions (agreed with the user):
   - **Keyboard:** the Animate and Perspective plane tools share one key handler, so the Animate tool now folds hinged faces too, and the arrow keys slide the camera while its row is selected.
   - **Performance:** flat repeating pieces now draw on the GPU (see 6.23).
 
-### Milestone 7 — Paths and trails, version 1.3.0 (requested after 1.2.0; not started)
-Things that travel leave marks. A piece can follow a path drawn on a shape layer and face the way it's going. A path can be drawn on, or eaten away right behind the piece travelling it, like a burning fuse or a route on a map. A piece can leave a trail: smoke, sparks, a comet tail, speed lines. The user asked for this plan but not for the work yet, so nothing starts until they say so. Before 7.1, go through the decisions below with them. Split into four stops; each ends with a working app, `npm run check` green and a report, then waits for "continue". Each item is ticked in the same commit as its work.
+### Milestone 7 — Paths, trails and loops, version 1.3.0 (requested after 1.2.0; not started)
+Things that travel leave marks. A piece can follow a path drawn on a shape layer and face the way it's going. A path can be drawn on, or eaten away right behind the piece travelling it, like a burning fuse or a route on a map. A piece can leave a trail: smoke, sparks, a comet tail, speed lines. Short cycles repeat by themselves: a layer's drawings (cloth waving in the wind, a flag, a flickering flame) and a piece's keyframes (a swinging sign, a bobbing boat) loop however long the timeline is. The user asked for this plan but not for the work yet, so nothing starts until they say so. Before 7.1, go through the decisions below with them. Split into five stops; each ends with a working app, `npm run check` green and a report, then waits for "continue". Each item is ticked in the same commit as its work.
 
 Words used in the UI:
 - **Follow path:** a piece travels along a path from a shape layer, its **progress** (0–100 %) keyed on the timeline instead of its position.
 - **Face direction:** the piece turns to point where it's heading, plus an **angle** for art drawn pointing another way.
 - **Trim:** a path shows only from its **Start** to its **End** (each 0–100 % of its length), with an **Offset** that slides both. **Draw on** and **Erase behind** set these up for you.
 - **Trail:** what a moving piece leaves behind, from its **emitter point** (a spot on the piece, such as a rocket's nozzle). It is either **Echo** (fading copies of the piece itself) or **Puffs** (stamps of a brush tip that live for a while, growing, drifting and fading, with a colour over their life).
+- **Loop drawings:** a frame-by-frame layer's drawings repeat as a **cycle** (A, B, A, B…), or go **back and forth** (A, B, C, B, A…), for the whole timeline.
+- **Loop keyframes:** after its last keyframe, a piece starts its moves again from the first (**Loop**) or plays them backwards and forwards (**Back and forth**).
 
 Decisions proposed (to agree with the user before starting):
 - **Deterministic trails:** a trail is worked out from the timeline alone. Each puff's birth, place, size and colour come from the frame and a seed, so scrubbing, playback and exports always show the same smoke, and no simulation state is saved. Puffs are emitted by distance travelled as well as by time, so a fast piece still leaves an unbroken trail.
@@ -427,6 +429,12 @@ Decisions proposed (to agree with the user before starting):
 - **Keyed shape paths:** a path on a shape layer can follow, or be followed by, a piece on the timeline. In 1.3.0 a shape object gains keyframes for its trim only (Start, End, Offset), so its row shows in the timeline. Animating a shape's points, style or size is left for later.
 - **Following a path:** the piece keeps a link to the path, so editing the path changes the motion. If the path is deleted, the piece keeps the motion it had, baked into keyframes. Following ignores the piece's own x and y keys; a curved motion path can also be turned into a shape path (**Motion path to shape**) to style or trim it.
 - **Face direction** uses the direction on the canvas, smoothed so a stop or a sharp corner doesn't flick the piece round. It adds to the piece's spin.
+- **Loops:**
+  - A loop is a setting on the layer or piece, not copies, so changing drawing A changes every repeat of it.
+  - A looping layer's cycle runs from its first drawing's start to the end of its last drawing. The last drawing gets an end you drag in the timeline, since nothing follows it.
+  - A looping piece repeats the span from its first keyframe to its last. Before the first keyframe it holds, as now.
+  - The timeline shows the repeats faded beyond the cycle, and onion skin and exports follow them.
+  - The picture's own playback mode (Loop, Once, Back and forth) still applies to the whole timeline on top of these.
 - **Save format:** projects hold all of this in `.pigm` version 4, written only when a picture uses something new in 1.3.0, otherwise version 3, 2 or 1 as now.
 - **Left out of 1.3.0:** physics (gravity, bouncing, collisions), emitters that aren't on a piece, wind fields, motion blur, and trails on frame-by-frame drawings.
 
@@ -440,7 +448,7 @@ Decisions proposed (to agree with the user before starting):
 - [ ] 7.5 Trim: Start, End and Offset on any path or shape outline on a shape layer, dashes and arrowheads included (an arrowhead stays at the visible end), drawn the same on screen and in exports (+ unit tests, golden sheet)
 - [ ] 7.6 Keyed shape objects: a shape object's trim is keyed on the timeline, with its row under its layer, and Draw on and Erase behind fill in the keys over a chosen span (+ unit tests)
 - [ ] 7.7 Tied to a piece: a followed path's Start (Erase behind) or End (Draw on) can track the piece's progress, so the line vanishes right behind it or is drawn just ahead of it, with a gap you set (+ e2e: a rocket on a dotted path that disappears behind it)
-- [ ] 7.8 `.pigm` version 4 for following, face direction and trim; limits on every new number; documented in `docs/project-format.md` (+ round-trip unit test, grown with 7C)
+- [ ] 7.8 `.pigm` version 4 for following, face direction and trim; limits on every new number; documented in `docs/project-format.md` (+ round-trip unit test, grown with 7C and 7D)
 
 **Stop 7C — Trails**
 - [ ] 7.9 The trail model: Echo and Puffs; the emitter point (dragged on the piece, turning with it); rate by time and by distance; lifetime, size, growth, drift, spread, fade and colour over life; a seed; keyed emission on and off. Worked out from the timeline alone, so any frame comes out the same however it's reached (+ unit tests, including scrubbing back and forth)
@@ -448,8 +456,13 @@ Decisions proposed (to agree with the user before starting):
 - [ ] 7.11 Drawing trails: puffs drawn many at a time on the GPU, with the CPU path for exports and flattening matching within a small tolerance; in 3D they face the camera at the emitter's depth; behind or in front of the piece (+ golden trail sheet, GPU/CPU comparison)
 - [ ] 7.12 E2e: a rocket follows a path, facing its way, with smoke that starts at ignition and thins out, its path erased behind it; save and reopen, export a GIF and an MP4; `npm run check` green; report
 
-**Stop 7D — Polish and release**
-- [ ] 7.13 Accessibility: axe audit of the new options, popover and timeline rows in light, dark and high contrast; everything reachable by keyboard, including the emitter point (arrow keys nudge it); trails don't animate by themselves while the timeline is stopped, so reduced motion needs nothing
-- [ ] 7.14 Performance budgets: 24 fps playback at 1920 × 1080 with three smoke trails of 2,000 live puffs each over the 1.2.0 box scene; scrubbing to any frame in under 16 ms; a 240-frame 1080p MP4 of it in under 30 s (+ perf e2e)
-- [ ] 7.15 User guide (following paths, face direction, trim, draw on and erase behind, trails and their presets), shortcuts, README feature and screenshot, CHANGELOG 1.3.0, version 1.3.0, welcome tour mention
-- [ ] 7.16 `npm run check` green, installer rebuilt and smoke-tested; final report listing every 1.3.0 feature with its status; then, after asking, tag `v1.3.0` and publish the release (steps in `docs/releasing.md`)
+**Stop 7D — Loops**
+- [ ] 7.13 Loop drawings: a frame-by-frame layer's Loop setting (Off, Cycle, Back and forth) in the Animate tab and on its timeline row. The last drawing's end is dragged in the timeline, and the repeats show faded there. The repeats appear in every tool's view (painting on a repeat paints that drawing, everywhere it shows), in onion skin, flattening and exports. Undoable (+ unit tests)
+- [ ] 7.14 Loop keyframes: a piece's Loop setting (Off, Loop, Back and forth). Its moves repeat after the last keyframe, with every value looping (position, spin, 3D, scroll, fold, trail emission). Its motion path, and the repeats faded in the timeline, show where it goes. Undoable (+ unit tests)
+- [ ] 7.15 E2e: cloth on a line drawn in two drawings loops Cycle while a rocket crosses 48 frames and a sign swings Back and forth; save and reopen, export a GIF that shows the cloth flapping all the way through; `npm run check` green; report
+
+**Stop 7E — Polish and release**
+- [ ] 7.16 Accessibility: axe audit of the new options, popover and timeline rows in light, dark and high contrast. Everything is reachable by keyboard, including the emitter point (arrow keys nudge it), the loop settings and a looping layer's cycle end. Trails and loops don't animate by themselves while the timeline is stopped, so reduced motion needs nothing
+- [ ] 7.17 Performance budgets: 24 fps playback at 1920 × 1080 with three smoke trails of 2,000 live puffs each and two looping layers over the 1.2.0 box scene; scrubbing to any frame in under 16 ms; a 240-frame 1080p MP4 of it in under 30 s (+ perf e2e)
+- [ ] 7.18 User guide (following paths, face direction, trim, draw on and erase behind, trails and their presets, looping drawings and keyframes), shortcuts, README feature and screenshot, CHANGELOG 1.3.0, version 1.3.0, welcome tour mention
+- [ ] 7.19 `npm run check` green, installer rebuilt and smoke-tested; final report listing every 1.3.0 feature with its status; then, after asking, tag `v1.3.0` and publish the release (steps in `docs/releasing.md`)
