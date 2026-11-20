@@ -72,6 +72,11 @@ export interface PigmentoTestHook {
   pieceHandle(id: string, x: number, y: number): { x: number; y: number };
   cubeSheet(): Promise<{ ids: string[]; w: number; h: number; png: number[] }>;
   selectCamera(): void;
+  perfBoxScene(background?: boolean): { group: string; background: string | null; width: number };
+  dragTimes(id: string, steps: number): number[];
+  stillExportMs(): number;
+  perfStart(): void;
+  perfLatency(): { median: number | null; p95: number | null };
   pieceFront(id: string): boolean;
   addTestBox(cx: number, cy: number, size: { w: number; h: number; d: number }, tilt: number, turn: number, hideBacks?: boolean): Record<'front' | 'back' | 'top' | 'bottom' | 'left' | 'right' | 'group', string> | null;
   addLayer(): string;

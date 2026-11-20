@@ -318,6 +318,70 @@ export function installTestHook(): void {
     },
     /** Where a point of a piece (its own pixels) shows in the document at the frame shown. */
     cubeSheet,
+    /**
+     * The 3D performance scene on top of what's there: a 6000 px striped background repeating across
+     * the bottom layer and scrolling round, and a shaded box of 1024 px faces spinning once round
+     * over the timeline (48 frames at 24 fps). Its group's id, and the background's.
+     */
+    perfBoxScene: (background = true) => {
+      const a = engine.anim;
+      a.setTimeline({ length: 48, fps: 24 });
+      const { width: w, height: hh } = engine.doc;
+      const box = () => {
+        a.makeBox({ w: 1024, h: 1024, d: 1024 });
+        const group = a.info().pieces.filter((p) => p.kind === 'group').at(-1)!.id;
+        a.setKey(group, 47, { turn: a.piece(group)!.keyframes[0].turn + 2 * Math.PI });
+        a.select(null);
+        return group;
+      };
+      if (!background) return { group: box(), background: null, width: w };
+      const bw = 6000;
+      const data = new Uint8ClampedArray(bw * hh * 4);
+      for (let y = 0; y < hh; y++) for (let x = 0; x < bw; x++) data.set([((x >> 6) & 1) * 120 + 60, 90 + (y % 200) / 2, 180 - ((x >> 7) & 1) * 80, 255], (y * bw + x) * 4);
+      const bottom = engine.doc.rasterLayers()[0].id;
+      const bg = a.add({ w: bw, h: hh, data }, { x: 0, y: 0, w: bw, h: hh }, bottom, 'history.placeImage', true)!;
+      a.setRepeat(bg.id, 'x');
+      a.loopScroll(bg.id);
+      return { group: box(), background: bg.id, width: w };
+    },
+    /**
+     * Times (ms) to redraw a drag of a piece, step by step (moving it and tilting it a little more each
+     * time), each waiting for the GPU to finish (a 1-pixel read of the picture); the drag is then undone.
+     */
+    dragTimes: (id: string, steps: number) => {
+      const a = engine.anim;
+      const p = a.piece(id);
+      if (!p) return [];
+      const f = a.frame;
+      const keys0 = p.keyframes.map((k) => ({ ...k }));
+      const s0 = pieceStateAt(p, f);
+      a.beginDrag();
+      const times: number[] = [];
+      for (let i = 1; i <= steps; i++) {
+        const t0 = performance.now();
+        a.preview(id, (q) => (q.keyframes = setKey(keys0, f, { x: s0.x + i * 4, y: s0.y + i * 2, tilt: s0.tilt + i * 0.004 })));
+        engine.renderer.render();
+        engine.renderer.compositeCanvas.getContext('2d')!.getImageData(0, 0, 1, 1);
+        times.push(performance.now() - t0);
+      }
+      a.cancelDrag();
+      return times;
+    },
+    /** How long (ms) the whole picture takes to draw through the CPU path, as a still export does. */
+    stillExportMs: () => {
+      const t0 = performance.now();
+      engine.flatten(false);
+      return performance.now() - t0;
+    },
+    /** Start timing pointer-to-pixel latency afresh, or read it (ms). */
+    perfStart: () => {
+      engine.perf.enabled = true;
+      engine.perf.reset();
+    },
+    perfLatency: () => {
+      const s = engine.perf.stats(performance.now());
+      return { median: s.latency, p95: s.latencyP95 };
+    },
     selectCamera: () => engine.anim.selectCamera(),
     pieceFront: (id: string) => {
       const p = engine.anim.piece(id);

@@ -212,13 +212,20 @@ test('animation: 20 pieces at 1080p scrub in under 16 ms a frame and play at 24 
   const p95 = times[Math.floor(times.length * 0.95)];
   console.warn('1080p, 20 pieces, frame draw (ms): median', median.toFixed(1), 'p95', p95.toFixed(1));
   expect(p95).toBeLessThan(16);
-  // Playback at 24 fps for two seconds: (nearly) every frame is shown, none skipped.
+  const seen = await playTwoSeconds(page);
+  console.warn('1080p, 20 pieces, 24 fps playback: frames shown in 2 s', seen);
+  // 48 frames in 2 s; allow a couple for start-up.
+  expect(seen).toBeGreaterThanOrEqual(44);
+});
+
+/** Play at 24 fps for two seconds from frame 1: how many frames were shown (48 when none are skipped). */
+async function playTwoSeconds(page: Page): Promise<number> {
   await page.evaluate(() => {
     window.__pigmentoTest!.setTimeline({ length: 48, fps: 24 });
     window.__pigmentoTest!.setFrame(0);
   });
   await page.locator('.canvas-host').focus();
-  const seen = await page.evaluate(async () => {
+  return page.evaluate(async () => {
     const t = window.__pigmentoTest!;
     const frames: number[] = [];
     const start = performance.now();
@@ -236,10 +243,7 @@ test('animation: 20 pieces at 1080p scrub in under 16 ms a frame and play at 24 
     for (let i = 1; i < frames.length; i++) if (frames[i] !== frames[i - 1]) changes++;
     return changes;
   });
-  console.warn('1080p, 20 pieces, 24 fps playback: frames shown in 2 s', seen);
-  // 48 frames in 2 s; allow a couple for start-up.
-  expect(seen).toBeGreaterThanOrEqual(44);
-});
+}
 
 test('animation export: a 48-frame 720p GIF in under 15 s', async () => {
   test.setTimeout(120_000);
@@ -262,5 +266,104 @@ test('animation export: a 240-frame 1080p MP4 in under 30 s', async () => {
   await busyAnimation(page);
   const mp4 = await page.evaluate(() => window.__pigmentoTest!.encodeAnimation('mp4', 240));
   console.warn('240-frame 1920×1080 MP4 (s):', (mp4.ms / 1000).toFixed(1), 'size (KB):', Math.round(mp4.bytes / 1024));
+  expect(mp4.ms).toBeLessThan(30_000);
+});
+
+/** A 2000 × 1500 piece lifted from the middle of a 4000 × 3000 picture, tilted and turned: its id. */
+async function tiltedPiece(page: Page): Promise<string> {
+  await newImage(page, 4000, 3000);
+  return page.evaluate(() => {
+    const t = window.__pigmentoTest!;
+    t.fillLayer(t.layers().activeId, { r: 60, g: 140, b: 220, a: 255 }, { x: 1000, y: 750, w: 2000, h: 1500 });
+    t.selectRect(1000, 750, 2000, 1500);
+    t.animateSelection(false);
+    const id = t.anim().pieces[0].id;
+    t.setPieceKey(id, 0, { tilt: 0.5, turn: -0.3 });
+    return id;
+  });
+}
+
+test('3D: a shaded box of 1024 px faces spins at 24 fps at 1080p over a repeating background and 20 pieces', async () => {
+  test.setTimeout(120_000);
+  h = await launchApp();
+  const { page } = h;
+  await ready(page);
+  await newImage(page, 1920, 1080);
+  await busyAnimation(page);
+  await page.evaluate(() => window.__pigmentoTest!.perfBoxScene());
+  expect((await page.evaluate(() => window.__pigmentoTest!.anim())).pieces).toHaveLength(28);
+  expect(await page.evaluate(() => window.__pigmentoTest!.gpuPlanes())).toBe(true);
+  await page.evaluate((f) => window.__pigmentoTest!.renderTimes(f), [1, 2, 3]);
+  const times = (await page.evaluate((f) => window.__pigmentoTest!.renderTimes(f), [...Array(48).keys()])).sort((a, b) => a - b);
+  console.warn('1080p box + background + 20 pieces, frame draw (ms): median', times[24].toFixed(1), 'p95', times[45].toFixed(1));
+  const seen = await playTwoSeconds(page);
+  console.warn('1080p box + background + 20 pieces, 24 fps playback: frames shown in 2 s', seen);
+  expect(seen).toBeGreaterThanOrEqual(44);
+});
+
+test('3D: dragging a tilted piece on 4000 × 3000 draws in under 16 ms a frame', async () => {
+  test.setTimeout(120_000);
+  h = await launchApp();
+  const { page } = h;
+  await ready(page);
+  const id = await tiltedPiece(page);
+  await page.evaluate((pid) => window.__pigmentoTest!.dragTimes(pid, 5), id);
+  const times = (await page.evaluate((pid) => window.__pigmentoTest!.dragTimes(pid, 60), id)).sort((a, b) => a - b);
+  console.warn('4000×3000, dragging a tilted 2000×1500 piece, frame (ms): median', times[30].toFixed(1), 'p95', times[57].toFixed(1));
+  expect(times[57]).toBeLessThan(16);
+});
+
+test('3D: a brush stroke on a tilted piece stays within the latency budget', async () => {
+  test.setTimeout(120_000);
+  h = await launchApp();
+  const { page } = h;
+  await ready(page);
+  const id = await tiltedPiece(page);
+  await page.evaluate((pid) => window.__pigmentoTest!.selectPiece(pid), id);
+  await page.keyboard.press('b');
+  await page.getByRole('checkbox', { name: 'Paint on piece' }).check();
+  const steps = (await page.evaluate(() => window.__pigmentoTest!.history())).length;
+  await page.evaluate(() => window.__pigmentoTest!.perfStart());
+  for (let i = 0; i < 8; i++) {
+    const a = await page.evaluate(([pid, k]) => window.__pigmentoTest!.pieceHandle(pid, 300 + k * 150, 300), [id, i] as const);
+    const b = await page.evaluate(([pid, k]) => window.__pigmentoTest!.pieceHandle(pid, 450 + k * 150, 1200), [id, i] as const);
+    await drag(page, [
+      [a.x, a.y],
+      [(a.x + b.x) / 2, (a.y + b.y) / 2],
+      [b.x, b.y],
+    ]);
+  }
+  const lat = await page.evaluate(() => window.__pigmentoTest!.perfLatency());
+  console.warn('4000×3000, painting on a tilted piece, pointer → pixels (ms): median', lat.median?.toFixed(1), 'p95', lat.p95?.toFixed(1));
+  expect(lat.median).not.toBeNull();
+  expect(lat.median!).toBeLessThan(16);
+  // Each stroke painted the piece (one undo step each).
+  expect((await page.evaluate(() => window.__pigmentoTest!.history())).length).toBe(steps + 8);
+});
+
+test('3D: a still export of a shaded box of 1024 px faces at 4000 × 3000 in under 2 s', async () => {
+  test.setTimeout(120_000);
+  h = await launchApp();
+  const { page } = h;
+  await ready(page);
+  await newImage(page, 4000, 3000);
+  await page.evaluate(() => window.__pigmentoTest!.perfBoxScene(false));
+  await page.evaluate(() => window.__pigmentoTest!.setFrame(5));
+  await page.evaluate(() => window.__pigmentoTest!.stillExportMs());
+  const ms = await page.evaluate(() => window.__pigmentoTest!.stillExportMs());
+  console.warn('4000×3000 still of the box (CPU path, ms):', ms.toFixed(0));
+  expect(ms).toBeLessThan(2000);
+});
+
+test('3D: a 240-frame 1080p MP4 of the spinning box over the background in under 30 s', async () => {
+  test.setTimeout(180_000);
+  h = await launchApp();
+  const { page } = h;
+  await ready(page);
+  await newImage(page, 1920, 1080);
+  await busyAnimation(page);
+  await page.evaluate(() => window.__pigmentoTest!.perfBoxScene());
+  const mp4 = await page.evaluate(() => window.__pigmentoTest!.encodeAnimation('mp4', 240));
+  console.warn('240-frame 1920×1080 MP4 of the box scene (s):', (mp4.ms / 1000).toFixed(1), 'size (KB):', Math.round(mp4.bytes / 1024));
   expect(mp4.ms).toBeLessThan(30_000);
 });
