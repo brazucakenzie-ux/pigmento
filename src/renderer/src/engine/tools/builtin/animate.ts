@@ -21,7 +21,7 @@ import type { EdgeSnap } from '../../anim/edgeSnap';
 import { foldHandle, foldToward } from '../../anim/edgeSnap';
 import { project } from '../../anim/space';
 import { drawHingeSnap, hingeOnRelease, hingeSnap } from '../hingeSnap';
-import { slideOnParent, treePieces, treeTop } from '../treeEdit';
+import { selectionKeys, slideOnParent, treePieces, treeTop } from '../treeEdit';
 import { registerTool } from '../ToolRegistry';
 import type { ToolContext, ToolPointerEvent } from '../Tool';
 
@@ -355,24 +355,15 @@ export default registerTool({
         drag = null;
         return true;
       }
-      if (p) {
+      if (p || ctx.anim.cameraSelected) {
         ctx.anim.select(null);
+        ctx.anim.selectCamera(false);
         return true;
       }
       return false;
     }
-    if (!p || drag || e.ctrlKey || e.altKey || e.metaKey) return false;
-    if (e.key === 'Delete' || e.key === 'Backspace') {
-      ctx.anim.remove(p.id);
-      return true;
-    }
-    const step = e.shiftKey ? 10 : 1;
-    const move: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
-    const m = move[e.key];
-    if (!m) return false;
-    const s = pieceStateAt(p, ctx.anim.frame);
-    ctx.anim.setKey(p.id, ctx.anim.frame, { x: s.x + m[0], y: s.y + m[1] });
-    return true;
+    if (drag) return false;
+    return selectionKeys(ctx, e);
   },
   drawOverlay(ctx, ov) {
     const sel = ctx.anim.selected;

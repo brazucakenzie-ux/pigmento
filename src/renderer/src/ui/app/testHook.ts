@@ -71,20 +71,20 @@ async function brushSheet(cellW: number, cellH: number, cols: number): Promise<{
 /** A test box's faces: each its own colour, with a dark mark in its top-left corner (a face turned or mirrored wrongly shows). */
 const CUBE_COLOURS: Record<BoxFace, [number, number, number]> = { front: [200, 60, 50], top: [220, 170, 40], bottom: [60, 140, 70], left: [50, 90, 200], right: [150, 70, 170], back: [90, 90, 90] };
 
-function cubeFaces(size: BoxSize): Record<BoxFace, { w: number; h: number; data: Uint8ClampedArray }> {
+function cubeFaces(size: BoxSize, marks = true): Record<BoxFace, { w: number; h: number; data: Uint8ClampedArray }> {
   const out = {} as Record<BoxFace, { w: number; h: number; data: Uint8ClampedArray }>;
   for (const f of BOX_FACES) {
     const { w, h } = faceSize(f, size);
     const data = new Uint8ClampedArray(w * h * 4);
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) data.set(x < 10 && y < 10 ? [20, 20, 20, 255] : [...CUBE_COLOURS[f], 255], (y * w + x) * 4);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) data.set(marks && x < 10 && y < 10 ? [20, 20, 20, 255] : [...CUBE_COLOURS[f], 255], (y * w + x) * 4);
     out[f] = { w, h, data };
   }
   return out;
 }
 
 /** A box turned by tilt and turn: its pieces (group first), seen by a camera at its middle. */
-function cubeAt(centre: { x: number; y: number }, size: BoxSize, tilt: number, turn: number, layerId: string): Piece[] {
-  const pieces = makeBox(newPieceId, layerId, centre, size, 0, { faces: cubeFaces(size), names: (f) => f, shade: 0.6 });
+function cubeAt(centre: { x: number; y: number }, size: BoxSize, tilt: number, turn: number, layerId: string, marks = true, names: (f: BoxFace) => string = (f) => f): Piece[] {
+  const pieces = makeBox(newPieceId, layerId, centre, size, 0, { faces: cubeFaces(size, marks), names, shade: 0.6 });
   pieces[0].keyframes = setKey(pieces[0].keyframes, 0, { tilt, turn });
   return pieces;
 }
@@ -318,16 +318,82 @@ export function installTestHook(): void {
     },
     /** Where a point of a piece (its own pixels) shows in the document at the frame shown. */
     cubeSheet,
+    /**
+     * The 3D performance scene on top of what's there: a 6000 px striped background repeating across
+     * the bottom layer and scrolling round, and a shaded box of 1024 px faces spinning once round
+     * over the timeline (48 frames at 24 fps). Its group's id, and the background's.
+     */
+    perfBoxScene: (background = true) => {
+      const a = engine.anim;
+      a.setTimeline({ length: 48, fps: 24 });
+      const { width: w, height: hh } = engine.doc;
+      const box = () => {
+        a.makeBox({ w: 1024, h: 1024, d: 1024 });
+        const group = a.info().pieces.filter((p) => p.kind === 'group').at(-1)!.id;
+        a.setKey(group, 47, { turn: a.piece(group)!.keyframes[0].turn + 2 * Math.PI });
+        a.select(null);
+        return group;
+      };
+      if (!background) return { group: box(), background: null, width: w };
+      const bw = 6000;
+      const data = new Uint8ClampedArray(bw * hh * 4);
+      for (let y = 0; y < hh; y++) for (let x = 0; x < bw; x++) data.set([((x >> 6) & 1) * 120 + 60, 90 + (y % 200) / 2, 180 - ((x >> 7) & 1) * 80, 255], (y * bw + x) * 4);
+      const bottom = engine.doc.rasterLayers()[0].id;
+      const bg = a.add({ w: bw, h: hh, data }, { x: 0, y: 0, w: bw, h: hh }, bottom, 'history.placeImage', true)!;
+      a.setRepeat(bg.id, 'x');
+      a.loopScroll(bg.id);
+      return { group: box(), background: bg.id, width: w };
+    },
+    /**
+     * Times (ms) to redraw a drag of a piece, step by step (moving it and tilting it a little more each
+     * time), each waiting for the GPU to finish (a 1-pixel read of the picture); the drag is then undone.
+     */
+    dragTimes: (id: string, steps: number) => {
+      const a = engine.anim;
+      const p = a.piece(id);
+      if (!p) return [];
+      const f = a.frame;
+      const keys0 = p.keyframes.map((k) => ({ ...k }));
+      const s0 = pieceStateAt(p, f);
+      a.beginDrag();
+      const times: number[] = [];
+      for (let i = 1; i <= steps; i++) {
+        const t0 = performance.now();
+        a.preview(id, (q) => (q.keyframes = setKey(keys0, f, { x: s0.x + i * 4, y: s0.y + i * 2, tilt: s0.tilt + i * 0.004 })));
+        engine.renderer.render();
+        engine.renderer.compositeCanvas.getContext('2d')!.getImageData(0, 0, 1, 1);
+        times.push(performance.now() - t0);
+      }
+      a.cancelDrag();
+      return times;
+    },
+    /** How long (ms) the whole picture takes to draw through the CPU path, as a still export does. */
+    stillExportMs: () => {
+      const t0 = performance.now();
+      engine.flatten(false);
+      return performance.now() - t0;
+    },
+    /** Start timing pointer-to-pixel latency afresh, or read it (ms). */
+    perfStart: () => {
+      engine.perf.enabled = true;
+      engine.perf.reset();
+    },
+    perfLatency: () => {
+      const s = engine.perf.stats(performance.now());
+      return { median: s.latency, p95: s.latencyP95 };
+    },
+    selectCamera: () => engine.anim.selectCamera(),
     pieceFront: (id: string) => {
       const p = engine.anim.piece(id);
       return p ? engine.anim.scene().placement(p).front : false;
     },
     /** A box of coloured faces on the active layer (one undo step), turned by tilt and turn: its face ids. */
-    addTestBox: (cx: number, cy: number, size: BoxSize, tilt: number, turn: number, hideBacks = false) => {
-      const pieces = cubeAt({ x: cx, y: cy }, size, tilt, turn, engine.doc.activeId);
+    addTestBox: (cx: number, cy: number, size: BoxSize, tilt: number, turn: number, hideBacks = false, marks = true, named = false) => {
+      const pieces = cubeAt({ x: cx, y: cy }, size, tilt, turn, engine.doc.activeId, marks, named ? engine.anim.faceNamer : undefined);
       if (hideBacks) for (const p of pieces) p.back = 'hide';
       if (!engine.anim.addTree(pieces, 'history.box')) return null;
-      return Object.fromEntries(pieces.map((p) => [p.kind === 'group' ? 'group' : p.name, p.id])) as Record<BoxFace | 'group', string>;
+      // By face (front, back…) whatever the faces are called.
+      return Object.fromEntries(pieces.map((p, i) => [p.kind === 'group' ? 'group' : BOX_FACES[i - 1], p.id])) as Record<BoxFace | 'group', string>;
     },
     pieceHandle: (id: string, x: number, y: number) => {
       const p = engine.anim.piece(id);

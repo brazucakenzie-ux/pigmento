@@ -2,6 +2,35 @@
 
 All notable changes to Pigmento. Versions follow [Semantic Versioning](https://semver.org).
 
+## [1.2.0] — 2026-11-20
+
+Pieces in 3D: sheets you tilt and turn, hinge into boxes and film with a moving camera.
+
+### Pieces anywhere
+- **Piece from layer** turns a whole layer into a piece, **Place image…** brings in a picture file as one (bigger than the canvas if you like), and **Paste as piece** pastes the clipboard as one.
+- Pieces can sit outside the canvas and move in over time. View → **Pieces outside the canvas** shows them faded around it, where you can grab them, and Fit to window takes them in.
+- **Repeat** tiles copies of a piece across, down or both ways, and **Scroll** slides them along. The loop button makes a background that scrolls round seamlessly.
+- **Paint on piece:** the painting tools and Fill paint the selected piece's own pixels, under the pointer, however it's scaled or turned.
+
+### Pieces in 3D
+- The **Perspective plane** tool (M) treats a piece as a sheet of paper in 3D: push it back, tilt it, turn it like a door and spin it, all keyed on the timeline.
+- A camera with a **vanishing point** you drag and a **Perspective** strength, with a perspective grid to draw to.
+- **Shading** by a light you place, and a choice of what shows on a piece's back.
+- Drawn on the GPU, with the same picture in exports, flattening and the colour picker.
+
+### Hinges, groups and boxes
+- Drag a piece's edge onto another's and they **hinge** there. Fold the hinge with its handle, the **Fold** field or the arrow keys, and **Unhinge** to let go.
+- A piece can **follow** another, and hinged pieces form a **group** that moves, tilts and turns as one, about its middle with **Centre pivot**. Alt changes just one piece.
+- **Box…** makes six blank faces folded into a box, ready to paint.
+- Hinges show no line at any angle, on screen or in exports.
+
+### Camera moves
+- A **Camera** row on the timeline keys pans and pushes. Near pieces slide past faster than far ones, while the layers stay put.
+- The timeline shows a group's pieces indented under it.
+
+### Files
+- Projects keep all of this in `.pigm` version 3. A picture that uses none of it is still saved as version 2 (or 1), so Pigmento 1.1 opens it.
+
 ## [1.1.1] — 2026-11-17
 
 A calligraphy nib you can turn, and installers built on GitHub.

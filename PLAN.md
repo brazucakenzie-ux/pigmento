@@ -393,7 +393,18 @@ Decisions (agreed with the user):
   - **Centre pivot** keeps every piece exactly in place on keyframes. In between, an animated tree can be off by under a pixel or two, because the new pivot's path is eased in other terms (as with moving a 3D piece's pivot in 6B).
 
 **Stop 6D — Polish and release**
-- [ ] 6.22 Accessibility: axe audit of the Perspective plane tool's options, the Animate tab's new controls, Place image, the box maker and the new timeline rows in light, dark and high contrast; every new field, the fold and the camera reachable by keyboard (arrow keys nudge, as with pieces); nothing new animates by itself, so reduced motion needs nothing
-- [ ] 6.23 Performance budgets: 24 fps playback at 1920 × 1080 of a shaded spinning box (six 1024 × 1024 faces) over a repeating 6000 px background and 20 flat pieces; dragging a 3D piece on 4000 × 3000 under 16 ms a frame; a brush stroke on a 3D piece within the 3.12 latency budget (under 16 ms); still export of that box at 4000 × 3000 under 2 s; MP4 of 240 frames at 1080p under 30 s (+ perf e2e)
-- [ ] 6.24 User guide (3D pieces, the camera, the Perspective plane tool, painting on pieces, repeat and scroll, hinges, groups, the box maker), shortcuts, README feature and screenshot, CHANGELOG 1.2.0, version 1.2.0 in `package.json`, welcome tour mention
+- [x] 6.22 Accessibility: axe audit of the Perspective plane tool's options, the Animate tab's new controls, Place image, the box maker and the new timeline rows in light, dark and high contrast; every new field, the fold and the camera reachable by keyboard (arrow keys nudge, as with pieces); nothing new animates by itself, so reduced motion needs nothing
+- [x] 6.23 Performance budgets: 24 fps playback at 1920 × 1080 of a shaded spinning box (six 1024 × 1024 faces) over a repeating 6000 px background and 20 flat pieces; dragging a 3D piece on 4000 × 3000 under 16 ms a frame; a brush stroke on a 3D piece within the 3.12 latency budget (under 16 ms); still export of that box at 4000 × 3000 under 2 s; MP4 of 240 frames at 1080p under 30 s (+ perf e2e)
+- Measured on this PC (6.23):
+  - The 1080p scene (a shaded box of 1024 px faces spinning over a 6000 px repeating background, with 20 flat pieces) shows 46 of 48 frames in 2 s at 24 fps. It showed 35 until flat repeating pieces were drawn on the GPU: a Canvas 2D pattern of a 6000 px picture took about 30 ms a frame to fill.
+  - Dragging a tilted 2000 × 1500 piece on 4000 × 3000 takes 12.9 ms a frame at the 95th percentile, waiting for the GPU each time.
+  - Painting on a tilted piece takes a median of 10.8 ms from pointer to pixels.
+  - The still of the box at 4000 × 3000 takes 0.57 s through the CPU path.
+  - The 240-frame 1080p MP4 of the box scene takes 1.8 s.
+- [x] 6.24 User guide (3D pieces, the camera, the Perspective plane tool, painting on pieces, repeat and scroll, hinges, groups, the box maker), shortcuts, README feature and screenshot, CHANGELOG 1.2.0, version 1.2.0 in `package.json`, welcome tour mention
 - [ ] 6.25 `npm run check` green, installer rebuilt and smoke-tested; final report listing every 1.2.0 feature with its status; then, after asking, tag `v1.2.0` so `release.yml` builds the release (steps in `docs/releasing.md`)
+- Stop 6D notes:
+  - **Tests:** lint, type-check, 549 unit and 143 e2e tests pass (19 opt-in skipped). One flaked in the full run and passed on its own 12 times in a row: the free-transform Ctrl-distort drag, whose corner landed 113 px off, as if a pointer move was dropped.
+  - **Installers:** `npm run dist` built `Pigmento-Setup-1.2.0.exe` and the portable exe. The packaged app (dist/win-unpacked) was smoke-tested without installing: it reports 1.2.0, draws 3D pieces on the GPU, shows a box the same on screen and in the picture, matches the golden cube with no pixels different, exports a GIF, and logs no errors. The installed-build smoke script needs this PC's Pigmento 1.1.1 uninstalled first, so it waits for the user's go-ahead.
+  - **Keyboard:** the Animate and Perspective plane tools share one key handler, so the Animate tool now folds hinged faces too, and the arrow keys slide the camera while its row is selected.
+  - **Performance:** flat repeating pieces now draw on the GPU (see 6.23).

@@ -42,6 +42,10 @@ interface PieceMirror {
   canvas: OffscreenCanvas;
   ctx: Ctx2D;
   tiles: (Tile | null)[];
+  /** Goes up whenever its pixels change (a pattern made from it is then out of date). */
+  version: number;
+  /** The pattern each target draws a repeating piece with (making one copies the whole canvas). */
+  patterns: WeakMap<object, { key: string; pattern: CanvasPattern }>;
 }
 
 /** Off-screen canvas a group's children are composited into before it is blended as one. */
@@ -241,17 +245,30 @@ export class Renderer {
     if (!m) {
       const canvas = new OffscreenCanvas(s.width, s.height);
       // A new canvas is transparent, which is what empty tiles are.
-      m = { canvas, ctx: ctx2d(canvas), tiles: s.tiles.map(() => null) };
+      m = { canvas, ctx: ctx2d(canvas), tiles: s.tiles.map(() => null), version: 0, patterns: new WeakMap() };
       this.pieceCanvases.set(s, m);
     }
     for (let i = 0; i < s.tiles.length; i++) if (m.tiles[i] !== s.tiles[i]) this.uploadPieceTile(m, s, i);
     return m.canvas;
   }
 
+  /** The pattern a repeating piece is drawn with on `ctx`, made again only when its pixels change. */
+  private piecePattern(ctx: Ctx2D | CanvasRenderingContext2D, s: Surface, repeat: Exclude<Repeat, 'none'>): CanvasPattern | null {
+    const canvas = this.pieceCanvas(s);
+    const m = this.pieceCanvases.get(s)!;
+    const key = `${repeat}:${m.version}`;
+    const hit = m.patterns.get(ctx);
+    if (hit?.key === key) return hit.pattern;
+    const pattern = ctx.createPattern(canvas, PATTERN_REPEAT[repeat]);
+    if (pattern) m.patterns.set(ctx, { key, pattern });
+    return pattern;
+  }
+
   private uploadPieceTile(m: PieceMirror, s: Surface, i: number): void {
     const tile = s.tiles[i];
     const r = s.tileRect(i);
     m.tiles[i] = tile;
+    m.version++;
     if (!tile) m.ctx.clearRect(r.x, r.y, r.w, r.h);
     else m.ctx.putImageData(new ImageData(tile as Uint8ClampedArray<ArrayBuffer>, TILE_SIZE, TILE_SIZE), r.x, r.y, 0, 0, r.w, r.h);
   }
@@ -307,9 +324,11 @@ export class Renderer {
       if (p.repeat === 'none') {
         ctx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
         ctx.drawImage(this.pieceCanvas(p.src), 0, 0);
-      } else {
-        // Tiles as a pattern in the piece's own space, slid by its scroll on the axes it repeats along.
-        const pat = ctx.createPattern(this.pieceCanvas(p.src), PATTERN_REPEAT[p.repeat]);
+      } else if (!this.planes.draw(ctx, p.src, pl, pieceTiling(p, st), area, 1)) {
+        // On the GPU it's one pass over what's showing (a pattern from a picture this big is slow to
+        // fill); without it, tiles as a pattern in the piece's own space, slid by its scroll on the
+        // axes it repeats along.
+        const pat = this.piecePattern(ctx, p.src, p.repeat);
         if (pat) {
           const ax = repeatAxes(p.repeat);
           const t = matChain(matTranslate(ax.x ? st.scrollX : 0, ax.y ? st.scrollY : 0), m);

@@ -298,10 +298,10 @@ function AnimateTab() {
       <RibbonGroup label={t('group.space')}>
         <ActionButton id="tool.plane" label={t('ribbon.planeTool')} />
         <ActionButton id="makeBox" />
-        <div className="rb-stack">
+        <div className="rb-stack rb-fields">
           <CameraField />
         </div>
-        <div className="rb-stack">
+        <div className="rb-stack rb-fields">
           <LightFields />
         </div>
       </RibbonGroup>
