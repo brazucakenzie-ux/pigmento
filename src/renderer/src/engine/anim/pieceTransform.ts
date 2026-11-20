@@ -3,6 +3,7 @@ import { matApply, matApplyRect, matChain, matRotate, matScale, type Mat } from 
 import type { Keyframe } from './interpolate';
 import { cloneKeyframe, type Piece } from './piece';
 import { MAX_STRENGTH, MIN_STRENGTH, type Camera } from './space';
+import { artDirection } from './face';
 import type { CameraKey } from './cameraMove';
 
 const TAU = Math.PI * 2;
@@ -107,6 +108,7 @@ export function transformPieces(pieces: readonly Piece[], m: Mat): Piece[] {
       };
     let prevOld = 0;
     let prevNew = 0;
+    let prevFix = 0;
     let prev3d = { tilt: 0, turn: 0, oldTilt: 0, oldTurn: 0 };
     const keyframes = p.keyframes.map((k, i): Keyframe => {
       let parts: ReturnType<typeof decompose>;
@@ -130,6 +132,16 @@ export function transformPieces(pieces: readonly Piece[], m: Mat): Piece[] {
       const angle = nearTurn(parts.angle, expected);
       prevOld = k.angle;
       prevNew = angle;
+      // A piece facing the way it goes turns with its motion already, so the picture's turn isn't
+      // added again; and the way its art points may change with its scale (a flip, or the sign the
+      // scale is kept with), which its heading doesn't know about.
+      let fix = 0;
+      if (p.face.on) {
+        const raw = -turn - (flips ? -1 : 1) * artDirection(p.face.angle, k.sx, k.sy) + artDirection(p.face.angle, parts.sx, parts.sy);
+        fix = nearTurn(raw, i === 0 ? -turn : prevFix);
+        prevFix = fix;
+      }
+      const keyed = angle + fix;
       return {
         ...cloneKeyframe(k),
         x: pos.x,
@@ -137,7 +149,7 @@ export function transformPieces(pieces: readonly Piece[], m: Mat): Piece[] {
         sx: parts.sx,
         sy: parts.sy,
         skew: parts.skew,
-        angle,
+        angle: keyed,
         tilt,
         turn: kturn,
         depth: k.depth * scale,

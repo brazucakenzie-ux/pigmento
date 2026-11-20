@@ -8,7 +8,7 @@ import { depthDrag, movePivot3D, resizeDrag, tiltDrag, turnDrag } from '../../an
 import { placementOf, project, unproject } from '../../anim/space';
 import { foldHandle, foldToward, type EdgeSnap } from '../../anim/edgeSnap';
 import { drawHingeSnap, hingeOnRelease, hingeSnap } from '../hingeSnap';
-import { alongPath, drawTree, selectionKeys, slideOnParent, topPivot, treeHandles, treePieces, treeTop, type TreeHandle } from '../treeEdit';
+import { alongPath, drawTree, keyedAngle, selectionKeys, slideOnParent, topPivot, treeHandles, treePieces, treeTop, type TreeHandle } from '../treeEdit';
 import { registerTool } from '../ToolRegistry';
 import type { ToolContext, ToolPointerEvent } from '../Tool';
 
@@ -56,6 +56,8 @@ interface Drag {
   adding: boolean;
   /** The edge it hinges onto if it's let go now. */
   snap: EdgeSnap | null;
+  /** Which way it was heading when the drag began, if it faces the way it goes. */
+  heading: number | null;
 }
 
 let drag: Drag | null = null;
@@ -171,8 +173,8 @@ function cursorFor(hit: Hit | null, ctrl: boolean): string {
   }
 }
 
-function stateChange(s: PieceState): Partial<PieceState> {
-  return { x: s.x, y: s.y, sx: s.sx, sy: s.sy, angle: s.angle, depth: s.depth, tilt: s.tilt, turn: s.turn };
+function stateChange(p: Piece, s: PieceState, heading: number | null): Partial<PieceState> {
+  return { x: s.x, y: s.y, sx: s.sx, sy: s.sy, angle: keyedAngle(p, s, heading), depth: s.depth, tilt: s.tilt, turn: s.turn };
 }
 
 export default registerTool({
@@ -241,6 +243,7 @@ export default registerTool({
       depth: e.ctrl,
       adding: !target.keyframes.some((k) => k.frame === frame),
       snap: null,
+      heading: ctx.anim.scene().headingOf(target, frame),
     };
     ctx.anim.beginDrag();
   },
@@ -307,7 +310,7 @@ export default registerTool({
     else if (handle.kind === 'spin') s = rotateState(d.s0, d.start, { x: e.x, y: e.y }, e.shift);
     else if (handle.kind === 'corner') s = resizeDrag(d.s0, { pivot: d.pivot0, w: piece.src.width, h: piece.src.height }, handle.corner, { x: e.x, y: e.y }, space, e.shift);
     else return;
-    const change = stateChange(s);
+    const change = stateChange(piece, s, d.heading);
     ctx.anim.preview(d.id, (p) => (p.keyframes = setKey(d.keys0, frame, change)));
     if (hit.kind === 'body' && !d.depth) {
       d.snap = hingeSnap(ctx, piece, e.alt);

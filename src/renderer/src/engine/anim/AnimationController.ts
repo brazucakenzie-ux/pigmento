@@ -5,14 +5,14 @@ import { celAt, celIndexAt, celSurfaces, insertCel, MAX_CELS, moveCelStart, remo
 import type { Command, History } from '../history/History';
 import type { ImageBuf } from '../raster/transform';
 import type { I18nKey, I18nParams } from '../../i18n';
-import { movePivot, type Easing } from './interpolate';
+import { movePivot, type Easing, type PieceState } from './interpolate';
 import { movePivot3D } from './planeEdit';
 import { MAX_STRENGTH, MIN_STRENGTH, type Camera, type Light } from './space';
 import type { Hinge } from './frames';
 import { attach, centrePivot, detach, duplicateTree, hinge, movePivotLocal, moveTree, removeTree, rootOf, subtree, type LinkRefusal } from './links';
 import { BOX_FACES, faceSize, makeBox, MAX_BOX_SIDE, type BoxFace, type BoxSize } from './box';
 import { MAX_TREE, type Scene } from './scene';
-import { bakeFollow, docPaths, FollowedPaths, outlinesOf, sceneOf } from './follow';
+import { bakeFollow, docMotion, docPaths, FollowedPaths, outlinesOf, sceneOf } from './follow';
 import type { PathMeasure } from './pathMeasure';
 import { walkShapes } from '../vector/model';
 import { cameraMoveAt, MAX_CAMERA_KEYS, moveCameraKey, removeCameraKey, setCameraKey, type CameraKey, type CameraMove } from './cameraMove';
@@ -35,6 +35,7 @@ import {
   type Piece,
   type PieceKind,
   type Follow,
+  type Face,
   type Back,
   type Repeat,
 } from './piece';
@@ -138,6 +139,10 @@ export interface PieceFields {
   follow: Follow | null;
   /** How far along that path, in percent (past 100 goes round a closed path again). */
   progress: number;
+  /** It turns to face the way it goes (only pieces that follow no other piece can; not keyframed). */
+  face: boolean;
+  /** Which way its art points as drawn, in degrees (0 = right, 90 = down). */
+  faceAngle: number;
 }
 
 /** A path a piece can follow: one outline of a shape on a shape layer. */
@@ -383,8 +388,8 @@ export class AnimationController {
     const p = this.selected;
     if (!p) return null;
     const f = this.frame;
-    // On a path, where the path puts it.
-    const s = this.scene().stateAt(p, f);
+    // Where it is (on a path, where the path puts it); its angle as keyed (facing its way turns it on top of that).
+    const s = { ...pieceStateAt(p, f), ...xyOf(this.scene().stateAt(p, f)) };
     const at = p.keyframes.find((k) => k.frame === f);
     const before = [...p.keyframes].reverse().find((k) => k.frame <= f) ?? p.keyframes[0];
     return {
@@ -413,11 +418,13 @@ export class AnimationController {
       repeat: p.repeat,
       follow: p.follow && !p.link ? { ...p.follow } : null,
       progress: s.progress * 100,
+      face: p.face.on,
+      faceAngle: p.face.angle * DEG,
     };
   }
 
   /** Set the selected piece's values at the current frame (auto-key), in the options bar's units. */
-  setFields(change: Partial<Omit<PieceFields, 'keyed' | 'curved' | 'repeat' | 'back' | 'in3d' | 'shade' | 'group' | 'link' | 'inGroup' | 'follow'>>): boolean {
+  setFields(change: Partial<Omit<PieceFields, 'keyed' | 'curved' | 'repeat' | 'back' | 'in3d' | 'shade' | 'group' | 'link' | 'inGroup' | 'follow' | 'face' | 'faceAngle'>>): boolean {
     const p = this.selected;
     if (!p) return false;
     const k: KeyChange = {};
@@ -438,6 +445,26 @@ export class AnimationController {
     if (change.depth !== undefined) k.depth = Math.max(-this.doc.space.f * 0.99, Math.min(1e6, change.depth));
     if (change.easing !== undefined) k.easing = change.easing;
     return this.setKey(p.id, this.frame, k);
+  }
+
+  /**
+   * Face the way it goes, or not, and which way its art points as drawn (radians): one undo step,
+   * not keyframed. Says why not for a piece that follows another piece.
+   */
+  setFace(id: string, change: Partial<Face>): boolean {
+    const p = this.piece(id);
+    if (!p) return false;
+    const next = { on: change.on ?? p.face.on, angle: change.angle ?? p.face.angle };
+    next.angle = Number.isFinite(next.angle) ? Math.atan2(Math.sin(next.angle), Math.cos(next.angle)) : 0;
+    if (next.on === p.face.on && next.angle === p.face.angle) return false;
+    if (next.on && p.link) {
+      this.host.notify('info', 'notice.faceLinked');
+      return false;
+    }
+    return this.change('history.face', () => {
+      p.face = next;
+      return true;
+    });
   }
 
   /** What shows when a piece is turned round in 3D (one undo step; not keyframed). */
@@ -853,7 +880,7 @@ export class AnimationController {
     const top = rootOf(this.doc.pieces, p);
     if (top.kind !== 'group') return false;
     return this.change('history.centrePivot', () => {
-      this.doc.pieces = centrePivot(this.doc.pieces, top.id, this.frame, this.doc.space, docPaths(this.doc));
+      this.doc.pieces = centrePivot(this.doc.pieces, top.id, this.frame, this.doc.space, docMotion(this.doc));
       return true;
     });
   }
@@ -886,12 +913,13 @@ export class AnimationController {
     else if (why === 'full') this.host.notify('info', 'notice.linkFull', { max: MAX_TREE });
     else if (why === 'group') this.host.notify('info', 'notice.linkGroup');
     else if (why === 'path') this.host.notify('info', 'notice.linkPath');
+    else if (why === 'face') this.host.notify('info', 'notice.linkFace');
     return false;
   }
 
   /** `id` follows `parentId` from now on, staying where it is at this frame (one undo step). */
   attach(id: string, parentId: string): boolean {
-    const next = attach(this.doc.pieces, id, parentId, this.frame, this.doc.space, docPaths(this.doc));
+    const next = attach(this.doc.pieces, id, parentId, this.frame, this.doc.space, docMotion(this.doc));
     if (typeof next === 'string') return this.refused(next);
     return this.change('history.pieceAttach', () => {
       this.doc.pieces = next;
@@ -916,7 +944,7 @@ export class AnimationController {
     const p = this.piece(id);
     if (!p?.link) return false;
     return this.change(p.link.hinge ? 'history.unhinge' : 'history.pieceDetach', () => {
-      this.doc.pieces = detach(this.doc.pieces, id, this.doc.space, docPaths(this.doc));
+      this.doc.pieces = detach(this.doc.pieces, id, this.doc.space, docMotion(this.doc));
       return true;
     });
   }
@@ -1157,6 +1185,11 @@ function strip(p: Piece): Omit<Piece, 'src'> {
 
 function clampScroll(v: number): number {
   return Number.isFinite(v) ? Math.max(-MAX_SCROLL, Math.min(MAX_SCROLL, v)) : 0;
+}
+
+/** Just where a state puts the piece. */
+function xyOf(s: PieceState): { x: number; y: number } {
+  return { x: s.x, y: s.y };
 }
 
 function clampProgress(v: number): number {

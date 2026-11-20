@@ -554,6 +554,7 @@ function PieceFields({ plane = false }: { plane?: boolean }) {
         <>
           {onPath ? null : <FollowsField />}
           {info.link === 'none' ? <PathField follow={info.follow} /> : null}
+          {info.link === 'none' ? <FaceField on={info.face} angle={info.faceAngle} /> : null}
         </>
       )}
       {group ? null : (
@@ -723,6 +724,37 @@ function PathField({ follow }: { follow: Follow | null }) {
         ))}
       </select>
     </label>
+  );
+}
+
+/** Facing the way it goes, and which way the art points as drawn (shown while it's on). */
+function FaceField({ on, angle }: { on: boolean; angle: number }) {
+  const id = useUi((s) => s.animation.selectedId);
+  if (!id) return null;
+  return (
+    <>
+      <label className="check opt" data-tip={t('piece.faceTip')}>
+        <input type="checkbox" checked={on} onChange={() => engine.anim.setFace(id, { on: !on })} />
+        {t('piece.face')}
+      </label>
+      {on ? (
+        <span className="opt tf-field" data-tip={t('piece.faceAngleTip')}>
+          <span>{t('piece.faceAngle')}</span>
+          <NumberField
+            className="num tf-num"
+            value={Math.round(angle * 10) / 10}
+            decimals={1}
+            min={-180}
+            max={180}
+            shiftStep={15}
+            label={t('piece.faceAngle')}
+            onChange={(v) => engine.anim.setFace(id, { angle: (v * Math.PI) / 180 })}
+            onEnter={() => (document.activeElement as HTMLElement | null)?.blur()}
+          />
+          <span className="unit">°</span>
+        </span>
+      ) : null}
+    </>
   );
 }
 

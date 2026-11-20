@@ -48,7 +48,7 @@ import { MAX_CELS, type Cel } from '../anim/cels';
 export const PROJECT_MAGIC = 'pigmento-project';
 /**
  * Version 2 adds animation, version 3 what 1.2 adds to pieces (repeat, scroll, 3D, links),
- * version 4 what 1.3 adds (following paths). A picture is written as the oldest version that
+ * version 4 what 1.3 adds (following paths, facing the way pieces go). A picture is written as the oldest version that
  * holds everything in it, so older Pigmentos open whatever they can show correctly: 1 without
  * animation, 2 with 1.1's animation only, 3 with nothing from 1.3.
  */
@@ -71,7 +71,7 @@ function lightMoved(doc: PaintDocument): boolean {
 
 /** The oldest version that holds everything in `doc`. */
 export function versionFor(doc: PaintDocument): 1 | 2 | 3 | 4 {
-  if (doc.pieces.some((p) => p.follow !== null || p.keyframes.some((k) => k.progress !== 0))) return 4;
+  if (doc.pieces.some((p) => p.follow !== null || p.face.on || p.face.angle !== 0 || p.keyframes.some((k) => k.progress !== 0))) return 4;
   const v3 = doc.pieces.some(
     (p) =>
       p.kind !== 'piece' ||
@@ -389,6 +389,10 @@ const PieceJson = z.object({
     })
     .nullable()
     .default(null),
+  /** Version 4: facing the way it goes, and which way its art points as drawn (radians). */
+  face: z
+    .object({ on: z.boolean(), angle: z.number().min(-1e4).max(1e4) })
+    .default({ on: false, angle: 0 }),
 });
 const CameraKeyJson = z.object({
   frame: int.min(0).max(MAX_FRAMES - 1),
@@ -551,7 +555,7 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
             link: p.link && { parent: p.link.parent, hinge: p.link.hinge && { ...p.link.hinge } },
           }
         : {}),
-      ...(v4 ? { follow: p.follow && { ...p.follow } } : {}),
+      ...(v4 ? { follow: p.follow && { ...p.follow }, face: { ...p.face } } : {}),
     });
   }
   const t = doc.timeline;
@@ -771,6 +775,7 @@ async function readAnimation(doc: PaintDocument, a: NonNullable<DocumentJson['an
       kind: p.kind,
       link: p.link && { parent: p.link.parent, hinge: p.link.hinge && { ...p.link.hinge } },
       follow: p.follow && { ...p.follow },
+      face: { ...p.face },
     });
   }
   doc.pieces = checkLinks(pieces);

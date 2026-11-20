@@ -3,6 +3,7 @@ import { rootOf, subtree } from '../anim/links';
 import { pieceStateAt, type Piece } from '../anim/piece';
 import type { PieceState } from '../anim/interpolate';
 import type { PathMeasure } from '../anim/pathMeasure';
+import { artDirection } from '../anim/face';
 import type { Scene } from '../anim/scene';
 import { project, unproject } from '../anim/space';
 import type { Overlay } from '../render/Overlay';
@@ -89,6 +90,15 @@ export function slideOnParent(scene: Scene, piece: Piece, s0: PieceState, start:
     else dx = 0;
   }
   return { x: s0.x + dx, y: s0.y + dy };
+}
+
+/**
+ * The angle to key for a piece a tool has turned to `s` as it shows: a piece facing the way it goes
+ * shows its heading on top of its keyed angle, so that comes off again (`heading`: which way it
+ * was heading when the drag began, so moving it doesn't turn its keys; null when it doesn't face).
+ */
+export function keyedAngle(p: Piece, s: PieceState, heading: number | null): number {
+  return heading === null ? s.angle : s.angle - heading + artDirection(p.face.angle, s.sx, s.sy);
 }
 
 /**

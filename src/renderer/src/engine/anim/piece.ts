@@ -44,6 +44,17 @@ export interface Piece {
    * no other piece can follow a path.
    */
   follow: Follow | null;
+  /**
+   * Facing the way it goes: while on, a piece that follows no other piece turns so its art points
+   * where it's heading on the canvas, its keyed angle added on top (not keyframed).
+   */
+  face: Face;
+}
+
+/** Facing the way it goes, and which way the art points as drawn (radians in its own pixels: 0 = right, clockwise). */
+export interface Face {
+  on: boolean;
+  angle: number;
 }
 
 /** A shape a piece follows: on which shape layer, which object, and which of its outlines. */
@@ -118,6 +129,7 @@ export function makePiece(id: string, name: string, layerId: string, src: ImageB
     kind: 'piece',
     link: null,
     follow: null,
+    face: { on: false, angle: 0 },
   };
 }
 
@@ -137,6 +149,7 @@ export function makeGroup(id: string, name: string, layerId: string, home: Rect,
     kind: 'group',
     link: null,
     follow: null,
+    face: { on: false, angle: 0 },
   };
 }
 
@@ -146,7 +159,7 @@ export function cloneLink(l: Link | null): Link | null {
 
 /** The same piece (for undo snapshots: the pixels are shared, not copied). */
 export function clonePiece(p: Piece): Piece {
-  return { ...p, home: { ...p.home }, pivot: { ...p.pivot }, keyframes: p.keyframes.map(cloneKeyframe), link: cloneLink(p.link), follow: p.follow && { ...p.follow } };
+  return { ...p, home: { ...p.home }, pivot: { ...p.pivot }, keyframes: p.keyframes.map(cloneKeyframe), link: cloneLink(p.link), follow: p.follow && { ...p.follow }, face: { ...p.face } };
 }
 
 /**

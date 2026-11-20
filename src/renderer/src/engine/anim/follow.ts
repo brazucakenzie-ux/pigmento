@@ -4,7 +4,7 @@ import { walkShapes, type VectorShape } from '../vector/model';
 import { measurePath, type PathMeasure } from './pathMeasure';
 import { MAX_KEYFRAMES, pieceStateAt, type Follow, type Piece } from './piece';
 import type { Keyframe } from './interpolate';
-import { Scene } from './scene';
+import { Scene, type Motion } from './scene';
 
 /** Finds the path a piece follows, measured (null when it's gone). */
 export type PathResolver = (f: Follow) => PathMeasure | null;
@@ -38,9 +38,14 @@ export function docPaths(doc: PaintDocument): PathResolver {
   };
 }
 
+/** What places a picture's pieces besides their keyframes: the paths they follow, and its frame rate (for facing). */
+export function docMotion(doc: PaintDocument): Motion {
+  return { paths: docPaths(doc), fps: doc.timeline.fps };
+}
+
 /** Every piece's pose at `frame`, as the picture's camera (at that frame) sees it, on the paths they follow. */
 export function sceneOf(doc: PaintDocument, frame: number): Scene {
-  return new Scene(doc.pieces, frame, doc.spaceAt(frame), docPaths(doc));
+  return new Scene(doc.pieces, frame, doc.spaceAt(frame), docMotion(doc));
 }
 
 const keyOf = (f: Follow) => `${f.layerId}\n${f.objectId}\n${f.sub}`;

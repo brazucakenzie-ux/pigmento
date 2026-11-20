@@ -21,7 +21,7 @@ import type { EdgeSnap } from '../../anim/edgeSnap';
 import { foldHandle, foldToward } from '../../anim/edgeSnap';
 import { project } from '../../anim/space';
 import { drawHingeSnap, hingeOnRelease, hingeSnap } from '../hingeSnap';
-import { alongPath, selectionKeys, slideOnParent, treePieces, treeTop } from '../treeEdit';
+import { alongPath, keyedAngle, selectionKeys, slideOnParent, treePieces, treeTop } from '../treeEdit';
 import type { PathMeasure } from '../../anim/pathMeasure';
 import { registerTool } from '../ToolRegistry';
 import type { ToolContext, ToolPointerEvent } from '../Tool';
@@ -61,6 +61,8 @@ interface Drag {
   face: string;
   /** Alt-dragging a linked piece changes just it: a hinged one folds, one that follows another slides on it. */
   mode: 'own' | 'fold' | 'slide';
+  /** Which way it was heading when the drag began, if it faces the way it goes. */
+  heading: number | null;
 }
 
 let drag: Drag | null = null;
@@ -155,8 +157,8 @@ function cursorFor(hit: Hit | null, g: ScreenGeom | null): string {
   return handleCursor(hit.handle, g?.angle ?? 0);
 }
 
-function stateChange(s: PieceState): Partial<PieceState> {
-  return { x: s.x, y: s.y, sx: s.sx, sy: s.sy, angle: s.angle, skew: s.skew };
+function stateChange(p: Piece, s: PieceState, heading: number | null): Partial<PieceState> {
+  return { x: s.x, y: s.y, sx: s.sx, sy: s.sy, angle: keyedAngle(p, s, heading), skew: s.skew };
 }
 
 /** Where a keyframe's dot is on screen: at its x and y, or where its progress puts it on the path it follows. */
@@ -257,6 +259,7 @@ export default registerTool({
       snap: null,
       face: face.id,
       mode,
+      heading: ctx.anim.scene().headingOf(piece, frame),
     };
     // Pulling a bend handle grabs it where the pointer is.
     if (hit.kind === 'tangent') drag.grab = { x: 0, y: 0 };
@@ -337,7 +340,7 @@ export default registerTool({
     else if (hit.kind !== 'handle') return;
     else if (e.ctrl && (hit.handle === 'n' || hit.handle === 's')) s = skewState(d.s0, geom, hit.handle, p);
     else s = scaleState(d.s0, geom, hit.handle, p, { shift: e.shift, alt: e.alt });
-    const change = stateChange(s);
+    const change = stateChange(piece, s, d.heading);
     ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, frame, change)));
     // Dragged near another piece's edge, it hinges there when let go (Alt: it doesn't).
     if (hit.kind === 'body') {

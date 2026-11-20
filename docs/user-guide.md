@@ -192,6 +192,10 @@ Dragging the piece slides it along its path (Shift: in steps of 10 %), and the a
 
 Edit the path at any time (move its points, reshape it) and the piece follows the new one. Set **Path** to **None**, or delete the path, and the piece keeps moving exactly as it did, as ordinary keyframes (one on each frame). A piece that follows another piece can't follow a path too, but the top of its tree can: hinge pieces onto one that follows a path, and the whole tree goes along it.
 
+### Facing the way it goes
+
+Tick **Face its way** in the options bar and the piece turns to point where it's heading, along a path or along its own motion path. It turns smoothly through sharp corners. When it stops, it keeps facing the way it was going, and before it sets off it already faces the way it will go. **Art points** says which way your drawing points as drawn: 0° if the rocket points right, −90° if it points up, 90° if down, 180° if left. The piece's own angle (or spin) is added on top, so you can still key a wobble or a lean. A flipped piece still points its way, and so does one in a picture you flip or turn. Like a path, facing is only for a piece that follows no other piece (or the group at the top of its tree).
+
 ### More ways to make a piece
 
 - **Piece from layer** turns a whole pixel layer into a piece.
