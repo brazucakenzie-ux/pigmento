@@ -1,6 +1,8 @@
 // Hinged pieces, groups and boxes (1.2.0, Stop 6C).
 import { expect, test, type Page } from '@playwright/test';
-import { drag, launchApp, ready, type AppHandle } from './harness';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { drag, launchApp, ready, tempFile, type AppHandle } from './harness';
 
 let h: AppHandle;
 
@@ -276,4 +278,103 @@ test('a box folds open over 24 frames on its own rows, and the camera row pans p
   // Halfway through, the camera is halfway there (the front itself doesn't move).
   expect((await at(12, ids.Front)).x - front0.x).toBeCloseTo((near * 12) / 23, 3);
   expect((await at(0, ids.Front)).x).toBeCloseTo(front0.x, 6);
+});
+
+test('a box: made, a face painted, spun over the timeline, saved and reopened, and exported as a GIF', async () => {
+  const { page, app } = h;
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  await page.getByRole('button', { name: 'Box…' }).click();
+  await page.getByRole('dialog', { name: 'Make a box' }).getByRole('button', { name: 'Make' }).click();
+  const named = async () => Object.fromEntries((await page.evaluate(() => window.__pigmentoTest!.anim().pieces)).map((p) => [p.name, p.id]));
+  const ids = await named();
+  // Paint across the front's middle, on its own pixels.
+  await page.keyboard.press('b');
+  await page.getByRole('checkbox', { name: 'Paint on piece' }).check();
+  const a = await corner(page, ids.Front, 60, 133);
+  const b = await corner(page, ids.Front, 200, 133);
+  await drag(page, [
+    [a.x, a.y],
+    [(a.x + b.x) / 2, (a.y + b.y) / 2],
+    [b.x, b.y],
+  ]);
+  const ink = (id: string) => page.evaluate((pid) => window.__pigmentoTest!.piecePixel(pid, 133, 133)!, id);
+  expect(await ink(ids.Front)).toMatchObject({ r: 0, g: 0, b: 0 });
+  // Spin it: the group turns once round over the timeline (keyed at the first and last frames).
+  await page.getByRole('checkbox', { name: 'Paint on piece' }).uncheck();
+  await page.locator('.tl-names').getByRole('button', { name: 'Group 1', exact: true }).click();
+  await page.keyboard.press('m');
+  await page.evaluate(() => window.__pigmentoTest!.setFrame(23));
+  const turn = page.locator('.optionsbar').getByRole('textbox', { name: 'Turn', exact: true });
+  await turn.fill('330');
+  await turn.press('Enter');
+  expect((await page.evaluate((id) => window.__pigmentoTest!.pieceKeys(id), ids['Group 1'])).map((k) => k.frame)).toEqual([0, 23]);
+  // Half way round, the back faces the camera and the front doesn't.
+  await page.evaluate(() => window.__pigmentoTest!.setFrame(12));
+  expect(await page.evaluate((id) => window.__pigmentoTest!.pieceFront(id), ids.Back)).toBe(true);
+  expect(await page.evaluate((id) => window.__pigmentoTest!.pieceFront(id), ids.Front)).toBe(false);
+  // Saved and opened again: the same box, linked and painted, spinning the same way.
+  const dir = path.dirname(tempFile('x'));
+  const project = path.join(dir, 'box.pigm');
+  const gif = path.join(dir, 'box.gif');
+  const stubSave = (fp: string) =>
+    app.evaluate(({ dialog }, file) => {
+      dialog.showSaveDialog = (async () => ({ canceled: false, filePath: file })) as typeof dialog.showSaveDialog;
+    }, fp);
+  await stubSave(project);
+  await page.keyboard.press('Control+Shift+s');
+  await expect.poll(() => existsSync(project)).toBe(true);
+  await page.evaluate((p) => window.__pigmentoTest!.openPath(p), project);
+  await expect.poll(() => page.evaluate(() => window.__pigmentoTest!.history().length)).toBe(0);
+  const back = await named();
+  const pieces = await page.evaluate(() => window.__pigmentoTest!.anim().pieces);
+  expect(pieces.map((p) => [p.name, p.kind, p.hinged])).toEqual([
+    ['Group 1', 'group', false],
+    ['Front', 'piece', false],
+    ['Top', 'piece', true],
+    ['Bottom', 'piece', true],
+    ['Left', 'piece', true],
+    ['Right', 'piece', true],
+    ['Back', 'piece', true],
+  ]);
+  expect(pieces.find((p) => p.name === 'Back')!.parent).toBe(back.Right);
+  expect(await ink(back.Front)).toMatchObject({ r: 0, g: 0, b: 0 });
+  await page.evaluate(() => window.__pigmentoTest!.setFrame(12));
+  expect(await page.evaluate((id) => window.__pigmentoTest!.pieceFront(id), back.Back)).toBe(true);
+  // Exported as a GIF: every frame, the box turning in it.
+  await stubSave(gif);
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  await page.locator('.ribbon').getByRole('button', { name: 'Export', exact: true }).click();
+  const dlg = page.getByRole('dialog', { name: 'Export animation' });
+  await expect(dlg).toContainText('24 frames');
+  await dlg.getByRole('button', { name: 'Export…' }).click();
+  await expect(dlg).toBeHidden({ timeout: 60_000 });
+  const bytes = readFileSync(gif);
+  expect(bytes.subarray(0, 6).toString('ascii')).toBe('GIF89a');
+  const decoded = await page.evaluate(async (b64) => {
+    const dec = new ImageDecoder({ data: Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)), type: 'image/gif' });
+    await dec.tracks.ready;
+    await dec.completed;
+    const frames = dec.tracks.selectedTrack!.frameCount;
+    // The box's outline row by row through its middle, on frames 1 and 13: it turns, so they differ.
+    const rows: number[][] = [];
+    for (const i of [0, 12]) {
+      const { image } = await dec.decode({ frameIndex: i });
+      const c = new OffscreenCanvas(image.displayWidth, image.displayHeight);
+      const ctx = c.getContext('2d')!;
+      ctx.drawImage(image, 0, 0);
+      rows.push(Array.from(ctx.getImageData(0, Math.round(image.displayHeight / 2), image.displayWidth, 1).data));
+      image.close();
+    }
+    // Pixels on frame 1's row that aren't the white page (the box's faces, shaded), and those that changed by frame 13.
+    let painted = 0;
+    let differ = 0;
+    for (let k = 0; k < rows[0].length; k += 4) {
+      if (Math.min(rows[0][k], rows[0][k + 1], rows[0][k + 2]) < 200) painted++;
+      if (Math.abs(rows[0][k] - rows[1][k]) + Math.abs(rows[0][k + 1] - rows[1][k + 1]) + Math.abs(rows[0][k + 2] - rows[1][k + 2]) > 60) differ++;
+    }
+    return { frames, differ, painted };
+  }, bytes.toString('base64'));
+  expect(decoded.frames).toBe(24);
+  expect(decoded.painted).toBeGreaterThan(50);
+  expect(decoded.differ).toBeGreaterThan(20);
 });

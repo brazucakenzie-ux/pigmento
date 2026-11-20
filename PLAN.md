@@ -375,7 +375,22 @@ Decisions (agreed with the user):
 - [x] 6.18 Seams: shared corners are worked out once for both faces; on the GPU and in the CPU path a hinge shows no line at any angle (no pixel along the seam is lighter than both faces next to it); golden cube sheet (a shaded box at fixed angles) (+ golden test)
 - [x] 6.19 Group editing and the box maker: dragging any linked face moves, turns or tilts the whole group (Alt: just that face); Centre pivot; Box maker (Animate tab: six hinged blank faces of a chosen size, folded into a box on the active layer, ready to paint, as one undo step)
 - [x] 6.20 Timeline: a group's row with its pieces indented under it, fold angles and group keyframes on those rows; a camera row (pan X and Y, push in or out) giving parallax by depth (+ e2e: fold a box open over 24 frames)
-- [ ] 6.21 E2e: make a box, paint a face, spin the box, save and reopen, export a GIF; `npm run check` green; report
+- [x] 6.21 E2e: make a box, paint a face, spin the box, save and reopen, export a GIF; `npm run check` green; report
+- Stop 6C notes:
+  - **Tests:** Lint, type-check, 549 unit and 136 e2e tests pass (18 opt-in skipped). In the full run two failed and then passed on their own, as they have before: the MP4 frame-by-frame check, and the 100-megapixel open (11.8 s against its 8 s budget in the full run, which happens when memory is short; well within it alone).
+  - **The model:** every piece has a 3D frame (its pixels and a distance along its normal → 3D), composed up its tree. A `Scene` works out every piece's pose once per drawing, hit test or drag; all drawing, picking and painting go through it. A free piece is still placed exactly as in 6B.
+  - **Decided while building:**
+    - Hinging onto a free piece makes a group to carry the tree, so a box turns about its group's pivot. Plain following doesn't make one.
+    - A hinged piece's place comes from its parent's edge and its fold alone; only its fold, opacity and scroll are keyed.
+    - Edges run clockwise round a box, and two faces share an edge running opposite ways. A positive fold goes back, away from the viewer, so folded sides make a box going back with the fronts outward.
+    - A group's opacity reaches the pieces under it; a piece's own opacity reaches only itself.
+    - Snapping makes lengths equal when they're within reach; otherwise the piece lines up with the nearer end at its own size. Its fold is the angle it lay at.
+    - Dragging any piece of a tree moves the whole tree. Alt changes just that piece: a hinged one folds after the pointer, and a follower slides on the piece it follows.
+    - Seams: runs of hinged faces next to each other in drawing order are drawn as one picture. On the GPU each corner is projected once and shared; in the CPU path each coverage sample takes the faces over it in turn. T-junctions (a short edge partway along a long one) share no corner, so a sample there can still miss on the GPU; the box maker's edges all match.
+    - The box maker turns the box −30° and tilts it −20° so its sides show. The front is placed on the canvas at its real size, and the box's middle is its pivot.
+    - Camera moves place pieces with the camera at rest and project them with the moved one, so nothing about a piece changes. The first camera key set away from the first frame also keys the camera at rest on frame 1.
+    - The keymap now hands arrow keys to the Perspective plane tool too (6B's nudging never reached it).
+  - **Centre pivot** keeps every piece exactly in place on keyframes. In between, an animated tree can be off by under a pixel or two, because the new pivot's path is eased in other terms (as with moving a 3D piece's pivot in 6B).
 
 **Stop 6D — Polish and release**
 - [ ] 6.22 Accessibility: axe audit of the Perspective plane tool's options, the Animate tab's new controls, Place image, the box maker and the new timeline rows in light, dark and high contrast; every new field, the fold and the camera reachable by keyboard (arrow keys nudge, as with pieces); nothing new animates by itself, so reduced motion needs nothing
