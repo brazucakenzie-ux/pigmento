@@ -403,3 +403,8 @@ Decisions (agreed with the user):
   - The 240-frame 1080p MP4 of the box scene takes 1.8 s.
 - [x] 6.24 User guide (3D pieces, the camera, the Perspective plane tool, painting on pieces, repeat and scroll, hinges, groups, the box maker), shortcuts, README feature and screenshot, CHANGELOG 1.2.0, version 1.2.0 in `package.json`, welcome tour mention
 - [ ] 6.25 `npm run check` green, installer rebuilt and smoke-tested; final report listing every 1.2.0 feature with its status; then, after asking, tag `v1.2.0` so `release.yml` builds the release (steps in `docs/releasing.md`)
+- Stop 6D notes:
+  - **Tests:** lint, type-check, 549 unit and 143 e2e tests pass (19 opt-in skipped). One flaked in the full run and passed on its own 12 times in a row: the free-transform Ctrl-distort drag, whose corner landed 113 px off, as if a pointer move was dropped.
+  - **Installers:** `npm run dist` built `Pigmento-Setup-1.2.0.exe` and the portable exe. The packaged app (dist/win-unpacked) was smoke-tested without installing: it reports 1.2.0, draws 3D pieces on the GPU, shows a box the same on screen and in the picture, matches the golden cube with no pixels different, exports a GIF, and logs no errors. The installed-build smoke script needs this PC's Pigmento 1.1.1 uninstalled first, so it waits for the user's go-ahead.
+  - **Keyboard:** the Animate and Perspective plane tools share one key handler, so the Animate tool now folds hinged faces too, and the arrow keys slide the camera while its row is selected.
+  - **Performance:** flat repeating pieces now draw on the GPU (see 6.23).
