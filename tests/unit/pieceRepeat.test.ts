@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PaintDocument } from '@engine/doc/Document';
 import { History } from '@engine/history/History';
 import { makePiece, pieceStateAt, setKey, type Piece } from '@engine/anim/piece';
+import { Scene } from '@engine/anim/scene';
 import { drawPiece } from '@engine/anim/pieceRaster';
 import { pieceAt } from '@engine/anim/pieceEdit';
 import { AnimationController, type AnimHost } from '@engine/anim/AnimationController';
@@ -16,7 +17,7 @@ function strip(): Piece {
 /** Red of each pixel of a w × h view after drawing p at frame 0 (-1 where nothing was drawn). */
 function reds(p: Piece, w: number, h: number): number[][] {
   const view = { data: new Uint8ClampedArray(w * h * 4), stride: w, ox: 0, oy: 0 };
-  drawPiece(view, { x: 0, y: 0, w, h }, p, 0);
+  drawPiece(view, { x: 0, y: 0, w, h }, p, new Scene([p], 0));
   const rows: number[][] = [];
   for (let y = 0; y < h; y++) {
     const row: number[] = [];
@@ -67,10 +68,10 @@ describe('repeating pieces', () => {
   it('can be picked on any copy, its scroll included', () => {
     const p = strip();
     p.repeat = 'x';
-    expect(pieceAt([p], 0, { x: 4002.5, y: 0.5 })).toBe(p);
-    expect(pieceAt([p], 0, { x: 4002.5, y: 1.5 })).toBeNull();
+    expect(pieceAt([p], new Scene([p], 0), { x: 4002.5, y: 0.5 })).toBe(p);
+    expect(pieceAt([p], new Scene([p], 0), { x: 4002.5, y: 1.5 })).toBeNull();
     p.repeat = 'none';
-    expect(pieceAt([p], 0, { x: 4002.5, y: 0.5 })).toBeNull();
+    expect(pieceAt([p], new Scene([p], 0), { x: 4002.5, y: 0.5 })).toBeNull();
   });
 });
 

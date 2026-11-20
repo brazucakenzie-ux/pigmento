@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { matApply, matChain, matRotate, matScale, matTranslate, type Mat } from '@engine/core/matrix';
-import { makePiece, piecePlacementAt, setKey, type Piece } from '@engine/anim/piece';
+import { makePiece, setKey, type Piece } from '@engine/anim/piece';
+import { piecePlacementAt } from '@engine/anim/scene';
 import { keepsDepth, transformCamera, transformPieces } from '@engine/anim/pieceTransform';
 import { project, spaceOf, type Camera } from '@engine/anim/space';
 

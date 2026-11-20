@@ -2,6 +2,8 @@ import type { Point, Rect } from '../core/geometry';
 import { matChain, matScale, matTranslate, type Mat } from '../core/matrix';
 import { invertHomography, type Homography } from '../raster/warp';
 import { stateMatrix, type PieceState } from './interpolate';
+import { NO_MOVE, type CameraMove } from './cameraMove';
+import { placementFromFrame, rootFrame } from './frames';
 
 /**
  * Pieces in 3D. The canvas is the plane z = 0, seen by one camera straight on from its vanishing
@@ -28,23 +30,46 @@ export function defaultCamera(w: number, h: number): Camera {
   return { x: w / 2, y: h / 2, strength: DEFAULT_STRENGTH };
 }
 
-/** The camera worked out for a picture size: its vanishing point, and how far it is from the canvas (px). */
+/**
+ * The camera worked out for a picture size: its vanishing point, and how far it is from the canvas
+ * (px), where it rests. A camera move takes it from there: slid across and down by px and py, and
+ * in towards the canvas by pz. Pieces are placed in 3D by the camera at rest, then seen by the
+ * moved one, so they slide past by their depth.
+ */
 export interface Space {
   cx: number;
   cy: number;
   f: number;
+  px: number;
+  py: number;
+  pz: number;
 }
 
 /** No perspective at all (depth changes nothing): for pictures without a camera, and tests. */
-export const FLAT_SPACE: Space = { cx: 0, cy: 0, f: 1e12 };
+export const FLAT_SPACE: Space = { cx: 0, cy: 0, f: 1e12, px: 0, py: 0, pz: 0 };
 
 /**
  * The focal length follows the picture's size (50 % = its diagonal), so resizing the picture
  * keeps the same look without changing the camera.
  */
-export function spaceOf(cam: Camera, w: number, h: number): Space {
+export function spaceOf(cam: Camera, w: number, h: number, move: CameraMove = NO_MOVE): Space {
   const s = Math.min(MAX_STRENGTH, Math.max(MIN_STRENGTH, Number.isFinite(cam.strength) ? cam.strength : DEFAULT_STRENGTH));
-  return { cx: cam.x, cy: cam.y, f: (50 * Math.hypot(w, h)) / s };
+  const f = (50 * Math.hypot(w, h)) / s;
+  // The camera never reaches the canvas, however far it's pushed in.
+  return { cx: cam.x, cy: cam.y, f, px: move.panX, py: move.panY, pz: Math.min(move.push, f * 0.95) };
+}
+
+/** The camera has moved from where it rests. */
+export function moved(space: Space): boolean {
+  return space.px !== 0 || space.py !== 0 || space.pz !== 0;
+}
+
+/** A point in 3D on the canvas, as the (moved) camera sees it, or null behind it. */
+export function projectWorld(W: readonly number[], space: Space): Point | null {
+  const { cx, cy, f, px, py, pz } = space;
+  const z = W[2] + f - pz;
+  if (!(z > f * NEAR)) return null;
+  return { x: cx + (f * (W[0] - cx - px)) / z, y: cy + (f * (W[1] - cy - py)) / z };
 }
 
 /** Where a piece is at one moment. */
@@ -66,21 +91,25 @@ export interface Placement {
 }
 
 /** Closest a point may come to the camera and still be drawn, as a share of the focal length. */
-const NEAR = 0.01;
+export const NEAR = 0.01;
 
-/** Tilt (round the horizontal axis) then turn (round the upright): columns of the rotation. */
-function rotation(tilt: number, turn: number): { c0: [number, number, number]; c1: [number, number, number] } {
+export type Vec3 = [number, number, number];
+
+/** Tilt (round the horizontal axis) then turn (round the upright): columns of the rotation (c2 is the sheet's normal). */
+export function rotation(tilt: number, turn: number): { c0: Vec3; c1: Vec3; c2: Vec3 } {
   const ct = Math.cos(tilt);
   const st = Math.sin(tilt);
   const cr = Math.cos(turn);
   const sr = Math.sin(turn);
   // R = Ry(turn) · Rx(tilt), with Rx: y' = ct·y + st·z, z' = −st·y + ct·z (the top, y < 0, goes back)
   // and Ry: x' = cr·x − sr·z, z' = sr·x + cr·z (the right edge goes back).
-  return { c0: [cr, 0, sr], c1: [sr * st, ct, -cr * st] };
+  return { c0: [cr, 0, sr], c1: [sr * st, ct, -cr * st], c2: [-sr * ct, st, cr * ct] };
 }
 
 /** Where `s` puts a w × h piece turning about `pivot` (its own pixels), seen by `space`. */
 export function placementOf(s: PieceState, pivot: Point, w: number, h: number, space: Space): Placement {
+  // A moved camera sees the piece where the camera at rest put it.
+  if (moved(space)) return placementFromFrame(rootFrame(s, pivot, space), w, h, space);
   const m = stateMatrix(s, pivot);
   const { cx, cy, f } = space;
   // A depth at or past the camera can't be seen: keep it just in front.
@@ -169,10 +198,18 @@ function lightVector(l: Light): [number, number, number] {
  */
 export function shadeOf(s: PieceState, front: boolean, light: Light, strength: number): number {
   if (strength <= 0 || (s.tilt === 0 && s.turn === 0)) return 1;
-  const { c0, c1 } = rotation(s.tilt, s.turn);
-  // The normal of the side the camera sees (c0 × c1 points away from it while the front faces it).
+  return shadeFor(rotation(s.tilt, s.turn).c2, front, light, strength);
+}
+
+/**
+ * The same for a sheet whose front's normal (a unit vector pointing away from the camera while
+ * the front faces it) is `normal`.
+ */
+export function shadeFor(normal: Vec3, front: boolean, light: Light, strength: number): number {
+  if (strength <= 0) return 1;
+  // The normal of the side the camera sees.
   const k = front ? -1 : 1;
-  const n = [k * (c0[1] * c1[2] - c0[2] * c1[1]), k * (c0[2] * c1[0] - c0[0] * c1[2]), k * (c0[0] * c1[1] - c0[1] * c1[0])];
+  const n = [k * normal[0], k * normal[1], k * normal[2]];
   const L = lightVector(light);
   const lit = Math.max(0, n[0] * L[0] + n[1] * L[1] + n[2] * L[2]);
   // Facing the camera square on counts as fully lit.

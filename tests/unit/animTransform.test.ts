@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { matChain, matRotate, matScale, matSkew, matTranslate, type Mat } from '@engine/core/matrix';
-import { makePiece, pieceCorners, setKey, type Piece } from '@engine/anim/piece';
+import { makePiece, setKey, type Piece } from '@engine/anim/piece';
+import { pieceCorners } from '@engine/anim/scene';
 import { transformPieces } from '@engine/anim/pieceTransform';
 import { stateAt } from '@engine/anim/interpolate';
 

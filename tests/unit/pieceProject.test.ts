@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { identityState, type PieceState } from '@engine/anim/interpolate';
-import { makePiece, pieceBounds, setKey, type Piece } from '@engine/anim/piece';
+import { makePiece, setKey, type Piece } from '@engine/anim/piece';
+import { pieceBounds, Scene } from '@engine/anim/scene';
 import { sampleProjective } from '@engine/anim/pieceProject';
 import { drawPiece } from '@engine/anim/pieceRaster';
 import { piecePaintMap } from '@engine/anim/piecePaint';
@@ -9,7 +10,7 @@ import { Surface } from '@engine/raster/Surface';
 import { perspectiveWarp, type Quad } from '@engine/raster/warp';
 import type { ImageBuf } from '@engine/raster/transform';
 
-const space: Space = { cx: 200, cy: 150, f: 500 };
+const space: Space = { cx: 200, cy: 150, f: 500, px: 0, py: 0, pz: 0 };
 
 /** Smooth colours (no hard edges), so bilinear results compare closely. */
 function gradient(w: number, h: number): ImageBuf {
@@ -65,7 +66,7 @@ describe('the CPU path for pieces in 3D', () => {
     const src = Surface.fromRGBA(4, 4, new Uint8ClampedArray(64).fill(255));
     // Barely tilted, so its edges sit where the flat piece's would.
     const s = at({ tilt: 1e-6, x: 10, y: 10 });
-    const pl = placementOf(s, { x: 2, y: 2 }, 4, 4, { cx: 10, cy: 10, f: 1e6 });
+    const pl = placementOf(s, { x: 2, y: 2 }, 4, 4, { cx: 10, cy: 10, f: 1e6, px: 0, py: 0, pz: 0 });
     const out = sampleProjective(src, pl, { x: 0, y: 0, w: 20, h: 20 });
     const alpha = (x: number, y: number) => out.data[((y - out.y) * out.w + (x - out.x)) * 4 + 3] ?? 0;
     expect(alpha(9, 9)).toBe(255);
@@ -79,7 +80,7 @@ describe('the CPU path for pieces in 3D', () => {
     // Flat on the ground, its pivot below the vanishing point.
     p.keyframes = setKey(p.keyframes, 0, { y: 260, tilt: Math.PI / 2 });
     const view = { data: new Uint8ClampedArray(400 * 300 * 4), stride: 400, ox: 0, oy: 0 };
-    drawPiece(view, { x: 0, y: 0, w: 400, h: 300 }, p, 0, space);
+    drawPiece(view, { x: 0, y: 0, w: 400, h: 300 }, p, new Scene([p], 0, space));
     const a = (x: number, y: number) => view.data[(y * 400 + x) * 4 + 3];
     // Above the horizon (the vanishing point's height) there's nothing; below it, floor all the way across.
     expect(a(200, 100)).toBe(0);
@@ -92,7 +93,7 @@ describe('the CPU path for pieces in 3D', () => {
     p.keyframes = setKey(p.keyframes, 0, { turn: Math.PI - 0.2 });
     const draw = () => {
       const view = { data: new Uint8ClampedArray(400 * 300 * 4), stride: 400, ox: 0, oy: 0 };
-      drawPiece(view, { x: 0, y: 0, w: 400, h: 300 }, p, 0, space);
+      drawPiece(view, { x: 0, y: 0, w: 400, h: 300 }, p, new Scene([p], 0, space));
       return view.data[(150 * 400 + 200) * 4 + 3];
     };
     expect(draw()).toBe(255);
@@ -104,8 +105,7 @@ describe('the CPU path for pieces in 3D', () => {
   it('paints a tilted piece under the pointer, and not where it is seen edge-on', () => {
     const p = makePiece('p', '', 'l', gradient(100, 60), { x: 150, y: 120, w: 100, h: 60 }, 0);
     p.keyframes = setKey(p.keyframes, 0, { tilt: 0.9 });
-    const s = p.keyframes[0];
-    const map = piecePaintMap(p, s, space, { x: 200, y: 150 })!;
+    const map = piecePaintMap(p, new Scene([p], 0, space), { x: 200, y: 150 })!;
     const q = map.toPiece({ x: 200, y: 150 })!;
     expect(q.x).toBeCloseTo(50, 6);
     expect(q.y).toBeCloseTo(30, 6);
@@ -114,13 +114,14 @@ describe('the CPU path for pieces in 3D', () => {
     expect(back.y).toBeCloseTo(140, 6);
     // Tilted back, the sheet is squeezed up and down: a brush covers more of it than it is wide.
     expect(map.scale).toBeLessThan(1);
-    expect(piecePaintMap(p, { ...s, tilt: Math.PI / 2 }, space, { x: 200, y: 150 })).toBeNull();
+    p.keyframes = setKey(p.keyframes, 0, { tilt: Math.PI / 2 });
+    expect(piecePaintMap(p, new Scene([p], 0, space), { x: 200, y: 150 })).toBeNull();
   });
 
   it('draws a 4000 × 3000 piece tilted to fill the picture in good time', () => {
     const src = new Surface(4000, 3000);
     src.fillRect({ x: 0, y: 0, w: 4000, h: 3000 }, { r: 40, g: 90, b: 200, a: 255 });
-    const pl = placementOf({ ...identityState(2000, 1500), tilt: 0.3, turn: 0.2 }, { x: 2000, y: 1500 }, 4000, 3000, { cx: 2000, cy: 1500, f: 5000 });
+    const pl = placementOf({ ...identityState(2000, 1500), tilt: 0.3, turn: 0.2 }, { x: 2000, y: 1500 }, 4000, 3000, { cx: 2000, cy: 1500, f: 5000, px: 0, py: 0, pz: 0 });
     const t0 = performance.now();
     const out = sampleProjective(src, pl, { x: 0, y: 0, w: 4000, h: 3000 });
     const ms = performance.now() - t0;

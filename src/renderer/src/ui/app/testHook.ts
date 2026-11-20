@@ -8,9 +8,12 @@ import { openPath } from '../services/files';
 import { autosaveNow } from '../services/autosave';
 import { defaultParams, shapeRegistry } from '@engine/shapes/ShapeRegistry';
 import { paintShape } from '@engine/vector/render';
-import { makePiece, piecePlacementAt, pieceStateAt } from '@engine/anim/piece';
-import { project } from '@engine/anim/space';
-import { drawPiece } from '@engine/anim/pieceRaster';
+import { makePiece, newPieceId, pieceStateAt, setKey, type Piece } from '@engine/anim/piece';
+import { Scene } from '@engine/anim/scene';
+import { defaultLight, project, spaceOf } from '@engine/anim/space';
+import { drawPiece, drawRuns, hingedIds, runSheets } from '@engine/anim/pieceRaster';
+import { BOX_FACES, faceSize, makeBox, type BoxFace, type BoxSize } from '@engine/anim/box';
+import { sampleProjectiveBatch } from '@engine/anim/pieceProject';
 import { encodeAnimation } from '@engine/io/animExport';
 import { EASINGS, type Keyframe } from '@engine/anim/interpolate';
 
@@ -65,6 +68,63 @@ async function brushSheet(cellW: number, cellH: number, cols: number): Promise<{
   return { ids: defs.map((d) => d.id), w, h, png: Array.from(png) };
 }
 
+/** A test box's faces: each its own colour, with a dark mark in its top-left corner (a face turned or mirrored wrongly shows). */
+const CUBE_COLOURS: Record<BoxFace, [number, number, number]> = { front: [200, 60, 50], top: [220, 170, 40], bottom: [60, 140, 70], left: [50, 90, 200], right: [150, 70, 170], back: [90, 90, 90] };
+
+function cubeFaces(size: BoxSize): Record<BoxFace, { w: number; h: number; data: Uint8ClampedArray }> {
+  const out = {} as Record<BoxFace, { w: number; h: number; data: Uint8ClampedArray }>;
+  for (const f of BOX_FACES) {
+    const { w, h } = faceSize(f, size);
+    const data = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) data.set(x < 10 && y < 10 ? [20, 20, 20, 255] : [...CUBE_COLOURS[f], 255], (y * w + x) * 4);
+    out[f] = { w, h, data };
+  }
+  return out;
+}
+
+/** A box turned by tilt and turn: its pieces (group first), seen by a camera at its middle. */
+function cubeAt(centre: { x: number; y: number }, size: BoxSize, tilt: number, turn: number, layerId: string): Piece[] {
+  const pieces = makeBox(newPieceId, layerId, centre, size, 0, { faces: cubeFaces(size), names: (f) => f, shade: 0.6 });
+  pieces[0].keyframes = setKey(pieces[0].keyframes, 0, { tilt, turn });
+  return pieces;
+}
+
+/**
+ * The cube sheet (golden-image test): a shaded box of six coloured faces at fixed angles, drawn
+ * through the CPU path exports use, its faces together so the hinges stay solid.
+ */
+async function cubeSheet(): Promise<{ ids: string[]; w: number; h: number; png: number[] }> {
+  const CELL = 200;
+  const views: [string, number, number][] = [
+    ['front-right', 0.35, -0.6],
+    ['below-left', -0.45, 0.75],
+    ['over-the-top', 0.9, 2.3],
+    ['from-behind', 0.15, Math.PI - 0.35],
+  ];
+  const W = CELL * views.length;
+  const data = new Uint8ClampedArray(W * CELL * 4).fill(255);
+  views.forEach(([, tilt, turn], i) => {
+    const centre = { x: i * CELL + CELL / 2, y: CELL / 2 };
+    const pieces = cubeAt(centre, { w: 70, h: 60, d: 50 }, tilt, turn, 'sheet');
+    const scene = new Scene(pieces, 0, spaceOf({ x: centre.x, y: centre.y, strength: 60 }, CELL, CELL));
+    const cell = { x: i * CELL, y: 0, w: CELL, h: CELL };
+    const order = scene.backToFront(pieces.filter((p) => scene.shows(p)));
+    for (const run of drawRuns(order, hingedIds(pieces))) {
+      const img = sampleProjectiveBatch(runSheets(run, scene, defaultLight()), cell);
+      for (let y = 0; y < img.h; y++) {
+        for (let x = 0; x < img.w; x++) {
+          const s = (y * img.w + x) * 4;
+          const a = img.data[s + 3] / 255;
+          const t = ((img.y + y) * W + img.x + x) * 4;
+          for (let c = 0; c < 3; c++) data[t + c] = Math.round(img.data[s + c] * a + data[t + c] * (1 - a));
+        }
+      }
+    }
+  });
+  const png = await engine.codecs.encode('png', W, CELL, data, 100, 96);
+  return { ids: views.map((v) => v[0]), w: W, h: CELL, png: Array.from(png) };
+}
+
 /** Pixels per cell that differ (any channel by more than 24) between two sheets. */
 /**
  * The motion sheet (golden-image test): one row per easing and per kind of motion, each showing
@@ -97,7 +157,7 @@ async function motionSheet(): Promise<{ ids: string[]; w: number; h: number; png
     const base = p.keyframes[0];
     const key = (k: Partial<Keyframe>, frame: number): Keyframe => ({ ...base, ...k, frame, y: (k.y ?? 32) + r * H });
     p.keyframes = [key(row.keys[0], 0), key(row.keys[1], 8)];
-    for (let f = 0; f <= 8; f++) drawPiece(view, { x: 0, y: r * H, w: W, h: H }, p, f);
+    for (let f = 0; f <= 8; f++) drawPiece(view, { x: 0, y: r * H, w: W, h: H }, p, new Scene([p], f));
   });
   const png = await engine.codecs.encode('png', W, H * rows.length, data, 100, 96);
   return { ids: rows.map((r) => r.id), w: W, h: H * rows.length, png: Array.from(png) };
@@ -257,10 +317,22 @@ export function installTestHook(): void {
       return { r: d[0], g: d[1], b: d[2], a: d[3] };
     },
     /** Where a point of a piece (its own pixels) shows in the document at the frame shown. */
+    cubeSheet,
+    pieceFront: (id: string) => {
+      const p = engine.anim.piece(id);
+      return p ? engine.anim.scene().placement(p).front : false;
+    },
+    /** A box of coloured faces on the active layer (one undo step), turned by tilt and turn: its face ids. */
+    addTestBox: (cx: number, cy: number, size: BoxSize, tilt: number, turn: number, hideBacks = false) => {
+      const pieces = cubeAt({ x: cx, y: cy }, size, tilt, turn, engine.doc.activeId);
+      if (hideBacks) for (const p of pieces) p.back = 'hide';
+      if (!engine.anim.addTree(pieces, 'history.box')) return null;
+      return Object.fromEntries(pieces.map((p) => [p.kind === 'group' ? 'group' : p.name, p.id])) as Record<BoxFace | 'group', string>;
+    },
     pieceHandle: (id: string, x: number, y: number) => {
       const p = engine.anim.piece(id);
       if (!p) return { x: Number.NaN, y: Number.NaN };
-      return project(piecePlacementAt(p, engine.anim.frame, engine.doc.space), { x, y }) ?? { x: Number.NaN, y: Number.NaN };
+      return project(engine.anim.scene().placement(p), { x, y }) ?? { x: Number.NaN, y: Number.NaN };
     },
   };
 }

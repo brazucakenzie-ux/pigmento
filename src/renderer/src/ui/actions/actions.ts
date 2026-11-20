@@ -231,6 +231,14 @@ const base: Action[] = [
     },
   },
   {
+    id: 'makeBox',
+    labelKey: 'action.makeBox',
+    icon: 'box',
+    group: 'animation',
+    run: () => openDialog({ kind: 'box' }),
+    enabled: rasterActive,
+  },
+  {
     id: 'pasteAsPiece',
     labelKey: 'action.pasteAsPiece',
     icon: 'paste',

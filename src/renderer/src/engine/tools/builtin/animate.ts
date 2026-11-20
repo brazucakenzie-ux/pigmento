@@ -1,8 +1,8 @@
 import type { Point } from '../../core/geometry';
-import { walkLayers } from '../../doc/Document';
 import { handleCursor, ROTATE_HANDLE_OFFSET } from '../../live/BoxGeom';
 import { movePivot, type Keyframe, type PieceState } from '../../anim/interpolate';
-import { cloneKeyframe, pieceCorners, pieceStateAt, setKey, type Piece } from '../../anim/piece';
+import { cloneKeyframe, pieceStateAt, setKey, type Piece } from '../../anim/piece';
+import { piecesInDrawOrder } from '../../anim/pieceRaster';
 import {
   docToLocal,
   handleLocal,
@@ -17,6 +17,11 @@ import {
   type PieceHandle,
 } from '../../anim/pieceEdit';
 import type { Overlay } from '../../render/Overlay';
+import type { EdgeSnap } from '../../anim/edgeSnap';
+import { foldHandle, foldToward } from '../../anim/edgeSnap';
+import { project } from '../../anim/space';
+import { drawHingeSnap, hingeOnRelease, hingeSnap } from '../hingeSnap';
+import { slideOnParent, treePieces, treeTop } from '../treeEdit';
 import { registerTool } from '../ToolRegistry';
 import type { ToolContext, ToolPointerEvent } from '../Tool';
 
@@ -49,6 +54,12 @@ interface Drag {
   keys0: Keyframe[];
   pivot0: Point;
   adding: boolean;
+  /** The edge it hinges onto if it's let go now (dragging the whole piece). */
+  snap: EdgeSnap | null;
+  /** The piece that was grabbed (a drag on a linked piece moves the top of its tree). */
+  face: string;
+  /** Alt-dragging a linked piece changes just it: a hinged one folds, one that follows another slides on it. */
+  mode: 'own' | 'fold' | 'slide';
 }
 
 let drag: Drag | null = null;
@@ -59,12 +70,7 @@ const PIVOT_SNAP_PX = 8;
 
 /** Pieces in drawing order (bottom to top) on layers that are showing. */
 function visiblePieces(ctx: ToolContext): Piece[] {
-  const out: Piece[] = [];
-  for (const layer of walkLayers(ctx.doc.layers)) {
-    if (layer.kind !== 'raster' || !ctx.doc.isEffectivelyVisible(layer.id)) continue;
-    for (const p of ctx.doc.pieces) if (p.layerId === layer.id) out.push(p);
-  }
-  return out;
+  return piecesInDrawOrder(ctx.doc, ctx.anim.scene());
 }
 
 interface ScreenGeom {
@@ -103,14 +109,20 @@ const near = (a: Point, b: Point, px = HIT_PX): boolean => Math.abs(a.x - b.x) <
 /** The piece has depth, tilt or turn at the frame shown. */
 function in3d(ctx: ToolContext, p: Piece): boolean {
   const s = pieceStateAt(p, ctx.anim.frame);
-  return s.depth !== 0 || s.tilt !== 0 || s.turn !== 0;
+  return s.depth !== 0 || s.tilt !== 0 || s.turn !== 0 || p.link !== null || p.kind === 'group';
 }
 
 function hitSelected(ctx: ToolContext, p: Piece, e: ToolPointerEvent): Hit | null {
+  // A group is grabbed by any of its pieces.
+  if (p.kind === 'group') {
+    const over = pieceAt(visiblePieces(ctx), ctx.anim.scene(), e);
+    return over && treePieces(ctx, p).includes(over) ? { kind: 'body' } : null;
+  }
   const g = geometry(ctx, p);
   const sp = { x: e.sx, y: e.sy };
   const frame = ctx.anim.frame;
-  const keys = p.keyframes.length > 1 ? p.keyframes : [];
+  // A linked piece's keyframes are relative to what it follows, so its path isn't on the canvas.
+  const keys = p.keyframes.length > 1 && !p.link ? p.keyframes : [];
   const dot = (k: Keyframe) => ctx.view.toScreen(k.x, k.y);
   // Bend handles first: they sit off the path, where nothing else is.
   for (const k of keys) {
@@ -127,7 +139,7 @@ function hitSelected(ctx: ToolContext, p: Piece, e: ToolPointerEvent): Hit | nul
     if (near(sp, g.rotate)) return { kind: 'rotate' };
   }
   for (const k of keys) if (k.frame !== frame && near(sp, dot(k))) return { kind: 'key', frame: k.frame };
-  if (insidePiece(p, frame, e, ctx.doc.space)) return { kind: 'body' };
+  if (insidePiece(p, ctx.anim.scene(), e)) return { kind: 'body' };
   return null;
 }
 
@@ -145,7 +157,7 @@ function stateChange(s: PieceState): Partial<PieceState> {
 }
 
 function drawPath(ctx: ToolContext, ov: Overlay, p: Piece): void {
-  if (p.keyframes.length < 2) return;
+  if (p.keyframes.length < 2 || p.link) return;
   const first = p.keyframes[0].frame;
   const last = p.keyframes[p.keyframes.length - 1].frame;
   const pts: Point[] = [];
@@ -191,7 +203,7 @@ export default registerTool({
     let hit = piece ? hitSelected(ctx, piece, e) : null;
     // A repeating piece's copies reach everywhere: a piece showing on top of them is picked instead.
     if (piece && hit?.kind === 'body' && piece.repeat !== 'none') {
-      const top = pieceAt(visiblePieces(ctx), ctx.anim.frame, e, ctx.doc.space);
+      const top = pieceAt(visiblePieces(ctx), ctx.anim.scene(), e);
       if (top && top.id !== piece.id) hit = null;
     }
     // Double-click a keyframe's dot: a straight path there again.
@@ -200,15 +212,28 @@ export default registerTool({
       if (ctx.anim.straighten(piece.id, frame)) return;
     }
     if (!hit) {
-      piece = pieceAt(visiblePieces(ctx), ctx.anim.frame, e, ctx.doc.space);
+      piece = pieceAt(visiblePieces(ctx), ctx.anim.scene(), e);
       ctx.anim.select(piece?.id ?? null);
       if (!piece) return;
       hit = { kind: 'body' };
     }
     if (!piece) return;
     const frame = ctx.anim.frame;
+    const face = piece;
+    // Grabbing a linked piece moves its whole tree; with Alt, just that piece.
+    let mode: Drag['mode'] = 'own';
+    let foldGrab = { x: 0, y: 0 };
+    if (hit.kind === 'body' && piece.link) {
+      if (!e.alt) piece = treeTop(ctx, piece) ?? piece;
+      else if (piece.link.hinge) {
+        mode = 'fold';
+        const handle = foldHandle(piece);
+        const at = handle && project(ctx.anim.scene().placement(piece), handle);
+        if (at) foldGrab = { x: at.x - e.x, y: at.y - e.y };
+      } else mode = 'slide';
+    }
     const s0 = pieceStateAt(piece, frame);
-    let grab = { x: 0, y: 0 };
+    let grab = foldGrab;
     if (hit.kind === 'handle') {
       const d = localToDoc(s0, piece.pivot, handleLocal(piece, hit.handle));
       grab = { x: d.x - e.x, y: d.y - e.y };
@@ -222,6 +247,9 @@ export default registerTool({
       keys0: piece.keyframes.map(cloneKeyframe),
       pivot0: { ...piece.pivot },
       adding: !piece.keyframes.some((k) => k.frame === frame),
+      snap: null,
+      face: face.id,
+      mode,
     };
     // Pulling a bend handle grabs it where the pointer is.
     if (hit.kind === 'tangent') drag.grab = { x: 0, y: 0 };
@@ -233,6 +261,14 @@ export default registerTool({
     const frame = ctx.anim.frame;
     const p = { x: e.x + d.grab.x, y: e.y + d.grab.y };
     const hit = d.hit;
+    if (d.mode !== 'own') {
+      const piece = ctx.anim.piece(d.id);
+      if (!piece) return;
+      const scene = ctx.anim.scene();
+      const change = d.mode === 'fold' ? { fold: foldToward(scene, piece, p, d.s0.fold, e.shift) } : slideOnParent(scene, piece, d.s0, d.start, { x: e.x, y: e.y }, e.shift);
+      if (change) ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, frame, change)));
+      return;
+    }
     if (hit.kind === 'key') {
       const k = d.keys0.find((q) => q.frame === hit.frame);
       if (!k) return;
@@ -283,18 +319,27 @@ export default registerTool({
     else s = scaleState(d.s0, geom, hit.handle, p, { shift: e.shift, alt: e.alt });
     const change = stateChange(s);
     ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, frame, change)));
+    // Dragged near another piece's edge, it hinges there when let go (Alt: it doesn't).
+    if (hit.kind === 'body') {
+      d.snap = hingeSnap(ctx, piece, e.alt);
+      ctx.invalidateOverlay();
+    }
   },
   pointerUp(ctx) {
     const d = drag;
     drag = null;
     if (!d) return;
+    if (d.snap) {
+      hingeOnRelease(ctx, d.id, d.snap);
+      return;
+    }
     const k = d.hit.kind;
     ctx.anim.endDrag(k === 'pivot' ? 'history.pivot' : k === 'pull' || k === 'tangent' ? 'history.motionPath' : d.adding && k !== 'key' ? 'history.keyframeAdd' : 'history.keyframe');
   },
   hover(ctx, e) {
     const sel = ctx.anim.selected;
     const hit = sel ? hitSelected(ctx, sel, e) : null;
-    const over = hit ? null : pieceAt(visiblePieces(ctx), ctx.anim.frame, e, ctx.doc.space);
+    const over = hit ? null : pieceAt(visiblePieces(ctx), ctx.anim.scene(), e);
     const id = over?.id ?? null;
     if (id !== hovered) {
       hovered = id;
@@ -332,7 +377,7 @@ export default registerTool({
   drawOverlay(ctx, ov) {
     const sel = ctx.anim.selected;
     // The outline as it's drawn (in 3D, the sheet seen in perspective).
-    const outline = (p: Piece) => pieceCorners(p, ctx.anim.frame, ctx.doc.space).map((q) => ctx.view.toScreen(q.x, q.y));
+    const outline = (p: Piece) => ctx.anim.scene().corners(p).map((q) => ctx.view.toScreen(q.x, q.y));
     for (const p of visiblePieces(ctx)) {
       if (p === sel) continue;
       // Unselected pieces show a faint outline, so they can be found and clicked.
@@ -340,7 +385,11 @@ export default registerTool({
     }
     if (!sel || !ctx.doc.isEffectivelyVisible(sel.layerId)) return;
     drawPath(ctx, ov, sel);
-    ov.outlineScreen(outline(sel), true, false);
+    // A tree's pieces are outlined together (a group has no pixels of its own).
+    const top = treeTop(ctx, sel);
+    if (top) for (const p of treePieces(ctx, top)) if (p !== sel) ov.outlineScreen(outline(p), true, true);
+    if (sel.kind === 'piece') ov.outlineScreen(outline(sel), true, false);
+    if (drag?.snap) drawHingeSnap(ctx, ov, drag.snap);
     if (in3d(ctx, sel)) return;
     const g = geometry(ctx, sel);
     const active = drag?.hit;

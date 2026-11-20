@@ -8,6 +8,7 @@ export function NumberField({
   min,
   max,
   step = 1,
+  shiftStep = step * 10,
   label,
   id,
   className = 'num',
@@ -19,6 +20,8 @@ export function NumberField({
   min: number;
   max: number;
   step?: number;
+  /** What the arrow keys step by with Shift held (10 steps by default). */
+  shiftStep?: number;
   label: string;
   id?: string;
   className?: string;
@@ -52,7 +55,7 @@ export function NumberField({
         }
         if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
           e.preventDefault();
-          const d = (e.key === 'ArrowUp' ? 1 : -1) * step * (e.shiftKey ? 10 : 1);
+          const d = (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? shiftStep : step);
           onChange(Math.min(max, Math.max(min, value + d)));
         }
       }}

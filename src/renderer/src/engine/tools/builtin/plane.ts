@@ -1,11 +1,14 @@
 import type { Point } from '../../core/geometry';
-import { walkLayers } from '../../doc/Document';
 import { ROTATE_HANDLE_OFFSET } from '../../live/BoxGeom';
 import type { Keyframe, PieceState } from '../../anim/interpolate';
-import { cloneKeyframe, pieceCorners, pieceStateAt, setKey, type Piece } from '../../anim/piece';
+import { cloneKeyframe, pieceStateAt, setKey, type Piece } from '../../anim/piece';
+import { piecesInDrawOrder } from '../../anim/pieceRaster';
 import { insidePiece, moveState, pieceAt, rotateState } from '../../anim/pieceEdit';
 import { depthDrag, movePivot3D, resizeDrag, tiltDrag, turnDrag } from '../../anim/planeEdit';
 import { placementOf, project, unproject } from '../../anim/space';
+import { foldHandle, foldToward, type EdgeSnap } from '../../anim/edgeSnap';
+import { drawHingeSnap, hingeOnRelease, hingeSnap } from '../hingeSnap';
+import { drawTree, slideOnParent, topPivot, treeHandles, treePieces, treeTop, type TreeHandle } from '../treeEdit';
 import { registerTool } from '../ToolRegistry';
 import type { ToolContext, ToolPointerEvent } from '../Tool';
 
@@ -14,7 +17,11 @@ import type { ToolContext, ToolPointerEvent } from '../Tool';
  * (Ctrl-drag pushes it away or pulls it closer), drag its top or bottom handle to tilt it back
  * or forward, a side handle to turn it like a door, the round handle to spin it, a corner to
  * resize it on its own plane (Shift keeps the proportions), or the pivot to change what it turns
- * about. Shift snaps tilt and turn to 15°. Every change keys the piece at the frame shown.
+ * about. Shift snaps tilt and turn to 15°. Dragged near another piece's edge, a piece's edge lights
+ * up and letting go hinges it there (Alt: no snapping); a hinged piece has a fold handle instead.
+ * Dragging any piece of a tree of linked pieces moves the whole tree, and handles round the tree's
+ * pivot tilt, turn and spin it; Alt-dragging changes just that piece (folds a hinged one, slides
+ * one that follows another). Every change keys the piece at the frame shown.
  */
 type Hit =
   | { kind: 'body' }
@@ -22,20 +29,33 @@ type Hit =
   | { kind: 'turn'; handle: 'e' | 'w' }
   | { kind: 'spin' }
   | { kind: 'corner'; corner: Point }
-  | { kind: 'pivot' };
+  | { kind: 'pivot' }
+  /** A hinged piece's fold handle (or the piece itself, Alt-dragged). */
+  | { kind: 'fold' }
+  /** The handles round a tree's pivot: they tilt, turn and spin the whole tree. */
+  | { kind: 'tree'; handle: TreeHandle }
+  /** Alt-dragging a piece that follows another: it slides on that piece. */
+  | { kind: 'slide' };
 
 interface Drag {
+  /** The piece the drag changes (the top of its tree, when the whole tree moves). */
   id: string;
+  /** The piece that was grabbed. */
+  face: string;
   hit: Hit;
   /** Where the pointer was, in document and screen pixels. */
   start: Point;
   startScreen: Point;
+  /** From the pointer to the fold handle, when a hinged piece is folded by dragging it. */
+  grab: Point;
   s0: PieceState;
   keys0: Keyframe[];
   pivot0: Point;
   /** Ctrl when a body drag began: it changes the depth. */
   depth: boolean;
   adding: boolean;
+  /** The edge it hinges onto if it's let go now. */
+  snap: EdgeSnap | null;
 }
 
 let drag: Drag | null = null;
@@ -51,12 +71,7 @@ function vanishing(ctx: ToolContext): Point {
 const HIT_PX = 7;
 
 function visiblePieces(ctx: ToolContext): Piece[] {
-  const out: Piece[] = [];
-  for (const layer of walkLayers(ctx.doc.layers)) {
-    if (layer.kind !== 'raster' || !ctx.doc.isEffectivelyVisible(layer.id)) continue;
-    for (const p of ctx.doc.pieces) if (p.layerId === layer.id) out.push(p);
-  }
-  return out;
+  return piecesInDrawOrder(ctx.doc, ctx.anim.scene());
 }
 
 interface ScreenGeom {
@@ -65,18 +80,26 @@ interface ScreenGeom {
   spin: Point | null;
   top: Point | null;
   pivot: Point | null;
+  /** A hinged piece's only handle. */
+  fold: Point | null;
   outline: Point[];
 }
 
 /** Where the piece's handles show on screen at the frame shown (handles behind the camera are left out). */
 function geometry(ctx: ToolContext, p: Piece): ScreenGeom {
-  const s = pieceStateAt(p, ctx.anim.frame);
+  const scene = ctx.anim.scene();
   const { width: w, height: h } = p.src;
-  const pl = placementOf(s, p.pivot, w, h, ctx.doc.space);
+  const pl = scene.placement(p);
   const at = (q: Point): Point | null => {
     const d = project(pl, q);
     return d && ctx.view.toScreen(d.x, d.y);
   };
+  // A group has no pixels: its handles are the tree's, round its pivot.
+  if (p.kind === 'group') return { corners: [], edges: [], spin: null, top: null, pivot: null, fold: null, outline: [] };
+  const outline = scene.corners(p).map((q) => ctx.view.toScreen(q.x, q.y));
+  // A hinged piece is placed by its hinge: it only folds.
+  const fold = foldHandle(p);
+  if (fold) return { corners: [], edges: [], spin: null, top: null, pivot: null, fold: at(fold), outline };
   const corners: ScreenGeom['corners'] = [];
   for (const local of [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: h }, { x: 0, y: h }]) {
     const sp = at(local);
@@ -98,8 +121,8 @@ function geometry(ctx: ToolContext, p: Piece): ScreenGeom {
     const len = Math.hypot(top.x - mid.x, top.y - mid.y) || 1;
     spin = { x: top.x + ((top.x - mid.x) / len) * ROTATE_HANDLE_OFFSET, y: top.y + ((top.y - mid.y) / len) * ROTATE_HANDLE_OFFSET };
   }
-  const outline = pieceCorners(p, ctx.anim.frame, ctx.doc.space).map((q) => ctx.view.toScreen(q.x, q.y));
-  return { corners, edges, spin, top, pivot: at(p.pivot), outline };
+  // A piece following another turns about its own pivot in that piece's space (moving it there is for later).
+  return { corners, edges, spin, top, pivot: p.link ? null : at(p.pivot), fold: null, outline };
 }
 
 const near = (a: Point, b: Point, px = HIT_PX): boolean => Math.abs(a.x - b.x) <= px && Math.abs(a.y - b.y) <= px;
@@ -107,11 +130,21 @@ const near = (a: Point, b: Point, px = HIT_PX): boolean => Math.abs(a.x - b.x) <
 function hitSelected(ctx: ToolContext, p: Piece, e: ToolPointerEvent): Hit | null {
   const g = geometry(ctx, p);
   const sp = { x: e.sx, y: e.sy };
+  // The tree's handles round its pivot come first (they sit apart from the pieces' own).
+  const top = treeTop(ctx, p);
+  const c = top && topPivot(ctx, ctx.anim.scene(), top);
+  if (c) for (const h of treeHandles(c)) if (near(sp, h.at)) return { kind: 'tree', handle: h.hit };
+  // A group is grabbed by any of its pieces.
+  if (p.kind === 'group') {
+    const over = pieceAt(visiblePieces(ctx), ctx.anim.scene(), e);
+    return over && treePieces(ctx, p).includes(over) ? { kind: 'body' } : null;
+  }
+  if (g.fold && near(sp, g.fold)) return { kind: 'fold' };
   if (g.spin && near(sp, g.spin)) return { kind: 'spin' };
   if (g.pivot && near(sp, g.pivot)) return { kind: 'pivot' };
   for (const c of g.corners) if (near(sp, c.at)) return { kind: 'corner', corner: c.local };
   for (const edge of g.edges) if (near(sp, edge.at)) return edge.hit;
-  if (insidePiece(p, ctx.anim.frame, e, ctx.doc.space)) return { kind: 'body' };
+  if (insidePiece(p, ctx.anim.scene(), e)) return { kind: 'body' };
   return null;
 }
 
@@ -125,11 +158,16 @@ function cursorFor(hit: Hit | null, ctrl: boolean): string {
     case 'turn':
       return 'ew-resize';
     case 'spin':
+    case 'fold':
       return 'grab';
     case 'corner':
       return 'nwse-resize';
     case 'pivot':
       return 'crosshair';
+    case 'slide':
+      return 'move';
+    case 'tree':
+      return hit.handle.kind === 'tilt' ? 'ns-resize' : hit.handle.kind === 'turn' ? 'ew-resize' : 'grab';
   }
 }
 
@@ -166,27 +204,43 @@ export default registerTool({
     let hit = piece ? hitSelected(ctx, piece, e) : null;
     // A repeating piece's copies reach everywhere: a piece showing on top of them is picked instead.
     if (piece && hit?.kind === 'body' && piece.repeat !== 'none') {
-      const top = pieceAt(visiblePieces(ctx), ctx.anim.frame, e, ctx.doc.space);
+      const top = pieceAt(visiblePieces(ctx), ctx.anim.scene(), e);
       if (top && top.id !== piece.id) hit = null;
     }
     if (!hit) {
-      piece = pieceAt(visiblePieces(ctx), ctx.anim.frame, e, ctx.doc.space);
+      piece = pieceAt(visiblePieces(ctx), ctx.anim.scene(), e);
       ctx.anim.select(piece?.id ?? null);
       if (!piece) return;
       hit = { kind: 'body' };
     }
     if (!piece) return;
     const frame = ctx.anim.frame;
+    // What the drag changes: grabbing a linked piece moves its whole tree (Alt: just that piece).
+    let target = piece;
+    let grab = { x: 0, y: 0 };
+    if (hit.kind === 'tree') target = treeTop(ctx, piece) ?? piece;
+    else if (hit.kind === 'body' && piece.link) {
+      if (!e.alt) target = treeTop(ctx, piece) ?? piece;
+      else if (piece.link.hinge) {
+        hit = { kind: 'fold' };
+        const handle = foldHandle(piece);
+        const at = handle && project(ctx.anim.scene().placement(piece), handle);
+        if (at) grab = { x: at.x - e.x, y: at.y - e.y };
+      } else hit = { kind: 'slide' };
+    }
     drag = {
-      id: piece.id,
+      id: target.id,
+      face: piece.id,
       hit,
       start: { x: e.x, y: e.y },
       startScreen: { x: e.sx, y: e.sy },
-      s0: pieceStateAt(piece, frame),
-      keys0: piece.keyframes.map(cloneKeyframe),
-      pivot0: { ...piece.pivot },
+      grab,
+      s0: pieceStateAt(target, frame),
+      keys0: target.keyframes.map(cloneKeyframe),
+      pivot0: { ...target.pivot },
       depth: e.ctrl,
-      adding: !piece.keyframes.some((k) => k.frame === frame),
+      adding: !target.keyframes.some((k) => k.frame === frame),
+      snap: null,
     };
     ctx.anim.beginDrag();
   },
@@ -228,14 +282,30 @@ export default registerTool({
       });
       return;
     }
+    if (hit.kind === 'fold') {
+      const fold = foldToward(ctx.anim.scene(), piece, { x: e.x + d.grab.x, y: e.y + d.grab.y }, d.s0.fold, e.shift);
+      ctx.anim.preview(d.id, (p) => (p.keyframes = setKey(d.keys0, frame, { fold })));
+      return;
+    }
+    if (hit.kind === 'slide') {
+      const at = slideOnParent(ctx.anim.scene(), piece, d.s0, d.start, { x: e.x, y: e.y }, e.shift);
+      if (at) ctx.anim.preview(d.id, (p) => (p.keyframes = setKey(d.keys0, frame, at)));
+      return;
+    }
+    const handle = hit.kind === 'tree' ? hit.handle : hit;
     let s: PieceState;
-    if (hit.kind === 'body') s = d.depth ? depthDrag(d.s0, dys, space) : moveState(d.s0, e.x - d.start.x, e.y - d.start.y, e.shift);
-    else if (hit.kind === 'tilt') s = tiltDrag(d.s0, hit.handle, dys, e.shift);
-    else if (hit.kind === 'turn') s = turnDrag(d.s0, hit.handle, dxs, e.shift);
-    else if (hit.kind === 'spin') s = rotateState(d.s0, d.start, { x: e.x, y: e.y }, e.shift);
-    else s = resizeDrag(d.s0, { pivot: d.pivot0, w: piece.src.width, h: piece.src.height }, hit.corner, { x: e.x, y: e.y }, space, e.shift);
+    if (handle.kind === 'body') s = d.depth ? depthDrag(d.s0, dys, space) : moveState(d.s0, e.x - d.start.x, e.y - d.start.y, e.shift);
+    else if (handle.kind === 'tilt') s = tiltDrag(d.s0, handle.handle, dys, e.shift);
+    else if (handle.kind === 'turn') s = turnDrag(d.s0, handle.handle, dxs, e.shift);
+    else if (handle.kind === 'spin') s = rotateState(d.s0, d.start, { x: e.x, y: e.y }, e.shift);
+    else if (handle.kind === 'corner') s = resizeDrag(d.s0, { pivot: d.pivot0, w: piece.src.width, h: piece.src.height }, handle.corner, { x: e.x, y: e.y }, space, e.shift);
+    else return;
     const change = stateChange(s);
     ctx.anim.preview(d.id, (p) => (p.keyframes = setKey(d.keys0, frame, change)));
+    if (hit.kind === 'body' && !d.depth) {
+      d.snap = hingeSnap(ctx, piece, e.alt);
+      ctx.invalidateOverlay();
+    }
   },
   pointerUp(ctx) {
     if (camDrag) {
@@ -246,6 +316,10 @@ export default registerTool({
     const d = drag;
     drag = null;
     if (!d) return;
+    if (d.snap) {
+      hingeOnRelease(ctx, d.id, d.snap);
+      return;
+    }
     ctx.anim.endDrag(d.hit.kind === 'pivot' ? 'history.pivot' : d.adding ? 'history.keyframeAdd' : 'history.keyframe');
   },
   hover(ctx, e) {
@@ -255,7 +329,7 @@ export default registerTool({
     }
     const sel = ctx.anim.selected;
     const hit = sel ? hitSelected(ctx, sel, e) : null;
-    const over = hit ? null : pieceAt(visiblePieces(ctx), ctx.anim.frame, e, ctx.doc.space);
+    const over = hit ? null : pieceAt(visiblePieces(ctx), ctx.anim.scene(), e);
     const id = over?.id ?? null;
     if (id !== hovered) {
       hovered = id;
@@ -282,6 +356,14 @@ export default registerTool({
       ctx.anim.remove(p.id);
       return true;
     }
+    // A hinged piece folds: up folds it back, down forward (Shift: 15°).
+    if (p.link?.hinge) {
+      const dir = e.key === 'ArrowUp' ? 1 : e.key === 'ArrowDown' ? -1 : 0;
+      if (!dir) return false;
+      const fold = pieceStateAt(p, ctx.anim.frame).fold + (dir * (e.shiftKey ? 15 : 1) * Math.PI) / 180;
+      ctx.anim.setKey(p.id, ctx.anim.frame, { fold });
+      return true;
+    }
     const step = e.shiftKey ? 10 : 1;
     const move: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
     const m = move[e.key];
@@ -305,6 +387,9 @@ export default registerTool({
     if (!sel || !ctx.doc.isEffectivelyVisible(sel.layerId)) return;
     const g = geometry(ctx, sel);
     const active = drag?.hit;
+    // A tree: its pieces outlined, and its own handles round its pivot.
+    const top = treeTop(ctx, sel);
+    if (top) drawTree(ctx, ov, ctx.anim.scene(), top, active?.kind === 'tree' ? active.handle : null);
     ov.outlineScreen(g.outline, true, false);
     for (const c of g.corners) ov.handle(c.at, 'square', active?.kind === 'corner' && active.corner.x === c.local.x && active.corner.y === c.local.y);
     for (const edge of g.edges) {
@@ -316,5 +401,7 @@ export default registerTool({
       ov.handle(g.spin, 'circle', active?.kind === 'spin');
     }
     if (g.pivot) ov.pivot(g.pivot, active?.kind === 'pivot');
+    if (g.fold) ov.handle(g.fold, 'circle', active?.kind === 'fold');
+    if (drag?.snap) drawHingeSnap(ctx, ov, drag.snap);
   },
 });

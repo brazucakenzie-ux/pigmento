@@ -297,6 +297,7 @@ function AnimateTab() {
       </RibbonGroup>
       <RibbonGroup label={t('group.space')}>
         <ActionButton id="tool.plane" label={t('ribbon.planeTool')} />
+        <ActionButton id="makeBox" />
         <div className="rb-stack">
           <CameraField />
         </div>

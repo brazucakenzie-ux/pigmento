@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { identityState } from '@engine/anim/interpolate';
 import { makePiece } from '@engine/anim/piece';
 import { docToLocal, handleLocal, localToDoc, moveState, pieceAt, rotateState, scaleState, skewState } from '@engine/anim/pieceEdit';
+import { Scene } from '@engine/anim/scene';
 import type { ImageBuf } from '@engine/raster/transform';
 
 const img = (w: number, h: number, alpha = 255): ImageBuf => ({ w, h, data: new Uint8ClampedArray(w * h * 4).fill(alpha) });
@@ -94,7 +95,7 @@ describe('finding pieces', () => {
   it('picks the top piece that isn’t see-through there', () => {
     const below = makePiece('below', '', 'l', img(40, 20), { x: 100, y: 100, w: 40, h: 20 }, 0);
     const clear = makePiece('clear', '', 'l', img(40, 20, 0), { x: 100, y: 100, w: 40, h: 20 }, 0);
-    expect(pieceAt([below, clear], 0, { x: 110, y: 105 })?.id).toBe('below');
-    expect(pieceAt([below, clear], 0, { x: 300, y: 105 })).toBeNull();
+    expect(pieceAt([below, clear], new Scene([below, clear], 0), { x: 110, y: 105 })?.id).toBe('below');
+    expect(pieceAt([below, clear], new Scene([below, clear], 0), { x: 300, y: 105 })).toBeNull();
   });
 });

@@ -6,6 +6,7 @@ import { Surface } from '@engine/raster/Surface';
 import { affineTransform, type ImageBuf } from '@engine/raster/transform';
 import { matChain, matRotate, matScale, matTranslate } from '@engine/core/matrix';
 import { copyPiece, makePiece, MAX_PIECE_SIDE, pieceSize, setKey } from '@engine/anim/piece';
+import { Scene } from '@engine/anim/scene';
 import { drawPiece } from '@engine/anim/pieceRaster';
 import { sampleAffine } from '@engine/anim/pieceSample';
 import { AnimationCommand, AnimationController, captureAnim, type AnimHost } from '@engine/anim/AnimationController';
@@ -46,7 +47,7 @@ describe('piece pixels on a tiled surface', () => {
     // Lifted at x = -400: most of it hangs off the left of a 100-pixel picture.
     const p = makePiece('wide', '', 'l', img, { x: -400, y: 0, w: 1000, h: 4 }, 0);
     const view = { data: new Uint8ClampedArray(100 * 4 * 4), stride: 100, ox: 0, oy: 0 };
-    drawPiece(view, { x: 0, y: 0, w: 100, h: 4 }, p, 0);
+    drawPiece(view, { x: 0, y: 0, w: 100, h: 4 }, p, new Scene([p], 0));
     // Picture pixel x shows piece pixel x + 400.
     for (const x of [0, 37, 99]) expect(view.data[(1 * 100 + x) * 4]).toBe((x + 400) % 256);
   });

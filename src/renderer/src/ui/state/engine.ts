@@ -13,7 +13,8 @@ engine.layers.namer = (kind, arg) =>
   kind === 'copy'
     ? t('layer.copy', { name: String(arg) })
     : t(kind === 'group' ? 'layer.group' : kind === 'shapes' ? 'layer.shapes' : 'layer.default', { n: arg });
-engine.anim.namer = (n) => t('piece.defaultName', { n });
+engine.anim.namer = (n, kind) => t(kind === 'group' ? 'piece.groupName' : 'piece.defaultName', { n });
+engine.anim.faceNamer = (face) => t(`box.${face}`);
 // The start-up document was created before the namer existed.
 for (const l of engine.doc.layers) if (!l.name) l.name = engine.layers.namer('layer', 1);
 

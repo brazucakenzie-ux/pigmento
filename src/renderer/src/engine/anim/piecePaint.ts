@@ -4,9 +4,9 @@ import type { Dab } from '../brush/dab';
 import type { Command } from '../history/History';
 import type { TileDelta } from '../raster/Surface';
 import type { I18nKey } from '../../i18n';
-import type { PieceState } from './interpolate';
 import { repeatAxes, type Piece } from './piece';
-import { FLAT_SPACE, placementOf, project, unproject, type Space } from './space';
+import type { Scene } from './scene';
+import { project, unproject } from './space';
 
 /**
  * How painting on a piece maps the canvas onto the piece's own pixels at one moment (the frame
@@ -39,13 +39,13 @@ const mod = (v: number, n: number): number => ((v % n) + n) % n;
 const EDGE_ON = 1e-3;
 
 /**
- * Painting on `piece` as it is at state s, seen by `space`, for a stroke starting at canvas point
- * `at`; null when it can't be painted there (scaled to nothing, seen edge-on, or not under `at`).
+ * Painting on `piece` as `scene` has it, for a stroke starting at canvas point `at`; null when it
+ * can't be painted there (scaled to nothing, seen edge-on, or not under `at`).
  */
-export function piecePaintMap(piece: Piece, s: PieceState, space: Space = FLAT_SPACE, at: Point | null = null): PiecePaintMap | null {
+export function piecePaintMap(piece: Piece, scene: Scene, at: Point | null = null): PiecePaintMap | null {
   const w = piece.src.width;
   const h = piece.src.height;
-  const pl = placementOf(s, piece.pivot, w, h, space);
+  const { placement: pl, state: s } = scene.pose(piece);
   const ax = repeatAxes(piece.repeat);
   const sx = ax.x ? s.scrollX : 0;
   const sy = ax.y ? s.scrollY : 0;

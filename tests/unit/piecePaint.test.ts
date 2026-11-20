@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { makePiece, pieceStateAt, setKey, type Piece } from '@engine/anim/piece';
+import { makePiece, setKey, type Piece } from '@engine/anim/piece';
+import { Scene } from '@engine/anim/scene';
 import { PiecePixelsCommand, piecePaintMap } from '@engine/anim/piecePaint';
 import { forPiece } from '@engine/tools/brushTool';
 import { defaultBrush } from '@engine/brush/types';
@@ -15,7 +16,7 @@ const dab = (x: number, y: number, size = 10): Dab => ({ x, y, size, angle: 0, r
 describe('painting on a piece maps the canvas onto its own pixels', () => {
   it('leaves an unmoved piece where it was lifted from', () => {
     const p = piece();
-    const map = piecePaintMap(p, pieceStateAt(p, 0))!;
+    const map = piecePaintMap(p, new Scene([p], 0))!;
     expect(map.toPiece({ x: 110, y: 45 })).toEqual({ x: 10, y: 5 });
     expect(map.scale).toBe(1);
     expect(map.fold(dab(10, 5))).toEqual([dab(10, 5)]);
@@ -24,7 +25,7 @@ describe('painting on a piece maps the canvas onto its own pixels', () => {
   it('follows a moved, scaled and turned piece both ways', () => {
     const p = piece();
     p.keyframes = setKey(p.keyframes, 0, { x: 300, y: 300, sx: 2, sy: 2, angle: Math.PI / 2 });
-    const map = piecePaintMap(p, pieceStateAt(p, 0))!;
+    const map = piecePaintMap(p, new Scene([p], 0))!;
     // The pivot (the middle) is now at (300, 300).
     const mid = map.toPiece({ x: 300, y: 300 })!;
     expect(mid.x).toBeCloseTo(25, 9);
@@ -43,7 +44,7 @@ describe('painting on a piece maps the canvas onto its own pixels', () => {
   it('sizes the brush and keeps a fixed nib angle as it looks on the canvas', () => {
     const p = piece();
     p.keyframes = setKey(p.keyframes, 0, { sx: 4, sy: 4, angle: Math.PI / 4 });
-    const map = piecePaintMap(p, pieceStateAt(p, 0))!;
+    const map = piecePaintMap(p, new Scene([p], 0))!;
     const settings = defaultBrush({ angle: 90 });
     const b = forPiece({ settings, size: 40, opacity: 1, pressure: false, smoothing: 0 }, map);
     expect(b.size).toBeCloseTo(10, 9);
@@ -56,7 +57,7 @@ describe('painting on a piece maps the canvas onto its own pixels', () => {
     const p = piece();
     p.repeat = 'x';
     p.keyframes = setKey(p.keyframes, 0, { scrollX: 7 });
-    const map = piecePaintMap(p, pieceStateAt(p, 0))!;
+    const map = piecePaintMap(p, new Scene([p], 0))!;
     // Two tiles to the right of where it was lifted, its scroll taken off: not folded yet.
     expect(map.toPiece({ x: 100 + 100 + 30, y: 50 })).toEqual({ x: 123, y: 10 });
     expect(map.fold(dab(123, 10)).map((d) => d.x)).toEqual([23]);
@@ -70,7 +71,7 @@ describe('painting on a piece maps the canvas onto its own pixels', () => {
   it('can’t paint a piece scaled to nothing', () => {
     const p = piece();
     p.keyframes = setKey(p.keyframes, 0, { sx: 0 });
-    expect(piecePaintMap(p, pieceStateAt(p, 0))).toBeNull();
+    expect(piecePaintMap(p, new Scene([p], 0))).toBeNull();
   });
 });
 

@@ -227,6 +227,25 @@ export class Overlay {
     c.restore();
   }
 
+  /** The edge a dragged piece will hinge onto if it's let go now: thick, over a light halo (screen points). */
+  hingeEdge(a: Point, b: Point): void {
+    const c = this.ctx;
+    c.save();
+    c.lineCap = 'round';
+    for (const [width, style] of [
+      [6, this.theme.handleFill],
+      [3, this.theme.smart],
+    ] as const) {
+      c.beginPath();
+      c.moveTo(a.x, a.y);
+      c.lineTo(b.x, b.y);
+      c.lineWidth = width;
+      c.strokeStyle = style;
+      c.stroke();
+    }
+    c.restore();
+  }
+
   line(a: Point, b: Point, dashed = false): void {
     const c = this.ctx;
     c.save();

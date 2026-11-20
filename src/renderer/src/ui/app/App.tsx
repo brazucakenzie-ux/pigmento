@@ -7,6 +7,7 @@ import { clearOwnAutosave, offerRecovery, startAutosave } from '../services/auto
 import { CanvasSizeDialog, NewImageDialog, PropertiesDialog, ResizeDialog, RotateDialog } from '../dialogs/ImageDialogs';
 import { ExportDialog } from '../dialogs/ExportDialog';
 import { AnimExportDialog } from '../dialogs/AnimExportDialog';
+import { BoxDialog } from '../dialogs/BoxDialog';
 import { GradientDialog } from '../dialogs/GradientDialog';
 import { FilterDialog } from '../dialogs/FilterDialog';
 import { SettingsDialog } from '../dialogs/SettingsDialog';
@@ -114,6 +115,8 @@ function DialogHost() {
       return <CanvasSizeDialog />;
     case 'rotate':
       return <RotateDialog />;
+    case 'box':
+      return <BoxDialog />;
     case 'properties':
       return <PropertiesDialog />;
     case 'editColors':

@@ -6,14 +6,15 @@ import type { Surface, Tile } from '../raster/Surface';
 import { TILE_SIZE } from '../raster/Surface';
 import type { PixelView } from '../raster/pixels';
 import type { View } from './View';
-import { backToFront, pieceBounds, pieceStateAt, pieceTouches, repeatAxes, type Piece, type Repeat } from '../anim/piece';
+import { repeatAxes, type Piece, type Repeat } from '../anim/piece';
 import { matChain, matTranslate } from '../core/matrix';
-import { placementOf, shadeOf, type Placement } from '../anim/space';
+import type { Placement } from '../anim/space';
+import { Scene } from '../anim/scene';
 import { pieceTiling } from '../anim/pieceRaster';
-import { sampleProjective } from '../anim/pieceProject';
+import { sampleProjective, sampleProjectiveBatch } from '../anim/pieceProject';
 import type { Tiling } from '../anim/pieceSample';
 import { PlaneRenderer } from './PlaneRenderer';
-import { piecesByLayer } from '../anim/pieceRaster';
+import { drawRuns, hingedIds, piecesByLayer, runSheets } from '../anim/pieceRaster';
 import { celAt, celIndexAt } from '../anim/cels';
 
 /** Onion-skin tints: drawings before the one shown, and after it. */
@@ -280,22 +281,24 @@ export class Renderer {
     frame = this.doc.timeline.frame,
     area: Rect = r ?? { x: 0, y: 0, w: this.doc.width, h: this.doc.height },
   ): void {
-    const space = this.doc.space;
-    for (const p of backToFront(pieces, frame, space)) {
-      const st = pieceStateAt(p, frame);
-      if (st.opacity <= 0) continue;
-      if (r && !pieceTouches(p, frame, r, space)) continue;
-      const pl = placementOf(st, p.pivot, p.src.width, p.src.height, space);
-      if (!pl.front && p.back === 'hide') continue;
+    const scene = new Scene(this.doc.pieces, frame, this.doc.spaceAt(frame));
+    const order = scene.backToFront(pieces).filter((p) => scene.shows(p) && (!r || scene.touches(p, r)));
+    for (const run of drawRuns(order, hingedIds(this.doc.pieces))) {
+      if (run.length > 1) {
+        this.drawJoined(ctx, run, scene, area, alpha);
+        continue;
+      }
+      const p = run[0];
+      const { state: st, placement: pl, opacity } = scene.pose(p);
       ctx.save();
-      ctx.globalAlpha = st.opacity * alpha;
+      ctx.globalAlpha = opacity * alpha;
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       if (!pl.affine) {
         // Tilted or turned: a true perspective image needs the GPU (or the CPU path if it can't).
         const tiling = pieceTiling(p, st);
-        const where = tiling ? area : rectIntersect(area, pieceBounds(p, frame, space));
-        const shade = shadeOf(st, pl.front, this.doc.light, p.shade);
+        const where = tiling ? area : rectIntersect(area, scene.bounds(p));
+        const shade = scene.shade(p, this.doc.light);
         if (where && !this.planes.draw(ctx, p.src, pl, tiling, where, shade)) this.drawOnCpu(ctx, p, pl, tiling, where, shade);
         ctx.restore();
         continue;
@@ -317,6 +320,29 @@ export class Renderer {
       }
       ctx.restore();
     }
+  }
+
+  /**
+   * Hinged faces next to each other in drawing order, drawn as one picture (on the GPU, or by the
+   * CPU path if it can't), so their seams are as solid as the faces.
+   */
+  private drawJoined(ctx: Ctx2D | CanvasRenderingContext2D, run: readonly Piece[], scene: Scene, area: Rect, alpha: number): void {
+    const sheets = runSheets(run, scene, this.doc.light);
+    let where: Rect | null = null;
+    for (const s of sheets) where = rectUnion(where, s.bounds);
+    where = where && rectIntersect(area, where);
+    if (!where) return;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    if (!this.planes.drawBatch(ctx, sheets, where)) {
+      const img = sampleProjectiveBatch(sheets, where);
+      if (img.w > 0 && img.h > 0) {
+        const c = new OffscreenCanvas(img.w, img.h);
+        ctx2d(c).putImageData(new ImageData(img.data as Uint8ClampedArray<ArrayBuffer>, img.w, img.h), 0, 0);
+        ctx.drawImage(c, img.x, img.y);
+      }
+    }
+    ctx.restore();
   }
 
   /** A piece in 3D drawn by the CPU path when the GPU can't (no WebGL2, or the GPU reset). */
@@ -428,7 +454,7 @@ export class Renderer {
         target.globalAlpha = top ? 1 : l.opacity;
         target.globalCompositeOperation = top || l.blend === 'normal' ? 'source-over' : l.blend;
         target.drawImage(m.canvas, 0, 0, this.doc.width, this.doc.height, 0, 0, w, h);
-        const pieces = this.doc.pieces.filter((p) => p.layerId === l.id);
+        const pieces = this.doc.pieces.filter((p) => p.layerId === l.id && p.kind === 'piece');
         if (pieces.length) {
           target.save();
           target.scale(w / this.doc.width, h / this.doc.height);
@@ -746,13 +772,14 @@ export class Renderer {
    */
   private drawOutside(ctx: CanvasRenderingContext2D, page: Rect): void {
     const frame = this.doc.timeline.frame;
+    const scene = new Scene(this.doc.pieces, frame, this.doc.spaceAt(frame));
     const { width: dw, height: dh } = this.doc;
     const out: Piece[] = [];
     for (const layer of walkLayers(this.doc.layers)) {
       if (layer.kind !== 'raster' || !this.doc.isEffectivelyVisible(layer.id)) continue;
       for (const p of this.doc.pieces) {
-        if (p.layerId !== layer.id) continue;
-        const b = pieceBounds(p, frame, this.doc.space);
+        if (p.layerId !== layer.id || p.kind !== 'piece') continue;
+        const b = scene.bounds(p);
         if (p.repeat !== 'none' || b.x < 0 || b.y < 0 || b.x + b.w > dw || b.y + b.h > dh) out.push(p);
       }
     }

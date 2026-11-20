@@ -81,6 +81,38 @@ test('every built-in brush matches its golden image', async () => {
   expect(changed).toEqual([]);
 });
 
+const CUBE = 200;
+
+/**
+ * A shaded box of six coloured faces at four fixed angles, drawn by the CPU path exports use, its
+ * hinges solid. After an intended change, run with PIGMENTO_UPDATE_GOLDEN=1 and review
+ * tests/golden/cube.png.
+ */
+test('the shaded box matches its golden image at every angle', async () => {
+  h = await launchApp();
+  const { page } = h;
+  await ready(page);
+  const sheet = await page.evaluate(() => window.__pigmentoTest!.cubeSheet());
+  const png = path.join(GOLDEN, 'cube.png');
+  const meta = path.join(GOLDEN, 'cube.json');
+  if (process.env.PIGMENTO_UPDATE_GOLDEN) {
+    mkdirSync(GOLDEN, { recursive: true });
+    writeFileSync(png, Buffer.from(sheet.png));
+    writeFileSync(meta, `${JSON.stringify({ cell: CUBE, ids: sheet.ids }, null, 1)}
+`);
+    test.info().annotations.push({ type: 'golden', description: `wrote ${sheet.ids.length} views to ${png}` });
+    return;
+  }
+  expect(existsSync(png), 'Golden image missing: run with PIGMENTO_UPDATE_GOLDEN=1').toBe(true);
+  const saved = JSON.parse(readFileSync(meta, 'utf8')) as { ids: string[] };
+  expect(sheet.ids).toEqual(saved.ids);
+  const counts = await page.evaluate(([a, b, c, k]) => window.__pigmentoTest!.compareSheets([...a], [...b], c, k), [sheet.png, [...readFileSync(png)], CUBE, sheet.ids.length] as const);
+  expect(counts[0], 'The cube sheet changed size').not.toBe(-1);
+  const changed = counts.map((n, i) => ({ id: sheet.ids[i], pixels: n })).filter((c) => c.id && c.pixels > CUBE * CUBE * 0.005);
+  if (changed.length) writeFileSync(test.info().outputPath('cube-actual.png'), Buffer.from(sheet.png));
+  expect(changed).toEqual([]);
+});
+
 const objects = async (page: Page) => (await page.evaluate(() => window.__pigmentoTest!.vectorObjects())) ?? [];
 
 async function click(page: Page, x: number, y: number): Promise<void> {

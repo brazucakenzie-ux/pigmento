@@ -3,6 +3,7 @@ import { matApply, matApplyRect, matChain, matRotate, matScale, type Mat } from 
 import type { Keyframe } from './interpolate';
 import { cloneKeyframe, type Piece } from './piece';
 import { MAX_STRENGTH, MIN_STRENGTH, type Camera } from './space';
+import type { CameraKey } from './cameraMove';
 
 const TAU = Math.PI * 2;
 
@@ -96,6 +97,14 @@ export function transformPieces(pieces: readonly Piece[], m: Mat): Piece[] {
   const q2: [number, number, number, number] = flips ? [ct, st, st, -ct] : [ct, st, -st, ct];
   const vec = (v: Point | null): Point | null => (v ? linear(lin, v) : null);
   return pieces.map((p) => {
+    // A linked piece is placed in its parent's pixels, so it goes wherever its parent goes.
+    if (p.link)
+      return {
+        ...p,
+        home: matApplyRect(m, p.home),
+        pivot: { ...p.pivot },
+        keyframes: p.keyframes.map(cloneKeyframe),
+      };
     let prevOld = 0;
     let prevNew = 0;
     let prev3d = { tilt: 0, turn: 0, oldTilt: 0, oldTurn: 0 };
@@ -159,4 +168,13 @@ export function transformCamera(cam: Camera, m: Mat, w: number, h: number, nw: n
   const f = (50 * Math.hypot(w, h)) / cam.strength;
   const strength = (50 * Math.hypot(nw, nh)) / (f * scale);
   return { x: p.x, y: p.y, strength: Math.min(MAX_STRENGTH, Math.max(MIN_STRENGTH, strength)) };
+}
+
+/**
+ * The camera's moves after the picture is transformed by m: each slide turns (and flips) with the
+ * picture and grows with it, as does each push.
+ */
+export function transformCameraKeys(keys: readonly CameraKey[], m: Mat): CameraKey[] {
+  const scale = Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
+  return keys.map((k) => ({ ...k, panX: m[0] * k.panX + m[2] * k.panY, panY: m[1] * k.panX + m[3] * k.panY, push: k.push * scale }));
 }
