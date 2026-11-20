@@ -17,6 +17,7 @@ Pigmento is a painting app for Windows 11 with the classic Paint layout. It also
 - **Brush Designer:** make your own brushes from a built-in tip, the selection, a PNG or a tip you draw, with grain textures and response curves. Share them as brush packs (`.pigmbrush`).
 - **Effects:** 11 adjustments and 11 filters with a live preview. They work on the selection, and run in the background with progress on big pictures.
 - **Animation:** cut a piece out of a layer and move, turn, stretch, skew and fade it with keyframes, with easing, curved motion paths and a movable pivot. You can also draw frame by frame with onion skin. A timeline shows it all, and it exports as an animated GIF or an MP4 video.
+- **Pieces in 3D:** tilt and turn a piece like a sheet of paper in front of a camera, shade it by a light, and paint on it wherever it is. Hinge pieces edge to edge and fold them into boxes. Tile pieces into scrolling backgrounds that can start off the canvas, and pan or push the camera so near things pass faster than far ones.
 - **View aids:** zoom, rulers, gridlines and pixel grid, guides and snapping, turning the view, and a reference image.
 - **Made for everyone:** keyboard-friendly throughout (F6 moves between regions), with customisable shortcuts and an adjustable interface size. There are six themes, each in light and dark, including high contrast, and the app passes an automated WCAG 2.1 AA check.
 - **Safe with your work:** autosave and recovery, plain-language errors, a log for problems, and checks before pictures too big for memory.
@@ -25,6 +26,7 @@ Pigmento is a painting app for Windows 11 with the classic Paint layout. It also
 |---|---|
 | ![The Shapes tab and its gallery](docs/screenshots/shapes.png) | ![The Brush Designer's dynamics](docs/screenshots/brush-designer.png) |
 | ![A drop shadow previewed live](docs/screenshots/effects.png) | ![A piece moving along its path, retimed on the timeline](docs/screenshots/animation.png) |
+| ![A shaded box folded from six hinged pieces, turned in 3D with the Perspective plane tool](docs/screenshots/pieces-3d.png) | |
 
 The [user guide](docs/user-guide.md) explains everything; it's also in the app under Help → User guide.
 

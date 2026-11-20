@@ -71,20 +71,20 @@ async function brushSheet(cellW: number, cellH: number, cols: number): Promise<{
 /** A test box's faces: each its own colour, with a dark mark in its top-left corner (a face turned or mirrored wrongly shows). */
 const CUBE_COLOURS: Record<BoxFace, [number, number, number]> = { front: [200, 60, 50], top: [220, 170, 40], bottom: [60, 140, 70], left: [50, 90, 200], right: [150, 70, 170], back: [90, 90, 90] };
 
-function cubeFaces(size: BoxSize): Record<BoxFace, { w: number; h: number; data: Uint8ClampedArray }> {
+function cubeFaces(size: BoxSize, marks = true): Record<BoxFace, { w: number; h: number; data: Uint8ClampedArray }> {
   const out = {} as Record<BoxFace, { w: number; h: number; data: Uint8ClampedArray }>;
   for (const f of BOX_FACES) {
     const { w, h } = faceSize(f, size);
     const data = new Uint8ClampedArray(w * h * 4);
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) data.set(x < 10 && y < 10 ? [20, 20, 20, 255] : [...CUBE_COLOURS[f], 255], (y * w + x) * 4);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) data.set(marks && x < 10 && y < 10 ? [20, 20, 20, 255] : [...CUBE_COLOURS[f], 255], (y * w + x) * 4);
     out[f] = { w, h, data };
   }
   return out;
 }
 
 /** A box turned by tilt and turn: its pieces (group first), seen by a camera at its middle. */
-function cubeAt(centre: { x: number; y: number }, size: BoxSize, tilt: number, turn: number, layerId: string): Piece[] {
-  const pieces = makeBox(newPieceId, layerId, centre, size, 0, { faces: cubeFaces(size), names: (f) => f, shade: 0.6 });
+function cubeAt(centre: { x: number; y: number }, size: BoxSize, tilt: number, turn: number, layerId: string, marks = true, names: (f: BoxFace) => string = (f) => f): Piece[] {
+  const pieces = makeBox(newPieceId, layerId, centre, size, 0, { faces: cubeFaces(size, marks), names, shade: 0.6 });
   pieces[0].keyframes = setKey(pieces[0].keyframes, 0, { tilt, turn });
   return pieces;
 }
@@ -388,11 +388,12 @@ export function installTestHook(): void {
       return p ? engine.anim.scene().placement(p).front : false;
     },
     /** A box of coloured faces on the active layer (one undo step), turned by tilt and turn: its face ids. */
-    addTestBox: (cx: number, cy: number, size: BoxSize, tilt: number, turn: number, hideBacks = false) => {
-      const pieces = cubeAt({ x: cx, y: cy }, size, tilt, turn, engine.doc.activeId);
+    addTestBox: (cx: number, cy: number, size: BoxSize, tilt: number, turn: number, hideBacks = false, marks = true, named = false) => {
+      const pieces = cubeAt({ x: cx, y: cy }, size, tilt, turn, engine.doc.activeId, marks, named ? engine.anim.faceNamer : undefined);
       if (hideBacks) for (const p of pieces) p.back = 'hide';
       if (!engine.anim.addTree(pieces, 'history.box')) return null;
-      return Object.fromEntries(pieces.map((p) => [p.kind === 'group' ? 'group' : p.name, p.id])) as Record<BoxFace | 'group', string>;
+      // By face (front, back…) whatever the faces are called.
+      return Object.fromEntries(pieces.map((p, i) => [p.kind === 'group' ? 'group' : BOX_FACES[i - 1], p.id])) as Record<BoxFace | 'group', string>;
     },
     pieceHandle: (id: string, x: number, y: number) => {
       const p = engine.anim.piece(id);

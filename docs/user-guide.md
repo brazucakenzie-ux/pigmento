@@ -150,7 +150,7 @@ The **Animate** tab makes things move. There are two ways to animate, and you ca
 The timeline (Animate → Timeline, or View → Timeline) sits under the picture:
 
 - **The ruler** at the top: click or drag it to go to a frame. With it focused, the arrow keys, Home and End move through the frames.
-- **Below the ruler:** a row for each pixel layer, with the pieces on that layer just under it.
+- **Below the ruler:** the **Camera** row, then a row for each pixel layer with the pieces on that layer just under it. A group's pieces are indented under the group.
 - **Playback:** Play (Ctrl+Space), the frame you're on, the length in frames, the frame rate (frames a second), and the playback mode: Loop, Once, or Back and forth.
 - **Frame keys:** , and . step back and forward a frame; Shift+, and Shift+. jump to the previous and next keyframe.
 
@@ -178,7 +178,69 @@ More things you can do:
 - **Keyframe menu:** right-click a diamond for its easing, Copy, Paste and Delete.
 - **Motion path:** shows as a dotted line with a dot at each keyframe. Drag a dot to move that keyframe.
 - **Curves:** Alt-drag a dot to bend the path there, then drag its handles to shape the curve. Double-click a dot, or use **Straighten**, to make it straight again.
-- **Rename or delete a piece:** double-click its name in the timeline to rename it, or right-click the name for its menu.
+- **Rename, duplicate or delete a piece:** double-click its name in the timeline to rename it, or right-click the name for its menu.
+
+### More ways to make a piece
+
+- **Piece from layer** turns a whole pixel layer into a piece.
+- **Place image…** brings in a picture file as a piece, in the middle of the canvas. It can be bigger than the canvas.
+- **Paste as piece** pastes the picture on the clipboard as a piece.
+
+Pieces can sit partly or wholly outside the canvas, so they can scroll in over time. View → **Pieces outside the canvas** shows the parts beyond the canvas faded around it, where you can see and grab them; **Fit to window** then takes them in. Only what's on the canvas is in the picture.
+
+### Repeating and scrolling
+
+**Repeat** in the options bar tiles copies of a piece on: Across, Down or Both ways, out to the edges (and to the horizon in 3D). **Scroll X** and **Scroll Y** slide the tiles along; key them for a scrolling background. The **loop** button beside them slides exactly one tile over the timeline, so the end leads straight back into the start.
+
+### Painting on a piece
+
+Tick **Paint on piece** in a painting tool's options (or press the brush on a piece's row in the timeline). The painting tools and Fill then paint the selected piece's own pixels instead of the layer. The paint lands under the pointer even when the piece is scaled, turned or tilted in 3D, and stays on the piece as it moves. Each stroke is one undo step.
+
+### Pieces in 3D
+
+The **Perspective plane** tool (M, or Animate → 3D → Plane) treats a piece as a sheet of paper in 3D:
+
+- **Move:** drag the piece. Ctrl-drag up pushes it further away, and down pulls it closer.
+- **Tilt:** drag the top or bottom handle, to lean the top back or forward.
+- **Turn:** drag a side handle, to swing it like a door.
+- **Spin:** drag the round handle.
+- **Resize:** drag a corner (Shift keeps the proportions).
+- **Pivot:** drag it to change what the piece turns about.
+- Shift snaps tilt and turn to 15° steps.
+
+The options bar has the piece's **Depth**, **Tilt**, **Turn** and **Spin**, all keyed like everything else, so a piece can fall over or spin in 3D. It also has:
+
+- **Shade:** how much the light darkens the piece as it turns away from it.
+- **Back:** what shows when the piece is turned round. Mirrored shows its pixels the other way round, like paper; Hidden shows nothing.
+
+### The camera and the light
+
+- **Vanishing point:** the camera looks at the picture from its vanishing point. It's the round handle on the horizon in the Perspective plane tool; drag it.
+- **Perspective** (Animate → 3D) sets how strong the perspective is: low looks flat, high looks close up.
+- **Perspective grid** (View) shows lines running to the vanishing point.
+- **Light** and **Height** (Animate → 3D) set where the light that shades pieces comes from.
+- **Camera moves:** select the **Camera** row in the timeline, then set **Pan X**, **Pan Y** and **Push** in the options bar, or use the arrow keys.
+  - They're keyed like a piece's values: the camera slides across, or moves in towards the picture.
+  - Near pieces slide past faster than far ones. The layers' own pixels stay put.
+
+### Hinges, groups and boxes
+
+- **Hinge two pieces:** drag a piece so one of its edges lies along an edge of another piece on the same layer. That edge lights up, and letting go hinges the pieces there.
+  - Edges of nearly the same length are made equal; otherwise the piece lines up with the nearer end.
+  - Hold Alt while you drag to move without snapping.
+- **Fold:** a hinged piece folds round its edge. Any of these folds it:
+  - drag the round handle on its far edge (Perspective plane tool);
+  - type a **Fold** angle (Shift with the arrow keys steps 15°);
+  - press Up and Down.
+
+  **Unhinge** lets it go where it is.
+- **Follows:** choose another piece in the **Follows** list, and this piece moves with it.
+- **Groups:** hinging a piece onto a free one makes a group to carry them both.
+  - Dragging any piece of the group moves it all, and the handles round its pivot tilt, turn and spin it.
+  - Alt-drag changes just one piece: a hinged piece folds, and one that follows another slides on it.
+  - **Centre pivot** makes the group turn about its middle.
+- **Box…** (Animate tab) makes six blank faces of the size you choose, hinged and folded into a box in the middle of the picture. Paint them with Paint on piece, and turn the box with the Perspective plane tool.
+- Where two faces meet there's never a line, at any angle.
 
 ### Drawing frame by frame
 
@@ -235,6 +297,8 @@ These are the defaults; F1 always shows the current ones.
 | Swap colours, Reset colours | X, D |
 | Settings | Ctrl+Alt+S |
 | Animate tool | A |
+| Perspective plane tool | M |
+| Move the selected piece (fold a hinged one, slide the camera when its row is selected) | Arrow keys (Shift: 10 px, or 15° for a fold) |
 | Play or stop the animation | Ctrl+Space |
 | Previous, next frame | , and . |
 | Previous, next keyframe | Shift+, and Shift+. |

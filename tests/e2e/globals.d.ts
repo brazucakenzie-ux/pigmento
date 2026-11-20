@@ -78,7 +78,7 @@ export interface PigmentoTestHook {
   perfStart(): void;
   perfLatency(): { median: number | null; p95: number | null };
   pieceFront(id: string): boolean;
-  addTestBox(cx: number, cy: number, size: { w: number; h: number; d: number }, tilt: number, turn: number, hideBacks?: boolean): Record<'front' | 'back' | 'top' | 'bottom' | 'left' | 'right' | 'group', string> | null;
+  addTestBox(cx: number, cy: number, size: { w: number; h: number; d: number }, tilt: number, turn: number, hideBacks?: boolean, marks?: boolean, named?: boolean): Record<'front' | 'back' | 'top' | 'bottom' | 'left' | 'right' | 'group', string> | null;
   addLayer(): string;
   groupLayers(ids: string[]): string | null;
   setLayerProps(id: string, p: Record<string, unknown>): void;

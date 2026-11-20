@@ -401,5 +401,5 @@ Decisions (agreed with the user):
   - Painting on a tilted piece takes a median of 10.8 ms from pointer to pixels.
   - The still of the box at 4000 × 3000 takes 0.57 s through the CPU path.
   - The 240-frame 1080p MP4 of the box scene takes 1.8 s.
-- [ ] 6.24 User guide (3D pieces, the camera, the Perspective plane tool, painting on pieces, repeat and scroll, hinges, groups, the box maker), shortcuts, README feature and screenshot, CHANGELOG 1.2.0, version 1.2.0 in `package.json`, welcome tour mention
+- [x] 6.24 User guide (3D pieces, the camera, the Perspective plane tool, painting on pieces, repeat and scroll, hinges, groups, the box maker), shortcuts, README feature and screenshot, CHANGELOG 1.2.0, version 1.2.0 in `package.json`, welcome tour mention
 - [ ] 6.25 `npm run check` green, installer rebuilt and smoke-tested; final report listing every 1.2.0 feature with its status; then, after asking, tag `v1.2.0` so `release.yml` builds the release (steps in `docs/releasing.md`)

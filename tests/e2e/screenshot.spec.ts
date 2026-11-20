@@ -775,3 +775,34 @@ test('capture welcome tour', async () => {
     await h.close();
   }
 });
+
+// Pieces in 3D (README): a shaded box over a sky and a field, its group's handles, and the timeline.
+test('capture 3D', async () => {
+  test.skip(!process.env.PIGMENTO_SCREENSHOT, 'Set PIGMENTO_SCREENSHOT=1 to capture screenshots');
+  const out = process.env.PIGMENTO_SCREENSHOT_DIR ?? path.resolve('test-results');
+  const h = await launchApp();
+  const { page } = h;
+  try {
+    await ready(page);
+    await page.getByRole('tab', { name: 'View' }).click();
+    await page.getByRole('button', { name: 'Light' }).click();
+    const ids = await page.evaluate(() => {
+      const t = window.__pigmentoTest!;
+      const layer = t.layers().activeId;
+      t.fillLayer(layer, { r: 200, g: 226, b: 246, a: 255 }, { x: 0, y: 0, w: 1280, h: 520 });
+      t.fillLayer(layer, { r: 176, g: 214, b: 160, a: 255 }, { x: 0, y: 520, w: 1280, h: 280 });
+      return t.addTestBox(640, 380, { w: 240, h: 200, d: 200 }, -0.32, -0.62, false, false, true)!;
+    });
+    await page.getByRole('tab', { name: 'Animate' }).click();
+    await page.locator('.ribbon').getByRole('button', { name: 'Timeline' }).click();
+    await page.locator('.canvas-host').focus();
+    await page.keyboard.press('m');
+    await page.evaluate((id) => window.__pigmentoTest!.selectPiece(id), ids.group);
+    await page.mouse.move(1200, 120);
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: path.join(out, 'pieces-3d.png') });
+    console.warn('errors:', JSON.stringify(h.errors));
+  } finally {
+    await h.close();
+  }
+});

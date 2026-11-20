@@ -317,6 +317,10 @@
   flex-direction: column;
   gap: 0;
 }
+/* Stacks of number fields side by side (the 3D group): a unit mustn't run into the next label. */
+.rb-fields + .rb-fields {
+  margin-left: 10px;
+}
 .rb-grid {
   display: grid;
   grid-auto-flow: column;
