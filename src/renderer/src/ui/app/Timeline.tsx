@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, 
 import { EASINGS, type Easing } from '@engine/anim/interpolate';
 import type { KeyChange } from '@engine/anim/piece';
 import { LOOP_MODES, MAX_FPS, MAX_FRAMES, MIN_FPS, type LoopMode } from '@engine/anim/timeline';
-import type { PieceInfo } from '@engine/anim/AnimationController';
+import type { PieceInfo, ShapeKeysInfo } from '@engine/anim/AnimationController';
 import type { LayerNode } from '@engine/doc/LayerController';
 import { toolRegistry } from '@engine/tools/ToolRegistry';
 import { t, type I18nKey } from '../../i18n';
@@ -211,12 +211,25 @@ function PieceRow({ piece, index, selected, frame }: { piece: PieceInfo; index: 
   );
 }
 
-/** The camera's row: keyframes of its moves (pan and push), edited like a piece's. */
-function CameraRow({ keys: list, selected, frame }: { keys: { frame: number; easing: Easing }[]; selected: boolean; frame: number }) {
+/** What a row of keyframes (the camera's, a shape's trim) does when it's used. */
+interface KeyRowProps {
+  name: string;
+  /** Extra class for the row. */
+  kind: string;
+  keys: { frame: number; easing: Easing }[];
+  selected: boolean;
+  frame: number;
+  select(): void;
+  move(from: number, to: number): boolean;
+  remove(frame: number): void;
+  setEasing(frame: number, easing: Easing): void;
+}
+
+/** A row of keyframes edited like a piece's: drag a diamond to retime it, right-click for its easing and Delete. */
+function KeyRow({ name, kind, keys: list, selected, frame, select, move: moveKey, remove, setEasing }: KeyRowProps) {
   const [drag, setDrag] = useState<{ from: number; to: number } | null>(null);
   const [menu, setMenu] = useState<number | null>(null);
   const anchor = useRef<HTMLElement | null>(null);
-  const name = t('camera.row');
   const frameAt = (clientX: number, el: HTMLElement): number => {
     const row = el.closest('.tl-row');
     const left = row ? row.getBoundingClientRect().left : 0;
@@ -225,7 +238,7 @@ function CameraRow({ keys: list, selected, frame }: { keys: { frame: number; eas
   const onKeyDown = (e: ReactPointerEvent<HTMLButtonElement>, k: number) => {
     if (e.button === 2) return;
     e.stopPropagation();
-    engine.anim.selectCamera();
+    select();
     engine.anim.setFrame(k);
     const el = e.currentTarget;
     let to = k;
@@ -239,7 +252,7 @@ function CameraRow({ keys: list, selected, frame }: { keys: { frame: number; eas
       setDrag(null);
       if (to === k) return;
       if (to >= engine.anim.timeline.length) engine.anim.setTimeline({ length: to + 1 });
-      if (engine.anim.moveCameraKey(k, to)) engine.anim.setFrame(to);
+      if (moveKey(k, to)) engine.anim.setFrame(to);
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
@@ -247,12 +260,12 @@ function CameraRow({ keys: list, selected, frame }: { keys: { frame: number; eas
   const keys = list.map((k) => ({ ...k, at: k.frame, frame: drag && k.frame === drag.from ? drag.to : k.frame })).sort((a, b) => a.frame - b.frame);
   return (
     <div
-      className={`tl-row tl-piece-row tl-camera-row ${selected ? 'selected' : ''}`}
+      className={`tl-row tl-piece-row ${kind} ${selected ? 'selected' : ''}`}
       role="group"
       aria-label={name}
       onPointerDown={(e) => {
         if (e.button !== 0) return;
-        engine.anim.selectCamera();
+        select();
         engine.anim.setFrame(frameAt(e.clientX, e.currentTarget));
       }}
     >
@@ -275,17 +288,17 @@ function CameraRow({ keys: list, selected, frame }: { keys: { frame: number; eas
             onContextMenu={(e) => {
               e.preventDefault();
               anchor.current = e.currentTarget;
-              engine.anim.selectCamera();
+              select();
               setMenu(k.frame);
             }}
             onKeyDown={(e: ReactKeyboardEvent<HTMLButtonElement>) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                engine.anim.selectCamera();
+                select();
                 engine.anim.setFrame(k.frame);
               } else if (e.key === 'Delete') {
                 e.preventDefault();
-                engine.anim.removeCameraKey(k.frame);
+                remove(k.frame);
               } else if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) {
                 e.preventDefault();
                 anchor.current = e.currentTarget;
@@ -293,7 +306,7 @@ function CameraRow({ keys: list, selected, frame }: { keys: { frame: number; eas
               } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e.altKey) {
                 e.preventDefault();
                 const to = k.frame + (e.key === 'ArrowLeft' ? -1 : 1);
-                if (engine.anim.moveCameraKey(k.frame, to)) engine.anim.setFrame(to);
+                if (moveKey(k.frame, to)) engine.anim.setFrame(to);
               }
             }}
           >
@@ -311,14 +324,67 @@ function CameraRow({ keys: list, selected, frame }: { keys: { frame: number; eas
           <SubMenu label={t('timeline.easing')}>
             {(close) =>
               EASINGS.map((ease: Easing) => (
-                <MenuItem key={ease} label={t(`easing.${ease}` as I18nKey)} checked={list.find((k) => k.frame === menu)?.easing === ease} close={close} onSelect={() => engine.anim.setCameraKey(menu, { easing: ease })} />
+                <MenuItem key={ease} label={t(`easing.${ease}` as I18nKey)} checked={list.find((k) => k.frame === menu)?.easing === ease} close={close} onSelect={() => setEasing(menu, ease)} />
               ))
             }
           </SubMenu>
           <MenuSeparator />
-          <MenuItem label={t('timeline.deleteKey')} icon="keyframe-delete" close={() => setMenu(null)} onSelect={() => engine.anim.removeCameraKey(menu)} />
+          <MenuItem label={t('timeline.deleteKey')} icon="keyframe-delete" close={() => setMenu(null)} onSelect={() => remove(menu)} />
         </Menu>
       ) : null}
+    </div>
+  );
+}
+
+/** The camera's row: keyframes of its moves (pan and push), edited like a piece's. */
+function CameraRow({ keys, selected, frame }: { keys: { frame: number; easing: Easing }[]; selected: boolean; frame: number }) {
+  return (
+    <KeyRow
+      name={t('camera.row')}
+      kind="tl-camera-row"
+      keys={keys}
+      selected={selected}
+      frame={frame}
+      select={() => engine.anim.selectCamera()}
+      move={(from, to) => engine.anim.moveCameraKey(from, to)}
+      remove={(f) => engine.anim.removeCameraKey(f)}
+      setEasing={(f, easing) => engine.anim.setCameraKey(f, { easing })}
+    />
+  );
+}
+
+/** A shape's row under its layer: the keyframes of its trim. */
+function ShapeRow({ shape, name, frame }: { shape: ShapeKeysInfo; name: string; frame: number }) {
+  return (
+    <KeyRow
+      name={name}
+      kind="tl-shape-row"
+      keys={shape.keys}
+      selected={false}
+      frame={frame}
+      select={() => engine.selectShape(shape.layerId, shape.id)}
+      move={(from, to) => engine.moveShapeTrimKey(shape.layerId, shape.id, from, to)}
+      remove={(f) => engine.removeShapeTrimKey(shape.layerId, shape.id, f)}
+      setEasing={(f, easing) => engine.setShapeTrimKeyEasing(shape.layerId, shape.id, f, easing)}
+    />
+  );
+}
+
+/** A shape layer's row: just a still bar (its shapes' keyed trims have rows of their own beneath it). */
+function ShapeLayerRow({ layer, length, active }: { layer: LayerNode; length: number; active: boolean }) {
+  return (
+    <div
+      className={`tl-row tl-layer-row ${active ? 'selected' : ''}`}
+      role="group"
+      aria-label={layer.name}
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        if (useUi.getState().layers.activeId !== layer.id) engine.layers.setActive(layer.id);
+        const row = e.currentTarget.getBoundingClientRect();
+        engine.anim.setFrame(Math.max(0, Math.min(length - 1, Math.floor((e.clientX - row.left) / CELL))));
+      }}
+    >
+      <span className="tl-still" style={{ width: length * CELL }} />
     </div>
   );
 }
@@ -495,12 +561,12 @@ function Ruler({ length, frame }: { length: number; frame: number }) {
   );
 }
 
-/** Pixel layers, top to bottom like the Layers panel. */
-function pixelLayers(tree: LayerNode[]): LayerNode[] {
+/** Pixel layers, and shape layers with keyed shapes, top to bottom like the Layers panel. */
+function pixelLayers(tree: LayerNode[], keyed: ReadonlySet<string> = new Set()): LayerNode[] {
   const out: LayerNode[] = [];
   const walk = (nodes: LayerNode[]) => {
     for (const n of [...nodes].reverse()) {
-      if (n.kind === 'raster') out.push(n);
+      if (n.kind === 'raster' || (n.kind === 'vector' && keyed.has(n.id))) out.push(n);
       else if (n.kind === 'group') walk(n.children);
     }
   };
@@ -633,7 +699,7 @@ export function Timeline() {
   const settings = useUi((s) => s.settings.anim);
   const tree = useUi((s) => s.layers.tree);
   const activeId = useUi((s) => s.layers.activeId);
-  const layers = pixelLayers(tree);
+  const layers = pixelLayers(tree, new Set(anim.shapes.map((sh) => sh.layerId)));
   const [height, setHeight] = useState(settings.timelineHeight);
   const body = useRef<HTMLDivElement | null>(null);
   useEffect(() => setHeight(settings.timelineHeight), [settings.timelineHeight]);
@@ -650,10 +716,12 @@ export function Timeline() {
   // The camera, then each layer and the pieces on it (top first, as the Layers panel stacks them),
   // the pieces linked under one indented beneath it.
   const pieceIndex = new Map(anim.pieces.map((p, i) => [p.id, i]));
-  const rows: ({ kind: 'camera' } | { kind: 'layer'; layer: LayerNode } | { kind: 'piece'; piece: PieceInfo; index: number; level: number })[] = [];
+  const rows: ({ kind: 'camera' } | { kind: 'layer'; layer: LayerNode } | { kind: 'piece'; piece: PieceInfo; index: number; level: number } | { kind: 'shape'; shape: ShapeKeysInfo; name: string })[] = [];
   if (anim.pieces.length) rows.push({ kind: 'camera' });
   for (const l of layers) {
     rows.push({ kind: 'layer', layer: l });
+    // A shape layer's keyed shapes, top first.
+    for (const sh of anim.shapes.filter((x) => x.layerId === l.id).reverse()) rows.push({ kind: 'shape', shape: sh, name: t('timeline.shapeRow', { layer: l.name, n: sh.n }) });
     for (const r of treeRows(anim.pieces, l.id)) rows.push({ kind: 'piece', piece: r.piece, index: pieceIndex.get(r.piece.id)!, level: r.level });
   }
   const listed = new Set(layers.map((l) => l.id));
@@ -797,6 +865,13 @@ export function Timeline() {
                     <span className="tl-name-text">{t('camera.row')}</span>
                   </button>
                 </div>
+              ) : r.kind === 'shape' ? (
+                <div key={`shape-${r.shape.id}`} role="listitem" className="tl-name-row tl-piece-name" data-level={1} style={{ paddingInlineStart: 12 }}>
+                  <button type="button" className="tl-name" data-tip={t('timeline.shapeRowTip')} onClick={() => engine.selectShape(r.shape.layerId, r.shape.id)}>
+                    <Icon name="pen" size={13} />
+                    <span className="tl-name-text">{r.name}</span>
+                  </button>
+                </div>
               ) : r.kind === 'layer' ? (
                 <div key={r.layer.id} role="listitem" className="tl-name-row">
                   <button
@@ -823,13 +898,17 @@ export function Timeline() {
             {rows.map((r) =>
               r.kind === 'camera' ? (
                 <CameraRow key="camera" keys={anim.cameraKeys} selected={anim.cameraSelected} frame={anim.frame} />
+              ) : r.kind === 'shape' ? (
+                <ShapeRow key={`shape-${r.shape.id}`} shape={r.shape} name={r.name} frame={anim.frame} />
+              ) : r.kind === 'layer' && r.layer.kind === 'vector' ? (
+                <ShapeLayerRow key={r.layer.id} layer={r.layer} length={anim.length} active={r.layer.id === activeId} />
               ) : r.kind === 'layer' ? (
                 <LayerRow key={r.layer.id} layer={r.layer} starts={anim.cels[r.layer.id]} length={anim.length} frame={anim.frame} active={r.layer.id === activeId} />
               ) : (
                 <PieceRow key={r.piece.id} piece={r.piece} index={r.index} selected={r.piece.id === anim.selectedId} frame={anim.frame} />
               ),
             )}
-            {anim.pieces.length === 0 && Object.keys(anim.cels).length === 0 ? <p className="tl-empty">{t('timeline.empty')}</p> : null}
+            {anim.pieces.length === 0 && Object.keys(anim.cels).length === 0 && anim.shapes.length === 0 ? <p className="tl-empty">{t('timeline.empty')}</p> : null}
           </div>
           <div className="tl-playhead" aria-hidden="true" style={{ left: anim.frame * CELL + CELL / 2 }} />
         </div>

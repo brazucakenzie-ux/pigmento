@@ -25,6 +25,7 @@ export type DialogState =
   | { kind: 'canvasSize' }
   | { kind: 'rotate' }
   | { kind: 'box' }
+  | { kind: 'drawOn'; mode: 'drawOn' | 'eraseBehind' }
   | { kind: 'properties' }
   | { kind: 'editColors'; target: 'primary' | 'secondary' }
   | { kind: 'quality'; format: ImageFormat; transparent: boolean; layers: boolean; selections: boolean; resolve: (q: number | null) => void }
@@ -151,11 +152,11 @@ export const useUi = create<UiState>(() => ({
   shapeLibrary: 0,
   symmetry: { mode: 'off', segments: 6, center: null },
   reference: null,
-  animation: { fps: 12, length: 24, loop: 'loop', frame: 0, pieces: [], selectedId: null, current: null, playing: false, cels: {}, paintOnPiece: false, camera: { x: 0, y: 0, strength: 50 }, light: { angle: -30, height: 45 }, cameraSelected: false, cameraKeys: [], cameraMove: null },
+  animation: { fps: 12, length: 24, loop: 'loop', frame: 0, pieces: [], selectedId: null, current: null, playing: false, cels: {}, paintOnPiece: false, camera: { x: 0, y: 0, strength: 50 }, light: { angle: -30, height: 45 }, cameraSelected: false, cameraKeys: [], cameraMove: null, shapes: [] },
   brushLibrary: 0,
   patterns: [],
   guides: 0,
-  vectorSelection: { count: 0, groups: 0, bounds: null, shape: null },
+  vectorSelection: { count: 0, groups: 0, bounds: null, shape: null, trim: null, trimKeyed: false, trimKey: null, followers: [], tie: null },
 }));
 
 let pendingPatch: Partial<Settings> = {};

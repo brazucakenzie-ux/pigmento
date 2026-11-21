@@ -10,7 +10,7 @@ import { t, type I18nKey } from '../../i18n';
 import { Icon } from '../icons/Icon';
 import { NumberField, Segmented, Slider } from '../components/Controls';
 import { engine } from '../state/engine';
-import { useUi } from '../state/store';
+import { openDialog, useUi } from '../state/store';
 import { actions, runAction } from '../actions/actions';
 import { GradientButton, PatternPicker } from './PaintOptions';
 import { SelectedShapeParams, ShapeOption, ShapeToolParams } from './ShapeGallery';
@@ -300,6 +300,105 @@ function VectorBar() {
       {group(['bringToFront', 'bringForward', 'sendBackward', 'sendToBack'])}
       {group(['groupShapes', 'ungroupShapes'])}
       {group(['convertToPath', 'saveShape', 'rasterizeLayer'])}
+    </span>
+  );
+}
+
+/** How much of the selected shapes' outlines shows: Start, End and Offset, in percent of their length. */
+function TrimFields() {
+  const sel = useUi((s) => s.vectorSelection);
+  const length = useUi((s) => s.animation.length);
+  const pieces = useUi((s) => s.animation.pieces);
+  const trim = sel.trim;
+  if (!trim) return null;
+  const keyed = sel.trimKey !== null;
+  const pieceName = (id: string) => {
+    const i = pieces.findIndex((p) => p.id === id);
+    return i < 0 ? '' : pieces[i].name || t('piece.defaultName', { n: i + 1 });
+  };
+  const tieValue = sel.tie ? `${sel.tie.end}:${sel.tie.piece}` : '';
+  const blur = () => (document.activeElement as HTMLElement | null)?.blur();
+  const field = (key: 'start' | 'end' | 'offset', labelKey: I18nKey, min: number, max: number) => {
+    const label = t(labelKey);
+    return (
+      <span className="opt tf-field">
+        <span>{label}</span>
+        <NumberField className="num tf-num" value={Math.round(trim[key] * 1000) / 10} decimals={1} min={min} max={max} shiftStep={10} label={label} onChange={(v) => engine.trimVector({ [key]: v / 100 })} onEnter={blur} />
+        <span className="unit">%</span>
+      </span>
+    );
+  };
+  return (
+    <span className="opt trim-bar" role="group" aria-label={t('trim.group')} data-tip={t('trim.tip')}>
+      <span>{t('trim.group')}</span>
+      {length > 1 ? (
+        <>
+          <button type="button" className="icon-btn" aria-pressed={keyed} aria-label={t(keyed ? 'trim.keyed' : 'trim.addKey')} data-tip={t(keyed ? 'trim.keyed' : 'trim.addKey')} onClick={() => !keyed && engine.keyTrim()}>
+            <Icon name={keyed ? 'keyframe' : 'keyframe-add'} size={16} />
+          </button>
+          <button type="button" className="icon-btn" aria-label={t('trim.deleteKey')} data-tip={t('trim.deleteKey')} disabled={!keyed} onClick={() => engine.unkeyTrim()}>
+            <Icon name="keyframe-delete" size={16} />
+          </button>
+        </>
+      ) : null}
+      {field('start', 'trim.start', 0, 100)}
+      {field('end', 'trim.end', 0, 100)}
+      {field('offset', 'trim.offset', -100000, 100000)}
+      {sel.followers.length || sel.tie ? (
+        <label className="opt" data-tip={t('trim.tieTip')}>
+          <span>{t('trim.tie')}</span>
+          <select
+            className="select"
+            aria-label={t('trim.tie')}
+            value={tieValue}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (!v) return engine.tieTrim(null);
+              const [end, piece] = [v.slice(0, v.indexOf(':')), v.slice(v.indexOf(':') + 1)];
+              engine.tieTrim({ piece, end: end === 'end' ? 'end' : 'start', gap: sel.tie?.gap ?? 0 });
+            }}
+          >
+            <option value="">{t('trim.tieNone')}</option>
+            {[...new Set([...sel.followers, ...(sel.tie ? [sel.tie.piece] : [])])].flatMap((id) => [
+              <option key={`start:${id}`} value={`start:${id}`}>
+                {t('trim.tieStart', { piece: pieceName(id) })}
+              </option>,
+              <option key={`end:${id}`} value={`end:${id}`}>
+                {t('trim.tieEnd', { piece: pieceName(id) })}
+              </option>,
+            ])}
+          </select>
+        </label>
+      ) : null}
+      {sel.tie ? (
+        <span className="opt tf-field" data-tip={t('trim.gapTip')}>
+          <span>{t('trim.gap')}</span>
+          <NumberField className="num tf-num" value={Math.round(sel.tie.gap)} min={-100000} max={100000} label={t('trim.gap')} onChange={(v) => sel.tie && engine.tieTrim({ ...sel.tie, gap: v })} onEnter={blur} />
+          <span className="unit">px</span>
+        </span>
+      ) : null}
+      {sel.trimKey ? (
+        <label className="opt">
+          <span>{t('trim.easing')}</span>
+          <select className="select" aria-label={t('trim.easing')} value={sel.trimKey.easing} onChange={(e) => engine.setTrimEasing(e.target.value as Easing)}>
+            {EASINGS.map((e) => (
+              <option key={e} value={e}>
+                {t(`easing.${e}` as I18nKey)}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+      {length > 1 ? (
+        <>
+          <button type="button" className="btn" data-tip={t('trim.drawOnTip')} onClick={() => openDialog({ kind: 'drawOn', mode: 'drawOn' })}>
+            {t('trim.drawOn')}
+          </button>
+          <button type="button" className="btn" data-tip={t('trim.eraseBehindTip')} onClick={() => openDialog({ kind: 'drawOn', mode: 'eraseBehind' })}>
+            {t('trim.eraseBehind')}
+          </button>
+        </>
+      ) : null}
     </span>
   );
 }
@@ -816,6 +915,7 @@ export function OptionsBar() {
         {tool.symmetry && !simple ? <SymmetryControl /> : null}
         <PathBar />
         {toolId === 'move' && shapeLayer ? <SelectedShapeParams /> : null}
+        {toolId === 'move' && shapeLayer ? <TrimFields /> : null}
         {toolId === 'move' ? <VectorBar /> : null}
       </OptionScroller>
       {live ? (

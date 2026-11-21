@@ -71,6 +71,7 @@ export interface PigmentoTestHook {
   exportFramePixel(frame: number, x: number, y: number): { r: number; g: number; b: number; a: number };
   pieceHandle(id: string, x: number, y: number): { x: number; y: number };
   cubeSheet(): Promise<{ ids: string[]; w: number; h: number; png: number[] }>;
+  trimSheet(): Promise<{ ids: string[]; w: number; h: number; png: number[] }>;
   selectCamera(): void;
   perfBoxScene(background?: boolean): { group: string; background: string | null; width: number };
   dragTimes(id: string, steps: number): number[];

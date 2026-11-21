@@ -12,6 +12,11 @@ import '../shapes/library';
 import { assetCanvas } from './assets';
 import { shapeBounds, walkShapes, type VectorNode, type VectorShape } from './model';
 import { arrowHead, dashArray, gradientStops, hasArrows, lineDefaults, linearEnds, MITER_LIMIT, outlineReach, type ShapeGradient } from './style';
+import { shapeOutline } from './convert';
+import { measureOutline, piecePoints, trimPieces, type Trim, type TrimPiece } from './trim';
+
+/** A shape's trim at the frame being drawn (for shapes whose trim is keyed). */
+export type TrimResolver = (s: VectorShape) => Trim | undefined;
 
 /** What's needed to draw a shape (a live ShapeObject or a vector object). */
 export interface ShapeGeom {
@@ -24,6 +29,8 @@ export interface ShapeGeom {
   readonly subpaths?: SubPaths;
   readonly unitPath?: SubPaths;
   readonly fillRule?: 'evenodd' | 'nonzero';
+  /** How much of the outline shows (see trim.ts; none: all of it). */
+  readonly trim?: Trim;
 }
 
 type Ctx = OffscreenCanvasRenderingContext2D;
@@ -279,6 +286,45 @@ export function arrowParts(g: ShapeGeom): { points: Point[]; heads: { points: Po
   return { points: pts, heads: heads.filter((h): h is NonNullable<typeof h> => h !== null) };
 }
 
+/**
+ * What of a shape's outline shows under its trim, as pieces in document coordinates (each with
+ * where it starts along its outline, for dashes); null when it isn't trimmed (all of it shows).
+ */
+export function trimmedOutline(g: ShapeGeom, dashed: boolean): TrimPiece[] | null {
+  if (!g.trim) return null;
+  const o = shapeOutline(g);
+  return o ? trimPieces(measureOutline(o.subpaths), g.trim, dashed) : null;
+}
+
+/** A trimmed line or curve: the part that shows, as its points (for its arrowheads), and where it starts. */
+export function trimmedLine(pieces: readonly TrimPiece[]): { points: Point[]; from: number } | null {
+  const p = pieces[0];
+  const points = p ? piecePoints(p) : null;
+  return points ? { points, from: p.from } : null;
+}
+
+/** Stroke what shows of a trimmed outline (the context is in the shape's frame, as for its whole outline). */
+function strokeTrimmed(ctx: Ctx, g: ShapeGeom, f: Frame, pieces: readonly TrimPiece[], paint: string | CanvasGradient): void {
+  if (arrowsOf(g)) {
+    const line = trimmedLine(pieces);
+    if (!line) return;
+    ctx.lineDashOffset = line.from;
+    strokeWithArrows(ctx, { ...g, points: line.points }, paint);
+    return;
+  }
+  const inv = f.matrix ? f.matrix.inverse() : null;
+  for (const p of pieces) {
+    const doc = toPath2D(p.cmds);
+    let path = doc;
+    if (inv) {
+      path = new Path2D();
+      path.addPath(doc, inv);
+    }
+    ctx.lineDashOffset = p.from;
+    ctx.stroke(path);
+  }
+}
+
 function strokeWithArrows(ctx: Ctx, g: ShapeGeom, paint: string | CanvasGradient): void {
   const parts = arrowParts(g);
   if (!parts) return;
@@ -341,8 +387,12 @@ export function paintShape(ctx: Ctx, g: ShapeGeom, open = false, rubber: Point |
     ctx.lineJoin = join;
     ctx.miterLimit = MITER_LIMIT;
     ctx.lineCap = cap;
-    ctx.setLineDash(dashArray(style.dash, style.width, cap));
-    if (arrowsOf(g) && !open) strokeWithArrows(ctx, g, paint);
+    const dash = dashArray(style.dash, style.width, cap);
+    ctx.setLineDash(dash);
+    // Trimmed, only part of the outline shows (not while it's being drawn).
+    const cut = open ? null : trimmedOutline(g, dash.length > 0);
+    if (cut) strokeTrimmed(ctx, g, f, cut, paint);
+    else if (arrowsOf(g) && !open) strokeWithArrows(ctx, g, paint);
     else ctx.stroke(f.path);
   }
   ctx.restore();
@@ -380,16 +430,16 @@ export function drawVectorShape(ctx: Ctx, s: VectorShape, docW: number, docH: nu
   ctx.drawImage(scratch, 0, 0, area.w, area.h, area.x, area.y, area.w, area.h);
 }
 
-export function drawNodes(ctx: Ctx, nodes: readonly VectorNode[], docW: number, docH: number): void {
-  for (const s of walkShapes(nodes)) drawVectorShape(ctx, s, docW, docH);
+export function drawNodes(ctx: Ctx, nodes: readonly VectorNode[], docW: number, docH: number, trimAt: TrimResolver | null = null): void {
+  for (const s of walkShapes(nodes)) drawVectorShape(ctx, trimAt ? { ...s, trim: trimAt(s) } : s, docW, docH);
 }
 
 /** The objects as pixels (for blending, export, flattening and the colour picker). */
-export function rasterizeNodes(nodes: readonly VectorNode[], w: number, h: number): Surface {
+export function rasterizeNodes(nodes: readonly VectorNode[], w: number, h: number, trimAt: TrimResolver | null = null): Surface {
   if (nodes.length === 0) return new Surface(w, h);
   const c = new OffscreenCanvas(w, h);
   const ctx = c.getContext('2d', { willReadFrequently: true })!;
-  drawNodes(ctx, nodes, w, h);
+  drawNodes(ctx, nodes, w, h, trimAt);
   const s = Surface.fromRGBA(w, h, ctx.getImageData(0, 0, w, h).data);
   s.compact();
   return s;

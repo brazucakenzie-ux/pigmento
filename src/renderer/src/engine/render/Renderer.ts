@@ -2,6 +2,7 @@ import { toCss } from '../core/color';
 import { rectIntersect, rectUnion, type Rect } from '../core/geometry';
 import { walkLayers, type GroupLayer, type Layer, type PaintDocument, type RasterLayer, type VectorLayer } from '../doc/Document';
 import { drawNodes } from '../vector/render';
+import { tiedTrimAt } from '../anim/follow';
 import type { Surface, Tile } from '../raster/Surface';
 import { TILE_SIZE } from '../raster/Surface';
 import type { PixelView } from '../raster/pixels';
@@ -36,6 +37,8 @@ interface Mirror {
   surface: Surface | null;
   /** Shape layers: the object version last drawn. */
   version: number;
+  /** Shape layers with keyed trims: the frame last drawn. */
+  frame?: number;
 }
 
 /** A piece's GPU copy and the tiles it was last uploaded from. */
@@ -190,13 +193,15 @@ export class Renderer {
   }
 
   /** Redraw a shape layer's canvas from its objects if they changed since last time. */
-  private drawVector(layer: VectorLayer): boolean {
+  /** Draw a shape layer's objects into its copy (at `frame`, for keyed trims) if they changed since. */
+  private drawVector(layer: VectorLayer, frame = this.doc.timeline.frame): boolean {
     const m = this.mirrorFor(layer);
-    if (m.version === layer.version) return false;
+    if (m.version === layer.version && (!layer.keyed || m.frame === frame)) return false;
     m.ctx.setTransform(1, 0, 0, 1, 0, 0);
     m.ctx.clearRect(0, 0, m.canvas.width, m.canvas.height);
-    drawNodes(m.ctx, layer.objects, this.doc.width, this.doc.height);
+    drawNodes(m.ctx, layer.objects, this.doc.width, this.doc.height, layer.keyed ? (s) => tiedTrimAt(this.doc, layer.id, s, frame) : null);
     m.version = layer.version;
+    m.frame = frame;
     return true;
   }
 
@@ -642,7 +647,7 @@ export class Renderer {
             source = iso.canvas;
           }
         } else if (layer.kind === 'vector') {
-          this.drawVector(layer);
+          this.drawVector(layer, frame);
           source = this.mirrorFor(layer).canvas;
         } else {
           const g = this.groupCanvas(layer);

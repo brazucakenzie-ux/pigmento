@@ -91,6 +91,7 @@ Home → Shapes has Line, Curve, Rectangle, Rounded rectangle, Ellipse and Polyg
 - The options bar chooses outline, fill or both, and the line width, dashes, caps, joins and arrowheads. Fills can be solid, a gradient, a pattern or an image.
 - **Draw as: Shape layer** keeps shapes editable: use the Move tool (V) to select, move, resize, rotate or recolour them later. **Pixels** paints them straight into the layer.
 - The **Pen** (N) draws your own paths: click for corners, drag for curves.
+- **Trim** (in the Move tool's options, with shapes selected) shows only part of a shape's outline: from **Start** to **End**, as percentages of its length, slid along by **Offset**. Offset goes round and round a closed shape. Only the outline is trimmed: the fill stays whole. Dashes and dots stay where they are as the ends move, and arrowheads sit at the ends that show.
 - **Save as my shape** keeps a shape in My shapes, which you can rename, duplicate or delete.
 - **Shape packs** (`.pigmshapes`) share My shapes, or a single shape, between PCs, and **Import SVG** brings in a drawing's shapes as editable paths.
 
@@ -191,6 +192,14 @@ A piece can move along a path you draw, such as a rocket's flight or a car on a 
 Dragging the piece slides it along its path (Shift: in steps of 10 %), and the arrow keys move it 1 % on or back (Shift: 10 %). Its keyframes' dots sit on the path; drag one to change where that keyframe is. Turning, resizing and the rest work as usual; the piece's pivot is the point that rides the path.
 
 Edit the path at any time (move its points, reshape it) and the piece follows the new one. Set **Path** to **None**, or delete the path, and the piece keeps moving exactly as it did, as ordinary keyframes (one on each frame). A piece that follows another piece can't follow a path too, but the top of its tree can: hinge pieces onto one that follows a path, and the whole tree goes along it.
+
+### Drawing a line on, or erasing it behind
+
+A shape's **Trim** (see Shapes) can change over the timeline, so a route draws itself across a map or a fuse burns down. With the shape selected (Move tool), press the key button beside Trim to key it at the frame shown; after that, changing Start, End or Offset keys it at whatever frame you're on, with the usual easings. The shape gets a row under its layer in the timeline, where its diamonds are dragged, retimed and deleted like a piece's.
+
+**Draw on…** keys the outline growing from nothing to all of it between two frames (from the frame shown to the end, unless you change them), and **Erase behind…** keys it being taken away from its start. Keyframes of the trim in between are replaced; one undo step either way.
+
+When a piece follows the path, **Tie** (in the same Trim options) ties an end of the line to it instead: **Erase behind** the piece (a fuse burning down, a dotted trail vanishing as the rocket passes) or **Draw up to** it (a route drawn as the car drives). **Gap** sets how far behind the piece the line stops, in pixels along the path; negative puts it ahead. The line keeps up with the piece however its progress is keyed.
 
 Already animated a piece with keyframes? **Motion path to shape** (the pen button in the options bar, or on the Animate tab) turns its motion path, bends and all, into a path on a new shape layer just under the piece's layer, and the piece then follows it with the same timing. Style the path like any shape, or reshape it with the Pen tool, and the motion changes with it. A piece's stops become single points it waits at, and a motion path that ends where it started becomes a closed loop. It's one undo step.
 

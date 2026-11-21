@@ -6,8 +6,10 @@ import { imageAsset } from '../vector/assets';
 import { shapeOutline } from '../vector/convert';
 import type { VectorNode, VectorShape } from '../vector/model';
 import { toCmds } from '../vector/pathData';
-import { arrowParts, isStrokeOnly, lineStyleOf, shapeFillRule, shapeFrame } from '../vector/render';
+import { arrowParts, isStrokeOnly, lineStyleOf, shapeFillRule, shapeFrame, trimmedLine, trimmedOutline } from '../vector/render';
 import { dashArray, gradientStops, linearEnds, MITER_LIMIT, type ShapeGradient } from '../vector/style';
+import type { Trim } from '../vector/trim';
+import { tiedTrimAt } from '../anim/follow';
 
 /**
  * SVG export: shape layers become real paths (with their gradients, patterns, pictures, dashes
@@ -44,7 +46,11 @@ class Writer {
   defs: string[] = [];
   private n = 0;
 
-  constructor(private readonly deps: SvgExportDeps) {}
+  constructor(
+    private readonly deps: SvgExportDeps,
+    /** A shape's trim as it is at the frame shown (keyed, or tied to a piece). */
+    private readonly trimOf: (layerId: string, s: VectorShape) => Trim | undefined = (_l, s) => s.trim,
+  ) {}
 
   id(prefix: string): string {
     return `${prefix}${++this.n}`;
@@ -82,7 +88,8 @@ class Writer {
     return `url(#${id})`;
   }
 
-  async shape(s: VectorShape): Promise<string> {
+  async shape(shape: VectorShape, layerId: string): Promise<string> {
+    const s = shape.trimKeys?.length || shape.trimTie ? { ...shape, trim: this.trimOf(layerId, shape) } : shape;
     const st = s.style;
     const line = isStrokeOnly(s);
     const fills = !line && (st.mode === 'fill' || st.mode === 'both');
@@ -119,16 +126,34 @@ class Writer {
     }
     let strokeAttr = '';
     let strokePaint = '';
+    let dashed = false;
     if (strokes && st.width > 0) {
       const { cap, join } = lineStyleOf(s);
       strokePaint = st.outlineKind === 'gradient' ? `"${this.gradient(st.outlineGradient, s)}"` : '';
       const dash = dashArray(st.dash, st.width, cap);
+      dashed = dash.length > 0;
       strokeAttr =
         (strokePaint ? `stroke=${strokePaint}` : paintAttr('stroke', st.outline)) +
         ` stroke-width="${f(st.width)}" stroke-linecap="${cap}" stroke-linejoin="${join}"${join === 'miter' ? ` stroke-miterlimit="${MITER_LIMIT}"` : ''}${dash.length ? ` stroke-dasharray="${dash.map(f).join(' ')}"` : ''}`;
     }
-    if (fillAttr !== 'fill="none"' || strokeAttr) out.push(`<path d="${d}" ${fillAttr}${strokeAttr ? ` ${strokeAttr}` : ''} fill-rule="${rule}"${crisp}/>`);
-    for (const h of arrows?.heads ?? []) {
+    // Trimmed: the fill is the whole shape, and the outline only the part that shows (as on screen).
+    const cut = strokeAttr ? trimmedOutline(s, dashed) : null;
+    let heads = arrows?.heads ?? [];
+    if (cut) {
+      if (fillAttr !== 'fill="none"') out.push(`<path d="${toSvgPath(toCmds((shapeOutline(s) ?? outline).subpaths))}" ${fillAttr} fill-rule="${rule}"${crisp}/>`);
+      const dashAt = (from: number) => (dashed && from ? ` stroke-dashoffset="${f(from)}"` : '');
+      heads = [];
+      if (arrows) {
+        const line = trimmedLine(cut);
+        const parts = line && arrowParts({ ...s, points: line.points });
+        const shown = parts && shapeOutline({ ...s, points: parts.points });
+        if (line && parts && shown) {
+          out.push(`<path d="${toSvgPath(toCmds(shown.subpaths))}" fill="none" ${strokeAttr}${dashAt(line.from)}${crisp}/>`);
+          heads = parts.heads;
+        }
+      } else for (const p of cut) out.push(`<path d="${toSvgPath(p.cmds)}" fill="none" ${strokeAttr}${dashAt(p.from)}${crisp}/>`);
+    } else if (fillAttr !== 'fill="none"' || strokeAttr) out.push(`<path d="${d}" ${fillAttr}${strokeAttr ? ` ${strokeAttr}` : ''} fill-rule="${rule}"${crisp}/>`);
+    for (const h of heads) {
       const hd = h.points.map((p, i) => `${i ? 'L' : 'M'}${f(p.x)} ${f(p.y)}`).join('') + (h.closed ? 'Z' : '');
       const paint = strokePaint ? strokePaint.slice(1, -1) : null;
       if (h.closed) out.push(`<path d="${hd}" ${paint ? `fill="${paint}"` : paintAttr('fill', st.outline)}${crisp}/>`);
@@ -137,9 +162,9 @@ class Writer {
     return out.join('');
   }
 
-  async nodes(list: readonly VectorNode[]): Promise<string> {
+  async nodes(list: readonly VectorNode[], layerId: string): Promise<string> {
     const parts: string[] = [];
-    for (const n of list) parts.push(n.type === 'group' ? `<g>${await this.nodes(n.children)}</g>` : await this.shape(n));
+    for (const n of list) parts.push(n.type === 'group' ? `<g>${await this.nodes(n.children, layerId)}</g>` : await this.shape(n, layerId));
     return parts.join('');
   }
 
@@ -155,7 +180,7 @@ class Writer {
       return `<g style="isolation:isolate${blend ? `;${blend}` : ''}"${opacity}${name}>${inner.join('')}</g>`;
     }
     const attrs = `${opacity}${blend ? ` style="${blend}"` : ''}${name}`;
-    if (l.kind === 'vector') return `<g${attrs}>${await this.nodes(l.objects)}</g>`;
+    if (l.kind === 'vector') return `<g${attrs}>${await this.nodes(l.objects, l.id)}</g>`;
     const b = l.surface.contentBounds();
     if (!b) return '';
     return `<image${attrs} x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" href="${await this.png(l.surface.readRect(b), b.w, b.h)}"/>`;
@@ -163,7 +188,7 @@ class Writer {
 }
 
 export async function documentToSvg(doc: PaintDocument, deps: SvgExportDeps): Promise<string> {
-  const w = new Writer(deps);
+  const w = new Writer(deps, (layerId, s) => tiedTrimAt(doc, layerId, s, doc.timeline.frame));
   const body: string[] = [];
   if (doc.paper) body.push(`<rect width="${doc.width}" height="${doc.height}" ${paintAttr('fill', doc.paper)}/>`);
   for (const l of doc.layers) body.push(await w.layer(l));

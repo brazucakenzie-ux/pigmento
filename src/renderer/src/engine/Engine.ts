@@ -9,13 +9,14 @@ import { LayerController, type LayersInfo } from './doc/LayerController';
 import { AnimationController, type AnimHost, type AnimationInfo } from './anim/AnimationController';
 import { compositeLayers } from './raster/blend';
 import { frameExtras } from './anim/pieceRaster';
-import { motionToPath } from './anim/follow';
+import { motionToPath, tiedTrimAt } from './anim/follow';
 import type { Piece } from './anim/piece';
 import { docToPixel } from './anim/pieceEdit';
 import { PiecePixelsCommand } from './anim/piecePaint';
 import { keepsDepth, transformCamera, transformCameraKeys, transformPieces } from './anim/pieceTransform';
 import { celAt } from './anim/cels';
 import { clampFrame } from './anim/timeline';
+import type { Easing } from './anim/interpolate';
 import { Selection, type SelectionMode, type SelectionModify } from './doc/Selection';
 import { History, type HistoryEntry } from './history/History';
 import {
@@ -58,9 +59,12 @@ import {
   nodeBounds,
   removeNodes,
   reparamNode,
+  mapShapes,
   restyleNode,
+  retrimNode,
   transformNode,
   translateNode,
+  trimPart,
   ungroupNodes,
   vectorId,
   walkShapes,
@@ -69,6 +73,7 @@ import {
   type VectorNode,
   type VectorShape,
 } from './vector/model';
+import { drawOnKeys, FULL_TRIM, MAX_TIE_GAP, MAX_TRIM_KEYS, MAX_TRIM_OFFSET, moveTrimKey, removeTrimKey, setTrimKey, trimAt, type Trim, type TrimTie } from './vector/trim';
 import { hitTestNodes, lineStyleOf, rasterizeNodes, setSavedPatternSource, shapePad } from './vector/render';
 import { optionsOfStyle, shapeStyle } from './tools/shapeTools';
 import { maskToSubpaths } from './vector/trace';
@@ -134,8 +139,10 @@ const MODIFY_LABEL: Record<SelectionModify, I18nKey> = {
   border: 'history.border',
 };
 
-// Shape layers turn their objects into pixels with Canvas 2D (blending, export, picking).
-VectorLayer.rasterizer = (l) => rasterizeNodes(l.objects, l.width, l.height);
+
+// Shape layers turn their objects into pixels with Canvas 2D (blending, export, picking); the
+// engine installs one that also knows the pieces trims are tied to.
+VectorLayer.rasterizer = (l) => rasterizeNodes(l.objects, l.width, l.height, l.keyed ? (s) => trimAt(s, l.frame) : null);
 
 /** The objects selected on the active shape layer, as the UI needs them. */
 export interface VectorSelectionInfo {
@@ -145,6 +152,35 @@ export interface VectorSelectionInfo {
   bounds: Rect | null;
   /** One library shape selected: which, and its slider values (for the options bar). */
   shape: { shapeId: string; params: Record<string, number> } | null;
+  /** The first selected shape's trim at the frame shown (null: no shapes selected). */
+  trim: Trim | null;
+  /** Its trim is keyed on the timeline. */
+  trimKeyed: boolean;
+  /** Its trim key at the frame shown, if there's one: the easing on to the next. */
+  trimKey: { easing: Easing } | null;
+  /** Pieces that follow it (its trim's ends can be tied to them). */
+  followers: string[];
+  /** The end of its trim tied to a piece, if one is. */
+  tie: TrimTie | null;
+}
+
+function clampShare(v: number): number {
+  return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0;
+}
+
+/** A shape without its trim key at `frame` (null: it has none there); the last key leaves its trim set as it was. */
+function withoutTrimKey(s: VectorShape, frame: number): VectorShape | null {
+  const keys = s.trimKeys && removeTrimKey(s.trimKeys, frame);
+  if (!keys) return null;
+  if (keys.length) return { ...s, trimKeys: keys };
+  const { trimKeys: _k, ...rest } = s;
+  return retrimNode(rest, trimAt(s, frame) ?? FULL_TRIM) as VectorShape;
+}
+
+/** The trim of the shape with this id in a list of objects (what a shape edited in place had). */
+function trimOfEdited(list: readonly VectorNode[], id: string): Pick<VectorShape, 'trim' | 'trimKeys'> {
+  const n = list.find((m) => m.id === id);
+  return n?.type === 'shape' ? trimPart(n) : {};
 }
 
 /** Saved per-shape slider values: a small table of finite numbers. */
@@ -353,6 +389,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       this.emitHistory();
     });
     this.history.amend = () => this.anim.bakeLostPaths();
+    VectorLayer.rasterizer = (l) => rasterizeNodes(l.objects, l.width, l.height, l.keyed ? (sh) => tiedTrimAt(this.doc, l.id, sh, l.frame) : null);
     // Shapes filled with a saved pattern find its tile here.
     setSavedPatternSource((id, scale) => this.patternTile({ pattern: id, fg: { r: 0, g: 0, b: 0, a: 255 }, bg: null, scale }));
   }
@@ -587,12 +624,22 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   }
 
   animationChanged(r: Rect | null): void {
+    // Paths whose trim is tied to a piece change with it (anywhere on the canvas).
+    let tied = false;
+    for (const l of this.doc.vectorLayers()) {
+      if (!l.tied) continue;
+      l.redraw();
+      tied = true;
+    }
+    if (tied) r = null;
     // Frame-by-frame layers may now show another drawing: upload the ones that changed.
     if (this.doc.hasCels) this.renderer.syncTree();
     this.renderer.invalidate(r);
     this.updateReach();
     this.requestRender();
     this.emit('animation', this.anim.info());
+    // A keyed trim shows another value at another frame, and pieces may follow the selected shapes now.
+    if (this.vectorSel.length) this.emit('vectorSelection', this.vectorSelectionInfo());
     this.notifyPixels();
   }
 
@@ -1557,6 +1604,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.pruneVectorSelection();
     this.requestRender();
     this.notifyPixels();
+    // Keyed shapes have rows in the timeline.
+    if (layer.keyed || this.anim.info().shapes.some((r) => r.layerId === layer.id)) this.emit('animation', this.anim.info());
   }
 
   get activeVector(): VectorLayer | null {
@@ -1579,11 +1628,19 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   vectorSelectionInfo(): VectorSelectionInfo {
     const nodes = this.selectedVectorNodes();
     const one = nodes.length === 1 && nodes[0].type === 'shape' && nodes[0].shape === 'parametric' && nodes[0].shapeId ? nodes[0] : null;
+    const first: VectorShape | null = walkShapes(nodes).next().value ?? null;
+    const layer = this.activeVector;
+    const firstKey = first?.trimKeys?.find((k) => k.frame === this.doc.timeline.frame) ?? null;
     return {
       count: nodes.length,
       groups: nodes.filter((n) => n.type === 'group').length,
       bounds: boundsOf(nodes),
       shape: one ? { shapeId: one.shapeId!, params: { ...one.params } } : null,
+      trim: first ? { ...FULL_TRIM, ...trimAt(first, this.doc.timeline.frame) } : null,
+      trimKeyed: !!first?.trimKeys?.length,
+      trimKey: firstKey ? { easing: firstKey.easing } : null,
+      followers: first && layer ? this.doc.pieces.filter((p) => !p.link && p.follow?.layerId === layer.id && p.follow.objectId === first.id).map((p) => p.id) : [],
+      tie: first?.trimTie ?? null,
     };
   }
 
@@ -1710,6 +1767,156 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     );
   }
 
+  /** Trim the selected shapes' outlines (Start, End and Offset as shares of their length; one step). */
+  trimVector(change: Partial<Trim>): void {
+    if (!this.vectorSel.length) return;
+    const clean: { start?: number; end?: number; offset?: number } = {};
+    if (change.start !== undefined) clean.start = clampShare(change.start);
+    if (change.end !== undefined) clean.end = clampShare(change.end);
+    if (change.offset !== undefined) clean.offset = Number.isFinite(change.offset) ? Math.max(-MAX_TRIM_OFFSET, Math.min(MAX_TRIM_OFFSET, change.offset)) : 0;
+    // A shape whose trim is keyed is keyed again at the frame shown; one that isn't keeps its new trim.
+    const frame = this.doc.timeline.frame;
+    const changed = this.editVector('history.trimOutline', (list, sel) =>
+      list.map((n) =>
+        sel.has(n.id)
+          ? mapShapes(n, (s) => (s.trimKeys?.length ? { ...s, trimKeys: setTrimKey(s.trimKeys, frame, clean, { ...FULL_TRIM, ...trimAt(s, frame) }) } : (retrimNode(s, clean) as VectorShape)))
+          : n,
+      ),
+    );
+    if (changed) this.emit('vectorSelection', this.vectorSelectionInfo());
+  }
+
+/**
+   * Tie an end of the selected shapes' trims to a piece that follows them (null: untie), so the
+   * line is erased behind it or drawn up to it, `gap` pixels behind it (one step).
+   */
+  tieTrim(tie: TrimTie | null): void {
+    const clean = tie && { piece: tie.piece, end: tie.end, gap: Number.isFinite(tie.gap) ? Math.max(-MAX_TIE_GAP, Math.min(MAX_TIE_GAP, tie.gap)) : 0 };
+    this.editSelectedTrims('history.trimTie', (s) => {
+      if (!clean) {
+        if (!s.trimTie) return null;
+        const { trimTie: _t, ...rest } = s;
+        return rest;
+      }
+      const same = s.trimTie && s.trimTie.piece === clean.piece && s.trimTie.end === clean.end && s.trimTie.gap === clean.gap;
+      return same ? null : { ...s, trimTie: clean };
+    });
+  }
+
+  /** Key the selected shapes' trims at the frame shown, as they are there (one step). */
+  keyTrim(): void {
+    const frame = this.doc.timeline.frame;
+    this.editSelectedTrims('history.trimKeyAdd', (s) => {
+      if ((s.trimKeys?.length ?? 0) >= MAX_TRIM_KEYS && !s.trimKeys?.some((k) => k.frame === frame)) return null;
+      const { trim: _t, ...rest } = s;
+      return { ...rest, trimKeys: setTrimKey(s.trimKeys ?? [], frame, {}, { ...FULL_TRIM, ...trimAt(s, frame) }) };
+    });
+  }
+
+  /** Remove the selected shapes' trim keys at the frame shown; the last one leaves its trim set (one step). */
+  unkeyTrim(): void {
+    const frame = this.doc.timeline.frame;
+    this.editSelectedTrims('history.trimKeyDelete', (s) => withoutTrimKey(s, frame));
+  }
+
+  /** The easing from the selected shapes' trim keys at the frame shown on to the next (one step). */
+  setTrimEasing(easing: Easing): void {
+    const frame = this.doc.timeline.frame;
+    this.editSelectedTrims('history.trimKey', (s) => (s.trimKeys?.some((k) => k.frame === frame) ? { ...s, trimKeys: s.trimKeys.map((k) => (k.frame === frame ? { ...k, easing } : k)) } : null));
+  }
+
+  /**
+   * Draw on (the outline drawn from nothing to all of it) or Erase behind (from all of it to
+   * nothing, from its start) on the selected shapes, from frame `from` to frame `to`, easing as
+   * given (one step).
+   */
+  drawOn(mode: 'drawOn' | 'eraseBehind', from: number, to: number, easing: Easing): boolean {
+    const len = this.doc.timeline.length;
+    const a = clampFrame(Math.min(from, to), len);
+    const b = clampFrame(Math.max(from, to), len);
+    return this.editSelectedTrims(mode === 'drawOn' ? 'history.drawOn' : 'history.eraseBehind', (s) => {
+      const { trim: _t, ...rest } = s;
+      return { ...rest, trimKeys: drawOnKeys(s, mode, a, b, easing) };
+    });
+  }
+
+  /** Change every selected shape's trim (in groups too) as one step; fn returns null to leave a shape as it is. */
+  private editSelectedTrims(label: I18nKey, fn: (s: VectorShape) => VectorShape | null): boolean {
+    if (!this.vectorSel.length) return false;
+    let changed = false;
+    const done = this.editVector(label, (list, sel) => {
+      const out = list.map((n) =>
+        sel.has(n.id)
+          ? mapShapes(n, (s) => {
+              const next = fn(s);
+              if (!next) return s;
+              changed = true;
+              return next;
+            })
+          : n,
+      );
+      return changed ? out : null;
+    });
+    if (done) this.emit('vectorSelection', this.vectorSelectionInfo());
+    return done;
+  }
+
+  /** Change one shape (by id, in a group or not) on a shape layer as one step (the timeline's shape rows). */
+  private editShapeOn(layerId: string, id: string, label: I18nKey, fn: (s: VectorShape) => VectorShape | null): boolean {
+    const layer = this.doc.layerById(layerId);
+    if (layer?.kind !== 'vector') return false;
+    if (layer.locked) {
+      this.notify('info', 'notice.layerLocked');
+      return false;
+    }
+    let changed = false;
+    const after = layer.objects.map((n) =>
+      mapShapes(n, (s) => {
+        if (s.id !== id) return s;
+        const next = fn(s);
+        if (!next) return s;
+        changed = true;
+        return next;
+      }),
+    );
+    if (!changed) return false;
+    const before = layer.objects;
+    layer.setObjects(after);
+    this.history.push(new VectorEditCommand(label, this, layer, before, layer.objects));
+    this.vectorChanged(layer);
+    this.emit('vectorSelection', this.vectorSelectionInfo());
+    return true;
+  }
+
+  /** Select a shape from its timeline row: its layer active, it selected, the Move tool on. */
+  selectShape(layerId: string, id: string): void {
+    const layer = this.doc.layerById(layerId);
+    if (layer?.kind !== 'vector') return;
+    if (this.doc.activeId !== layerId) this.layers.setActive(layerId);
+    const top = layer.objects.find((n) => n.id === id || (n.type === 'group' && [...walkShapes([n])].some((s) => s.id === id)));
+    if (this.activeTool.id !== 'move') this.setTool('move');
+    if (top) this.setVectorSelection([top.id]);
+  }
+
+  /** Move a shape's trim key to another frame (one step). */
+  moveShapeTrimKey(layerId: string, id: string, from: number, to: number): boolean {
+    const target = clampFrame(to, this.doc.timeline.length);
+    return this.editShapeOn(layerId, id, 'history.trimKeyMove', (s) => {
+      const keys = s.trimKeys && moveTrimKey(s.trimKeys, from, target);
+      return keys ? { ...s, trimKeys: keys } : null;
+    });
+  }
+
+  /** Remove a shape's trim key (the last one leaves its trim set; one step). */
+  removeShapeTrimKey(layerId: string, id: string, frame: number): boolean {
+    return this.editShapeOn(layerId, id, 'history.trimKeyDelete', (s) => withoutTrimKey(s, frame));
+  }
+
+  /** The easing from a shape's trim key on to the next (one step). */
+  setShapeTrimKeyEasing(layerId: string, id: string, frame: number, easing: Easing): boolean {
+    return this.editShapeOn(layerId, id, 'history.trimKey', (s) => (s.trimKeys?.some((k) => k.frame === frame && k.easing !== easing) ? { ...s, trimKeys: s.trimKeys.map((k) => (k.frame === frame ? { ...k, easing } : k)) } : null));
+  }
+
   /** New slider values for the selected library shape (a drag merges into one step). */
   setVectorShapeParams(params: Readonly<Record<string, number>>): void {
     if (!this.vectorSel.length) return;
@@ -1763,7 +1970,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
         const o = shapeOutline(n);
         if (!o) return n;
         changed = true;
-        const node: VectorShape = { type: 'shape', id: n.id, shape: 'path', box: null, points: [], style: { ...n.style }, subpaths: o.subpaths, fillRule: o.fillRule };
+        const node: VectorShape = { type: 'shape', id: n.id, shape: 'path', box: null, points: [], style: { ...n.style }, subpaths: o.subpaths, fillRule: o.fillRule, ...trimPart(n) };
         return node;
       }),
     );
@@ -2033,6 +2240,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       ...(s.shape === 'path' ? { subpaths: s.subpaths } : {}),
       ...(s.unitPath ? { unitPath: s.unitPath } : {}),
       ...(s.fillRule ? { fillRule: s.fillRule } : {}),
+      // Editing its corners keeps its trim.
+      ...(edit ? trimOfEdited(edit.before, edit.id) : {}),
     };
     let layer: VectorLayer | null = target === 'new' ? null : target;
     this.history.group(label, () => {

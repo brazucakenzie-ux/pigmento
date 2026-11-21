@@ -2,7 +2,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { docToScreen, drag, launchApp, ready, tempFile, type AppHandle } from './harness';
+import { clickDoc, docToScreen, drag, launchApp, ready, tempFile, type AppHandle } from './harness';
 
 let h: AppHandle;
 
@@ -284,4 +284,127 @@ test('motion path to shape: the piece follows its own motion path as a shape, th
   await page.keyboard.press('Control+z');
   expect((await current(page)).follow).toMatchObject({ layerId: tree[0].id });
   expectSame(await where(), was);
+});
+
+test('a rocket on a dotted path erases it behind itself, the dots ahead staying put', async () => {
+  const { page } = h;
+  const id = await rocket(page);
+  // A straight dotted line across the canvas with the Pen, as a shape.
+  await page.getByRole('tab', { name: 'Shapes' }).click();
+  await page.getByRole('button', { name: 'Pen', exact: true }).click();
+  await page.getByRole('radio', { name: 'Shape layer (stays editable)' }).click();
+  // Dots, in the outline's options.
+  await page.locator('.opt-pop-btn', { hasText: 'Outline' }).click();
+  const pop = page.getByRole('dialog', { name: 'Outline' });
+  await pop.getByRole('radio', { name: 'Dots' }).click();
+  await page.keyboard.press('Escape');
+  await expect(pop).toBeHidden();
+  await clickDoc(page, 200, 500);
+  await clickDoc(page, 1000, 500);
+  await page.keyboard.press('Enter');
+  expect(await page.evaluate(() => window.__pigmentoTest!.activeLayerKind())).toBe('vector');
+  // The rocket goes along it over the timeline.
+  await page.keyboard.press('a');
+  expect(await page.evaluate(() => window.__pigmentoTest!.anim().selectedId)).toBe(id);
+  await page.locator('.optionsbar').getByRole('combobox', { name: 'Path' }).selectOption({ index: 1 });
+  // The path's trim tied to it: erased behind the rocket.
+  await page.keyboard.press('v');
+  await clickDoc(page, 900, 500);
+  const tie = page.locator('.optionsbar').getByRole('combobox', { name: 'Tie' });
+  await tie.selectOption({ label: 'Erase behind Piece 1' });
+  // Dark pixels along the line, between two x positions.
+  const ink = (frame: number, x0: number, x1: number) =>
+    page.evaluate(
+      ([f, a, b]) => {
+        const t = window.__pigmentoTest!;
+        t.setFrame(f);
+        const out: number[] = [];
+        for (let x = a; x <= b; x++) {
+          const p = t.pixel(x, 500);
+          if (p.r < 120 && p.g < 120 && p.b < 120) out.push(x);
+        }
+        return out;
+      },
+      [frame, x0, x1] as const,
+    );
+  // Half way (the rocket's middle near x = 617): nothing behind it, the dots still ahead.
+  expect(await ink(12, 260, 540)).toEqual([]);
+  const ahead = await ink(12, 720, 990);
+  expect(ahead.length).toBeGreaterThan(30);
+  // Dotted: gaps between them.
+  expect(ahead.length).toBeLessThan(200);
+  // The dots don't crawl as the rocket goes: the same ones, earlier on.
+  expect(await ink(6, 720, 990)).toEqual(ahead);
+  // Before it sets off, the whole line is there.
+  expect((await ink(0, 300, 540)).length).toBeGreaterThan(30);
+  // A gap leaves some of the line showing behind it.
+  const gap = page.locator('.optionsbar').getByRole('textbox', { name: 'Gap', exact: true });
+  await gap.fill('120');
+  await gap.press('Enter');
+  expect((await ink(12, 500, 540)).length).toBeGreaterThan(5);
+  expect(await ink(12, 260, 470)).toEqual([]);
+  // Undo twice: untied, the whole line shows again.
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('Control+z');
+  expect((await ink(12, 260, 540)).length).toBeGreaterThan(30);
+});
+
+test('a line draws itself on over the timeline: Draw on, its row in the timeline, saved and reopened', async () => {
+  const { page, app } = h;
+  // A straight line across the canvas with the Pen, as a shape.
+  await page.getByRole('tab', { name: 'Shapes' }).click();
+  await page.getByRole('button', { name: 'Pen', exact: true }).click();
+  await page.getByRole('radio', { name: 'Shape layer (stays editable)' }).click();
+  await clickDoc(page, 200, 400);
+  await clickDoc(page, 1000, 400);
+  await page.keyboard.press('Enter');
+  // Selected with the Move tool, then drawn on from the first frame to the last.
+  await page.keyboard.press('v');
+  await clickDoc(page, 600, 400);
+  await page.locator('.optionsbar').getByRole('button', { name: 'Draw on…' }).click();
+  const dlg = page.getByRole('dialog', { name: 'Draw on' });
+  await expect(dlg.getByRole('textbox', { name: 'From frame' })).toHaveValue('1');
+  await expect(dlg.getByRole('textbox', { name: 'To frame' })).toHaveValue('24');
+  await dlg.getByRole('combobox', { name: 'Easing' }).selectOption('linear');
+  await dlg.getByRole('button', { name: 'Key it' }).click();
+  await expect(dlg).toBeHidden();
+  // How far along the line it's drawn at a frame (its last dark pixel), or -1.
+  const reach = (frame: number) =>
+    page.evaluate((f) => {
+      const t = window.__pigmentoTest!;
+      t.setFrame(f);
+      let last = -1;
+      for (let x = 190; x <= 1010; x += 2) {
+        const p = t.pixel(x, 400);
+        if (p.r < 120 && p.g < 120 && p.b < 120) last = x;
+      }
+      return last;
+    }, frame);
+  expect(await reach(0)).toBe(-1);
+  const half = await reach(12);
+  expect(half).toBeGreaterThan(200 + 800 * (12 / 23) - 20);
+  expect(half).toBeLessThan(200 + 800 * (12 / 23) + 20);
+  expect(await reach(23)).toBeGreaterThan(990);
+  // Its row in the timeline, under its layer: two keyframes; Alt+Left moves the last one a frame earlier.
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  if (!(await page.locator('.tl-names').isVisible())) await page.locator('.ribbon').getByRole('button', { name: 'Timeline', exact: true }).click();
+  await expect(page.locator('.tl-names').getByRole('button', { name: 'Shapes 1 · shape 1' })).toBeVisible();
+  const keys = page.locator('.tl-shape-row .tl-key');
+  await expect(keys).toHaveCount(2);
+  await keys.nth(1).focus();
+  await page.keyboard.press('Alt+ArrowLeft');
+  await expect(page.locator('.tl-shape-row .tl-key').nth(1)).toHaveAttribute('data-frame', '22');
+  expect(await reach(22)).toBeGreaterThan(990);
+  // Saved and opened again: drawn on just the same.
+  const before = await reach(12);
+  const project = path.join(path.dirname(tempFile('x')), 'draw-on.pigm');
+  await app.evaluate(({ dialog }, file) => {
+    dialog.showSaveDialog = (async () => ({ canceled: false, filePath: file })) as typeof dialog.showSaveDialog;
+  }, project);
+  await page.keyboard.press('Control+Shift+s');
+  await expect.poll(() => existsSync(project)).toBe(true);
+  await page.evaluate((p) => window.__pigmentoTest!.openPath(p), project);
+  await expect.poll(() => page.evaluate(() => window.__pigmentoTest!.history().length)).toBe(0);
+  expect(await reach(12)).toBe(before);
+  expect(await reach(0)).toBe(-1);
 });
