@@ -14,7 +14,8 @@ import {
 import { Selection } from '../doc/Selection';
 import { guide } from '../doc/guides';
 import { parseHex, toHex8 } from '../core/color';
-import { walkShapes, type VectorNode } from '../vector/model';
+import { mapShapes, walkShapes, type VectorNode, type VectorShape } from '../vector/model';
+import { MAX_TIE_GAP, MAX_TRIM_KEYS, MAX_TRIM_OFFSET, type TrimKey } from '../vector/trim';
 import type { SubPaths } from '../vector/pathData';
 import type { ShapeStyle } from '../live/ShapeObject';
 import { MAX_STOPS } from '../raster/gradient';
@@ -72,6 +73,7 @@ function lightMoved(doc: PaintDocument): boolean {
 /** The oldest version that holds everything in `doc`. */
 export function versionFor(doc: PaintDocument): 1 | 2 | 3 | 4 {
   if (doc.pieces.some((p) => p.follow !== null || p.face.on || p.face.angle !== 0 || p.keyframes.some((k) => k.progress !== 0))) return 4;
+  if (doc.vectorLayers().some((l) => [...walkShapes(l.objects)].some((s) => s.trim || s.trimKeys?.length || s.trimTie))) return 4;
   const v3 = doc.pieces.some(
     (p) =>
       p.kind !== 'piece' ||
@@ -223,6 +225,8 @@ const SubPathsJson = z.array(z.object({ closed: z.boolean(), anchors: z.array(An
 /** Most path points all shape layers together may hold. */
 const MAX_ANCHORS = 2_000_000;
 
+const TrimJson = z.object({ start: z.number().min(0).max(1), end: z.number().min(0).max(1), offset: z.number().min(-MAX_TRIM_OFFSET).max(MAX_TRIM_OFFSET) });
+
 const ShapeNodeJson = z.object({
   type: z.literal('shape'),
   id: z.string().min(1).max(100),
@@ -240,6 +244,16 @@ const ShapeNodeJson = z.object({
   subpaths: SubPathsJson.optional(),
   unitPath: SubPathsJson.optional(),
   fillRule: z.enum(['evenodd', 'nonzero']).optional(),
+  /** Version 4: how much of the outline shows, as shares of its length (none: all of it). */
+  trim: TrimJson.optional(),
+  /** Version 4: the trim keyed on the timeline (these win over `trim`). */
+  trimKeys: z
+    .array(TrimJson.extend({ frame: int.min(0).max(MAX_FRAMES - 1), easing: z.enum(EASINGS as [Easing, ...Easing[]]) }))
+    .min(1)
+    .max(MAX_TRIM_KEYS)
+    .optional(),
+  /** Version 4: an end of the trim tied to a piece that follows the shape. */
+  trimTie: z.object({ piece: z.string().min(1).max(100), end: z.enum(['start', 'end']), gap: z.number().min(-MAX_TIE_GAP).max(MAX_TIE_GAP) }).optional(),
 });
 type VectorNodeJson = z.infer<typeof ShapeNodeJson> | { type: 'group'; id: string; children: VectorNodeJson[] };
 const VectorNodeSchema: z.ZodType<VectorNodeJson> = z.lazy(() =>
@@ -261,6 +275,9 @@ function nodeToJson(n: VectorNode): VectorNodeJson {
     ...(n.subpaths ? { subpaths: subpathsToJson(n.subpaths) } : {}),
     ...(n.unitPath ? { unitPath: subpathsToJson(n.unitPath) } : {}),
     ...(n.fillRule ? { fillRule: n.fillRule } : {}),
+    ...(n.trim ? { trim: { start: n.trim.start, end: n.trim.end, offset: n.trim.offset } } : {}),
+    ...(n.trimKeys?.length ? { trimKeys: n.trimKeys.map((k) => ({ frame: k.frame, start: k.start, end: k.end, offset: k.offset, easing: k.easing })) } : {}),
+    ...(n.trimTie ? { trimTie: { piece: n.trimTie.piece, end: n.trimTie.end, gap: n.trimTie.gap } } : {}),
   };
 }
 
@@ -294,7 +311,28 @@ function nodeFromJson(n: VectorNodeJson, depth: number, counter: { n: number; an
     ...library,
     ...outline,
     ...(n.fillRule ? { fillRule: n.fillRule } : {}),
+    ...(n.trim ? { trim: { ...n.trim } } : {}),
+    ...(n.trimKeys ? { trimKeys: n.trimKeys.map((k) => ({ ...k })) } : {}),
+    ...(n.trimTie ? { trimTie: { ...n.trimTie } } : {}),
   };
+}
+
+/**
+ * Trim keys inside the timeline, one a frame (the last one given for a frame wins), in order;
+ * keys of shapes on every shape layer.
+ */
+function fitTrimKeys(doc: PaintDocument): void {
+  const len = doc.timeline.length;
+  const fit = (s: VectorShape): VectorShape => {
+    if (!s.trimKeys) return s;
+    const byFrame = new Map<number, TrimKey>();
+    for (const k of s.trimKeys) {
+      const frame = clampFrame(k.frame, len);
+      byFrame.set(frame, { ...k, frame });
+    }
+    return { ...s, trimKeys: [...byFrame.values()].sort((a, b) => a.frame - b.frame) };
+  };
+  for (const l of doc.vectorLayers()) if (l.keyed) l.setObjects(l.objects.map((n) => mapShapes(n, fit)));
 }
 
 type LayerJson = z.infer<typeof RasterJson> | z.infer<typeof VectorJson> | GroupJson;
@@ -560,7 +598,8 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
   }
   const t = doc.timeline;
   const moves = v3 && doc.cameraKeys.length ? { cameraMoves: doc.cameraKeys.map((k) => ({ ...k })) } : {};
-  const animation = pieces.length || doc.hasCels ? { fps: t.fps, length: t.length, loop: t.loop, frame: t.frame, pieces, ...moves } : null;
+  // Keyed trims need the timeline too.
+  const animation = pieces.length || doc.hasCels || doc.hasTrimKeys ? { fps: t.fps, length: t.length, loop: t.loop, frame: t.frame, pieces, ...moves } : null;
   // What is written: fields with defaults may be left out (older versions don't have them).
   const json: z.input<typeof DocumentJsonSchema> = {
     format: PROJECT_MAGIC,
@@ -726,6 +765,7 @@ export async function loadProject(bytes: Uint8Array, codec: PngCodec): Promise<P
   doc.savedSelections = saved;
   doc.guides = (json.guides ?? []).map((g) => guide(g.axis, g.pos));
   if (json.animation) await readAnimation(doc, json.animation, files, codec);
+  fitTrimKeys(doc);
   if (json.camera) doc.camera = { ...json.camera };
   if (json.light) doc.light = { ...json.light };
   // Frame-by-frame layers show the drawing for the frame the file was saved at.

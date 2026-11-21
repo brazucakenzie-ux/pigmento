@@ -246,6 +246,9 @@ export interface TrimTie {
   readonly gap: number;
 }
 
+/** Most a trim's offset can be, either way, in whole outlines (far more than any loop needs). */
+export const MAX_TRIM_OFFSET = 1e6;
+
 /** Most a tie's gap can be, either way, in document pixels. */
 export const MAX_TIE_GAP = 1e5;
 

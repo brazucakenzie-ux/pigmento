@@ -232,9 +232,9 @@ Pieces in 1.2 can be bigger than the canvas and sit anywhere, partly or wholly o
   - One key per frame (the last given wins); frames past the end of the timeline move to its last frame.
 - Links that don't hold are dropped when a file is opened (the piece then follows nothing): one to a missing piece or one on another layer, a link from a group, a hinge onto a group, a loop, and pieces past the 64th in one tree.
 
-## Paths in 1.3 (version 4)
+## Paths and trims in 1.3 (version 4)
 
-Pigmento 1.3 writes version 4 only when a piece follows a path, faces the way it goes (or has a keyed progress or an art angle left over); otherwise it writes the oldest version that holds the picture, as 1.2 did. Pigmento 1.2 refuses a version 4 file with its "made with a newer Pigmento" message. Version 4 adds:
+Pigmento 1.3 writes version 4 only when a piece follows a path or faces the way it goes (or has a keyed progress or an art angle left over), or a shape's outline is trimmed; otherwise it writes the oldest version that holds the picture, as 1.2 did. Pigmento 1.2 refuses a version 4 file with its "made with a newer Pigmento" message. Version 4 adds:
 
 ```json
 {
@@ -251,6 +251,26 @@ Pigmento 1.3 writes version 4 only when a piece follows a path, faces the way it
 - **`progress`** (on each keyframe, 0 when left out): how far along the path the piece's pivot is, by distance along it, so an even progress moves it at an even speed. 0 is the path's start and 1 its end; an open path holds at its ends, and a closed one goes round again past 1 or below 0 (2.5 is half way round the third time). From −1,000,000 to 1,000,000. It eases between keyframes like any other value, and replaces the keyframe's `x` and `y` while the piece follows a path (they're kept, but don't place it).
 - **`face`** (on the piece, default `{ "on": false, "angle": 0 }`): facing the way it goes. While `on`, a piece that follows no other piece is turned so its art points the way its pivot is moving on the canvas (along its path, or by its own `x` and `y`). `angle` (radians, −10,000 to 10,000; Pigmento writes −π to π) is which way the art points in the piece's own pixels before it's scaled or turned: 0 right, π/2 down. The turn is the heading minus that direction once scaled by the keyframe's `sx` and `sy` (atan2(sy·sin angle, sx·cos angle)), added to the keyframe's `angle`.
   - The heading at a frame is the direction from where the pivot is 0.2 seconds earlier to where it is 0.2 seconds later (at the animation's `fps`; at least half a frame each way). Where that's no movement at all, it's the last heading before (where the piece stopped), else the first one after (where it starts). A piece that never moves isn't turned.
+
+### Trimmed outlines
+
+On a shape (in a shape layer's `objects`, in a group or not):
+
+```json
+{
+  "type": "shape",
+  "id": "v12-m3k9",
+  "trim": { "start": 0, "end": 0.5, "offset": 0 },
+  "trimKeys": [{ "frame": 0, "start": 0, "end": 0, "offset": 0, "easing": "easeInOut" }, { "frame": 23, "start": 0, "end": 1, "offset": 0, "easing": "linear" }],
+  "trimTie": { "piece": "piece-1", "end": "start", "gap": 12 },
+  "…": "…"
+}
+```
+
+- **`trim`** (left out: all of the outline shows): only the outline from `start` to `end` shows (shares of its whole length, 0 to 1, either way round), both slid along by `offset` (−1,000,000 to 1,000,000). Lengths are measured along the outline as it's drawn (box shapes inset for their outline, as Convert to path gives them). A shape with several outlines is trimmed across all of them in turn, as one long line. When all its outlines are closed, `offset` wraps round (only its fraction counts); otherwise the part that shows stops at the ends. Only the outline is trimmed: a fill is drawn whole.
+  - Dashes are laid out from the start of each outline as if it weren't trimmed, so they don't move as the ends do. Lines and curves with arrowheads get them at the ends that show, pointing along the outline there.
+- **`trimKeys`** (1 to 2,000; left out: not keyed): the trim keyed on the timeline, which wins over `trim`. Each key has a `frame` (0 to 1,999; ones past the end of the timeline move to its last frame, and the last key given for a frame wins) and an `easing` on to the next key (as for piece keyframes). Before the first key and after the last the trim holds. A picture with keyed trims writes its `animation` (for its timeline) even without pieces.
+- **`trimTie`** (left out: none): one end of the trim follows a piece that follows this shape (`piece` is its id). With `end` `"start"` the outline is erased behind the piece; with `"end"` it's drawn up to the piece. That end goes `gap` document pixels (−100,000 to 100,000; negative: ahead) behind where the piece's pivot is along the shape's outlines (taken as one long line, on the piece's current turn round a closed one), clamped to the outline, instead of where `trim` or `trimKeys` say; the other end and `offset` come from them. A tie to a piece that isn't there, or doesn't follow this shape, does nothing.
 
 ## Limits and safety
 - Width and height are at most 30,000 px each and 250 megapixels in total. Files may hold at most 2,000 layers, nested at most 64 deep, 200 saved selections and 256 pictures (each at most 4096 × 4096 px; bigger pictures are scaled down when chosen).

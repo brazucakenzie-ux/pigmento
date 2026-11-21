@@ -73,7 +73,7 @@ import {
   type VectorNode,
   type VectorShape,
 } from './vector/model';
-import { drawOnKeys, FULL_TRIM, MAX_TIE_GAP, MAX_TRIM_KEYS, moveTrimKey, removeTrimKey, setTrimKey, trimAt, type Trim, type TrimTie } from './vector/trim';
+import { drawOnKeys, FULL_TRIM, MAX_TIE_GAP, MAX_TRIM_KEYS, MAX_TRIM_OFFSET, moveTrimKey, removeTrimKey, setTrimKey, trimAt, type Trim, type TrimTie } from './vector/trim';
 import { hitTestNodes, lineStyleOf, rasterizeNodes, setSavedPatternSource, shapePad } from './vector/render';
 import { optionsOfStyle, shapeStyle } from './tools/shapeTools';
 import { maskToSubpaths } from './vector/trace';
@@ -163,9 +163,6 @@ export interface VectorSelectionInfo {
   /** The end of its trim tied to a piece, if one is. */
   tie: TrimTie | null;
 }
-
-/** Most a trim's offset can be, either way, in whole outlines (far more than any loop needs). */
-export const MAX_TRIM_OFFSET = 1e6;
 
 function clampShare(v: number): number {
   return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0;
