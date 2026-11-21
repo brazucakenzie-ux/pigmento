@@ -11,7 +11,8 @@ import {
   type Frame,
 } from './frames';
 import type { PieceState } from './interpolate';
-import { pieceStateAt, type Follow, type Piece } from './piece';
+import { pieceStateAt, pieceSurfaceAt, type Follow, type Piece } from './piece';
+import type { Surface } from '../raster/Surface';
 import type { PathMeasure } from './pathMeasure';
 import { artDirection, faceSpan, heading } from './face';
 import { spunAt } from './spin';
@@ -108,6 +109,11 @@ export class Scene {
       this.poses.set(chain[i].id, this.compute(chain[i], parent));
     }
     return this.poses.get(p.id)!;
+  }
+
+  /** The pixels a piece shows in this scene: its drawing at the scene's frame (or its one picture). */
+  src(p: Piece): Surface {
+    return pieceSurfaceAt(p, this.frame);
   }
 
   /** The path a piece follows (null: none, it follows another piece instead, or the path is gone). */

@@ -4,6 +4,8 @@ import { History } from '@engine/history/History';
 import { AnimationController, type AnimHost } from '@engine/anim/AnimationController';
 import { clonePiece, copyPiece, makePiece, pieceSurfaceAt, pieceSurfaces, showPieceFrame, type Piece } from '@engine/anim/piece';
 import { Surface } from '@engine/raster/Surface';
+import { Scene } from '@engine/anim/scene';
+import { drawPiece } from '@engine/anim/pieceRaster';
 
 const RED = { r: 220, g: 30, b: 30, a: 255 };
 const BLUE = { r: 30, g: 30, b: 220, a: 255 };
@@ -94,5 +96,27 @@ describe('a piece’s drawings', () => {
     history.undo();
     expect(doc.pieces).toHaveLength(1);
     expect(doc.pieces[0].drawings!.map((c) => c.surface)).toEqual(p.drawings!.map((c) => c.surface));
+  });
+});
+
+describe('drawing a piece’s drawings', () => {
+  /** The colour the CPU path paints at (5, 5) for the piece at a frame. */
+  const paintedAt = (p: Piece, frame: number) => {
+    const view = { data: new Uint8ClampedArray(20 * 20 * 4), stride: 20, ox: 0, oy: 0 };
+    drawPiece(view, { x: 0, y: 0, w: 20, h: 20 }, p, new Scene([p], frame));
+    return [...view.data.slice((5 * 20 + 5) * 4, (5 * 20 + 5) * 4 + 4)];
+  };
+
+  it('shows each frame its own drawing, through a scene and on the CPU path, wherever the frame on show is', () => {
+    const { p, a, b } = flicker();
+    expect(new Scene([p], 1).src(p)).toBe(a);
+    expect(new Scene([p], 3).src(p)).toBe(b);
+    // The frame on show doesn't matter: each frame draws its own drawing.
+    showPieceFrame(p, 4);
+    expect(paintedAt(p, 0)).toEqual([220, 30, 30, 255]);
+    expect(paintedAt(p, 5)).toEqual([30, 30, 220, 255]);
+    p.drawingLoop = { mode: 'cycle', end: 6 };
+    expect(paintedAt(p, 7)).toEqual([220, 30, 30, 255]);
+    expect(paintedAt(p, 10)).toEqual([30, 30, 220, 255]);
   });
 });

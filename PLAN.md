@@ -528,7 +528,7 @@ Decisions (all agreed, the last for Stop 7E):
   - **Release:** tagged `v1.3.0` on ad0731c after asking. The release build on GitHub (run 44933513444) passed lint, type-check and unit tests and built the installers unsigned, as chosen; their SHA-256 sums match the checksum file. The release (the three files and the 1.3.0 notes) was published on 2026-11-22 at the owner's go-ahead, and the files downloaded from it match the checksums.
 
 ### Side step: drawings on pieces (requested after 1.3.0)
-A piece made with Animate selection can switch between drawings while it moves, like a rock flickering between two drawings as it drifts. Agreed with the user on 2026-11-22:
+A piece made with Animate selection can switch between drawings while it moves or stays put, like a robe whose shading and creases change from drawing to drawing as the wind blows. Agreed with the user on 2026-11-22:
 - Animate selection (and Piece from layer) on a layer drawn frame by frame lifts the area out of every drawing, so the piece keeps all of them with the same timing and loop; the holes are cut from every drawing unless Leave the original.
 - While Paint on piece is on, the Animate tab's New drawing, Copy drawing, Clear drawing, Delete drawing and Loop drawings act on that piece instead of the layer, and painting paints the drawing showing at that frame.
 - The piece gets a drawings row of its own in the timeline, under it: blocks you drag, the repeats faded and the loop's end, like a layer's.
@@ -539,4 +539,4 @@ A piece made with Animate selection can switch between drawings while it moves, 
 - [ ] D.2 Drawing them: the screen (GPU), the CPU path, exports, flattening, the colour picker and echo trails show each piece's drawing at the frame; onion skin of a piece's drawings while painting on it (+ unit tests, e2e screen against picture)
 - [ ] D.3 Editing: with Paint on piece on, New, Copy, Clear and Delete drawing and Loop drawings act on the piece and painting paints the drawing shown; the piece's drawings row in the timeline; Animate selection and Piece from layer on a frame-by-frame layer lift every drawing. Undoable (+ unit tests, e2e)
 - [ ] D.4 Saved in `.pigm` version 5 only when a piece has drawings; user guide, project format and CHANGELOG (Unreleased) (+ unit tests)
-- [ ] D.5 E2e: a rock lifted from a layer drawn twice flickers Cycle while it drifts, saved, reopened and exported as a GIF that shows both drawings in turn; `npm run check` green
+- [ ] D.5 E2e (the user's test): a flat red square is drawn and lifted with Animate selection (its first drawing); without moving it, its second drawing has a blue line drawn across it; the two cycle (square, square with the line, square…) for the whole animation. Saved, reopened and exported as a GIF that shows the line on every other drawing all the way through; `npm run check` green

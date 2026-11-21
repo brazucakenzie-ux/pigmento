@@ -68,7 +68,7 @@ export function drawRuns(order: readonly Piece[], hinged: ReadonlySet<string>): 
 
 /** A run of hinged faces as `scene` has them, ready to draw together. */
 export function runSheets(run: readonly Piece[], scene: Scene, light: Light): BatchSheet[] {
-  return run.map((p) => ({ src: p.src, pl: scene.placement(p), shade: scene.shade(p, light), opacity: scene.opacity(p), bounds: scene.bounds(p) }));
+  return run.map((p) => ({ src: scene.src(p), pl: scene.placement(p), shade: scene.shade(p, light), opacity: scene.opacity(p), bounds: scene.bounds(p) }));
 }
 
 /** How a piece tiles at state s (null when it doesn't repeat). */
@@ -89,9 +89,9 @@ export function drawPiece(view: PixelView, r: Rect, p: Piece, scene: Scene, ligh
   if (pl.affine) {
     const area = tiling ? r : rectIntersect(scene.bounds(p), r);
     if (!area) return;
-    img = sampleAffine(p.src, pl.affine, area, tiling);
+    img = sampleAffine(scene.src(p), pl.affine, area, tiling);
   } else {
-    img = sampleProjective(p.src, pl, r, tiling, tiling ? null : scene.bounds(p), scene.shade(p, light));
+    img = sampleProjective(scene.src(p), pl, r, tiling, tiling ? null : scene.bounds(p), scene.shade(p, light));
   }
   if (img.w === 0 || img.h === 0) return;
   applyImage(view, { x: img.x, y: img.y, w: img.w, h: img.h }, { data: img.data, stride: img.w, ox: img.x, oy: img.y }, 'over', opacity * alpha);

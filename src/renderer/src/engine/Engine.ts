@@ -382,6 +382,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     this.doc = new PaintDocument({ width: 1280, height: 800 });
     this.view.setDocSize(this.doc.width, this.doc.height);
     this.renderer = new Renderer(this.doc, this.view);
+    this.renderer.onionPiece = () => this.anim.paintTarget;
     this.overlay = new Overlay(this.view);
     this.history.on('change', () => {
       // Pieces keep the motion of a path a change deletes: the paths as they were before it.
@@ -1058,8 +1059,16 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     if (delta) this.history.push(new PiecePixelsCommand(label, this, piece, delta));
   }
 
-  /** Undo or redo swapped a piece's tiles (its GPU copy picks up the new tiles when drawn). */
-  piecePixelsChanged(_piece: Piece): void {
+  /**
+   * Undo or redo swapped a piece's tiles (its GPU copy picks up the new tiles when drawn). A piece
+   * drawn frame by frame goes to a frame that shows the drawing that changed.
+   */
+  piecePixelsChanged(piece: Piece, surface: Surface): void {
+    const live = this.doc.pieces.find((q) => q.id === piece.id);
+    if (live?.drawings && live.src !== surface) {
+      const at = live.drawings.find((c) => c.surface === surface);
+      if (at) this.anim.setFrame(at.start);
+    }
     this.renderer.invalidate(null);
     this.requestRender();
     this.notifyPixels();
