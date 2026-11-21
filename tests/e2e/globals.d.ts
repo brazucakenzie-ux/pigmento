@@ -43,10 +43,11 @@ export interface PigmentoTestHook {
     loop: 'loop' | 'once' | 'pingpong';
     frame: number;
     selectedId: string | null;
-    pieces: { id: string; name: string; layerId: string; keys: { frame: number; easing: string }[]; kind: 'piece' | 'group'; parent: string | null; hinged: boolean }[];
-    current: { x: number; y: number; w: number; h: number; angle: number; skew: number; opacity: number; easing: string; keyed: boolean; curved: boolean; fold: number; group: boolean; link: 'none' | 'follows' | 'hinged'; follow: { layerId: string; objectId: string; sub: number } | null; progress: number; face: boolean; faceAngle: number; trails: { id: string; kind: string; brush: string; size: number; emitter: { x: number; y: number }; colors: { pos: number }[]; keys: { frame: number; amount: number }[]; emission: number; keyed: boolean }[] } | null;
+    pieces: { id: string; name: string; layerId: string; keys: { frame: number; easing: string }[]; kind: 'piece' | 'group'; parent: string | null; hinged: boolean; loop: 'off' | 'loop' | 'pingpong'; spinKeys: { frame: number; easing: string }[] }[];
+    current: { x: number; y: number; w: number; h: number; angle: number; skew: number; opacity: number; easing: string; keyed: boolean; curved: boolean; fold: number; group: boolean; link: 'none' | 'follows' | 'hinged'; follow: { layerId: string; objectId: string; sub: number } | null; progress: number; face: boolean; faceAngle: number; trails: { id: string; kind: string; brush: string; size: number; emitter: { x: number; y: number }; colors: { pos: number }[]; keys: { frame: number; amount: number }[]; emission: number; keyed: boolean }[]; loop: string; spin: { spin: number; tilt: number; turn: number; keyed: boolean; easing: string; keys: number[]; at: number } | null } | null;
     playing: boolean;
     cels: Record<string, number[]>;
+    celLoops: Record<string, { mode: 'cycle' | 'pingpong'; end: number }>;
     paintOnPiece: boolean;
     camera: { x: number; y: number; strength: number };
     light: { angle: number; height: number };

@@ -220,9 +220,10 @@ const TIME_STREAM = 0x5bd1e995;
 
 /**
  * The puffs of a trail alive at `frame`, oldest first, with the emitter's path and the frame
- * rate. Births are on fixed times, so the same frame always gives the same puffs.
+ * rate. Births are on fixed times, so the same frame always gives the same puffs. Its keyed
+ * emission is read at emissionFrame(frame) (a looping piece's frames repeat).
  */
-export function trailPuffs(t: Trail, at: EmitterPath, frame: number, fps: number): Puff[] {
+export function trailPuffs(t: Trail, at: EmitterPath, frame: number, fps: number, emissionFrame: (f: number) => number = (f) => f): Puff[] {
   if (t.kind !== 'puffs' || t.lifetime <= 0 || !Number.isFinite(frame) || fps <= 0) return [];
   const per = slicesPerFrame(t, fps);
   const dt = 1 / per;
@@ -256,7 +257,7 @@ export function trailPuffs(t: Trail, at: EmitterPath, frame: number, fps: number
     for (let k = Math.max(k0, k1 - MAX_LIVE_PUFFS * 2); k <= k1; k++) {
       const born = k * step;
       if (frame - born >= life || born > frame) continue;
-      const amount = emissionAt(t, born);
+      const amount = emissionAt(t, emissionFrame(born));
       if (amount <= 0 || (amount < 1 && trailRandom(t.seed ^ TIME_STREAM, k, -1) >= amount)) continue;
       const { i, f } = slice(born);
       births.push({ born, p: place(i, f), ...motion(i), r: [trailRandom(t.seed ^ TIME_STREAM, k, 1), trailRandom(t.seed ^ TIME_STREAM, k, 2), trailRandom(t.seed ^ TIME_STREAM, k, 3)] });
@@ -267,7 +268,7 @@ export function trailPuffs(t: Trail, at: EmitterPath, frame: number, fps: number
     for (let i = first; i <= last; i++) {
       const a = pos[i - first];
       const b = pos[i - first + 1];
-      const amount = emissionAt(t, (i + 0.5) * dt);
+      const amount = emissionAt(t, emissionFrame((i + 0.5) * dt));
       if (amount <= 0) continue;
       const due = (amount * Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2])) / t.spacing;
       const n = Math.min(MAX_LIVE_PUFFS, Math.floor(due) + (trailRandom(t.seed, i, -1) < due - Math.floor(due) ? 1 : 0));
@@ -306,13 +307,13 @@ export function trailPuffs(t: Trail, at: EmitterPath, frame: number, fps: number
  * The copies of an echo at `frame`, furthest back first: the piece as it was `gap` frames ago,
  * twice that, and so on, fainter each time; none before the first frame or while not emitting.
  */
-export function echoCopies(t: Trail, frame: number): EchoCopy[] {
+export function echoCopies(t: Trail, frame: number, emissionFrame: (f: number) => number = (f) => f): EchoCopy[] {
   if (t.kind !== 'echo' || t.copies < 1 || t.gap <= 0) return [];
   const out: EchoCopy[] = [];
   for (let i = t.copies; i >= 1; i--) {
     const f = frame - i * t.gap;
     if (f < 0) continue;
-    const amount = emissionAt(t, f);
+    const amount = emissionAt(t, emissionFrame(f));
     const opacity = t.opacity * amount * (1 - (t.fade * i) / (t.copies + 1));
     if (opacity > 0) out.push({ frame: f, opacity });
   }

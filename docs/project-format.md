@@ -232,6 +232,12 @@ Pieces in 1.2 can be bigger than the canvas and sit anywhere, partly or wholly o
   - One key per frame (the last given wins); frames past the end of the timeline move to its last frame.
 - Links that don't hold are dropped when a file is opened (the piece then follows nothing): one to a missing piece or one on another layer, a link from a group, a hinge onto a group, a loop, and pieces past the 64th in one tree.
 
+## Loops and spin in 1.3 (version 4)
+
+- **`loop`** (on a frame-by-frame pixel layer, left out: no loop): `{ "mode": "cycle", "end": 12 }`. Its drawings repeat for the whole timeline: `"cycle"` from frame 0 to `end` and round again, or `"pingpong"` forward through every drawing and back through the middle ones (A B C B A B C…). `end` (1 to 2,000) is the frame after the last drawing's last one; one at or before the last drawing's start becomes the frame after it.
+- **`loop`** (on a piece, default `"off"`): after its last keyframe its moves start again from the first (`"loop"`: the frame after the last shows what the frame after the first does) or run back and forth between the first and the last (`"pingpong"`). Every keyed value repeats with them, and so does its trails' emission; before its first keyframe it holds.
+- **`spin`** (on a piece, default `null`: it doesn't spin): `{ "keys": [{ "frame": 0, "spin": 0.5, "tilt": 0, "turn": 0, "easing": "linear" }] }`. Spin forever: speeds in turns a second (−100 to 100, positive clockwise) about its pivot (`spin`), round its own horizontal axis (`tilt`) and round its upright (`turn`), keyed on their own (1 to 2,000 keys, held before the first and after the last, eased like keyframes). The turn at a frame is the speed added up from frame 0 at the picture's `fps`, added to the keyed angle, tilt and turn; on a looping piece the speeds loop with its moves while the turn goes on adding up. Keys past the timeline move to its last frame, the last one given for a frame winning.
+
 ## Paths and trims in 1.3 (version 4)
 
 Pigmento 1.3 writes version 4 only when a piece follows a path or faces the way it goes (or has a keyed progress or an art angle left over), or a shape's outline is trimmed; otherwise it writes the oldest version that holds the picture, as 1.2 did. Pigmento 1.2 refuses a version 4 file with its "made with a newer Pigmento" message. Version 4 adds:

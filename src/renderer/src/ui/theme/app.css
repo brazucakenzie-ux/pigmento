@@ -3220,6 +3220,38 @@ dialog.tour::backdrop {
   cursor: ew-resize;
   pointer-events: auto;
 }
+/* A looping piece's keyframes again after its last, faded */
+.tl-key.ghost,
+.tl-seg.ghost {
+  opacity: 0.35;
+  pointer-events: none;
+}
+/* A loop's repeats: the same drawings again, faded */
+.tl-cel.repeat {
+  opacity: 0.45;
+  border-style: dashed;
+}
+/* The end of a loop's cycle (the last drawing's last frame), dragged along */
+.tl-loop-end {
+  position: absolute;
+  top: 2px;
+  width: 14px;
+  height: 22px;
+  margin-left: -7px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-xs);
+  background: var(--bg-panel);
+  color: var(--accent-fg);
+  cursor: ew-resize;
+  z-index: 1;
+}
+.tl-loop-end:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
 .tl-cel-start:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 1px;
@@ -3310,4 +3342,10 @@ dialog.tour::backdrop {
 }
 .trail-swatch.selected {
   box-shadow: 0 0 0 2px var(--accent);
+}
+/* The Spin popover: its speeds, their keys, Fit and Stop (nothing listed above them) */
+.spin-panel {
+  max-width: 440px;
+  padding-top: 0;
+  border-top: none;
 }

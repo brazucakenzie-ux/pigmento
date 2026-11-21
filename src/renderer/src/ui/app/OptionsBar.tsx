@@ -17,6 +17,7 @@ import { SelectedShapeParams, ShapeOption, ShapeToolParams } from './ShapeGaller
 import { BrushPicker } from './BrushPicker';
 import { CameraField, LightFields } from './CameraField';
 import { TrailButton } from './TrailOptions';
+import { SpinButton } from './SpinOptions';
 import { EASINGS, type Easing } from '@engine/anim/interpolate';
 import { BACKS, REPEATS, repeatAxes, type Back, type Follow, type Repeat } from '@engine/anim/piece';
 import type { CameraMoveFields } from '@engine/anim/AnimationController';
@@ -590,6 +591,23 @@ function PieceFields({ plane = false }: { plane?: boolean }) {
           </select>
         </label>
       ) : null}
+      <label className="opt" data-tip={t('loop.pieceTip')}>
+        <span>{t('loop.piece')}</span>
+        <select
+          className="select"
+          aria-label={t('loop.piece')}
+          value={info.loop}
+          onChange={(e) => {
+            const id = engine.anim.selectedId;
+            const v = e.target.value;
+            if (id) engine.anim.setPieceLoop(id, v === 'loop' ? 'loop' : v === 'pingpong' ? 'pingpong' : 'off');
+          }}
+        >
+          <option value="off">{t('loop.off')}</option>
+          <option value="loop">{t('loop.again')}</option>
+          <option value="pingpong">{t('loop.backAndForth')}</option>
+        </select>
+      </label>
       <label className="opt">
         <span>{t('piece.easing')}</span>
         <select className="select" aria-label={t('piece.easing')} value={info.easing} onChange={(e) => engine.anim.setFields({ easing: e.target.value as Easing })}>
@@ -661,6 +679,7 @@ function PieceFields({ plane = false }: { plane?: boolean }) {
           {info.link === 'none' ? <PathField follow={info.follow} /> : null}
           {info.link === 'none' ? <FaceField on={info.face} angle={info.faceAngle} /> : null}
           <TrailButton trails={info.trails} />
+          <SpinButton spin={info.spin} plane={plane} />
         </>
       )}
       {group ? null : (

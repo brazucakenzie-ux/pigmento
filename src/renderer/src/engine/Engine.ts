@@ -14,7 +14,7 @@ import type { Piece } from './anim/piece';
 import { docToPixel } from './anim/pieceEdit';
 import { PiecePixelsCommand } from './anim/piecePaint';
 import { keepsDepth, transformCamera, transformCameraKeys, transformPieces } from './anim/pieceTransform';
-import { celAt } from './anim/cels';
+import { celShownIndex } from './anim/cels';
 import { clampFrame } from './anim/timeline';
 import type { Easing } from './anim/interpolate';
 import { Selection, type SelectionMode, type SelectionModify } from './doc/Selection';
@@ -1079,7 +1079,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     let frame: number | null = null;
     if (layer.cels) {
       const now = this.doc.timeline.frame;
-      frame = celAt(layer.cels, now).surface === delta.surface ? now : (layer.cels.find((c) => c.surface === delta.surface)?.start ?? null);
+      frame = layer.cels[celShownIndex(layer.cels, layer.celLoop, now)].surface === delta.surface ? now : (layer.cels.find((c) => c.surface === delta.surface)?.start ?? null);
     }
     this.history.push(new PixelCommand(label, this, layer, delta, selBefore, selAfter, frame));
   }

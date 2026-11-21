@@ -9,7 +9,7 @@ import { repeatAxes, type Piece } from './piece';
 import type { Scene } from './scene';
 import { sceneOf } from './follow';
 import { defaultLight, type Light } from './space';
-import { celAt } from './cels';
+import { celShownIndex } from './cels';
 import { subtree } from './links';
 import { paintPuffs, pieceTrailsAt, puffTip, type TrailDrawing } from './trailDraw';
 
@@ -158,6 +158,6 @@ export function frameExtras(doc: PaintDocument, frame: number): LayerExtras | un
       }
       for (const g of groups) drawTrailsCpu(doc, view, r, g, t.get(g.id), true);
     },
-    surfaceOf: cels ? (layer) => (layer.cels ? celAt(layer.cels, frame).surface : null) : undefined,
+    surfaceOf: cels ? (layer) => (layer.cels ? layer.cels[celShownIndex(layer.cels, layer.celLoop, frame)].surface : null) : undefined,
   };
 }

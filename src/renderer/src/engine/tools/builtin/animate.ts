@@ -1,7 +1,8 @@
 import type { Point } from '../../core/geometry';
 import { handleCursor, ROTATE_HANDLE_OFFSET } from '../../live/BoxGeom';
 import { movePivot, type Keyframe, type PieceState } from '../../anim/interpolate';
-import { cloneKeyframe, pieceStateAt, setKey, type Piece } from '../../anim/piece';
+import { cloneKeyframe, pieceStateAt, setKey, type Piece, type PieceLoop } from '../../anim/piece';
+import { placeWithSpin } from '../../anim/spin';
 import { piecesInDrawOrder } from '../../anim/pieceRaster';
 import {
   docToLocal,
@@ -65,6 +66,10 @@ interface Drag {
   mode: 'own' | 'fold' | 'slide';
   /** Which way it was heading when the drag began, if it faces the way it goes. */
   heading: number | null;
+  /** How its moves repeat (a key added on a repeat starts from what shows there). */
+  loop: PieceLoop;
+  /** How far its spin had turned it when the drag began (radians; it isn't keyed). */
+  spun: { angle: number; tilt: number; turn: number } | null;
 }
 
 let drag: Drag | null = null;
@@ -114,7 +119,7 @@ const near = (a: Point, b: Point, px = HIT_PX): boolean => Math.abs(a.x - b.x) <
 /** The piece has depth, tilt or turn at the frame shown. */
 function in3d(ctx: ToolContext, p: Piece): boolean {
   const s = pieceStateAt(p, ctx.anim.frame);
-  return s.depth !== 0 || s.tilt !== 0 || s.turn !== 0 || p.link !== null || p.kind === 'group';
+  return s.depth !== 0 || s.tilt !== 0 || s.turn !== 0 || p.link !== null || p.kind === 'group' || !!p.spin?.keys.some((k) => k.tilt !== 0 || k.turn !== 0);
 }
 
 function hitSelected(ctx: ToolContext, p: Piece, e: ToolPointerEvent): Hit | null {
@@ -162,8 +167,8 @@ function cursorFor(hit: Hit | null, g: ScreenGeom | null): string {
   return handleCursor(hit.handle, g?.angle ?? 0);
 }
 
-function stateChange(p: Piece, s: PieceState, heading: number | null): Partial<PieceState> {
-  return { x: s.x, y: s.y, sx: s.sx, sy: s.sy, angle: keyedAngle(p, s, heading), skew: s.skew };
+function stateChange(p: Piece, s: PieceState, heading: number | null, spun: Drag['spun']): Partial<PieceState> {
+  return { x: s.x, y: s.y, sx: s.sx, sy: s.sy, angle: keyedAngle(p, s, heading) - (spun?.angle ?? 0), skew: s.skew };
 }
 
 /** Where a keyframe's dot is on screen: at its x and y, or where its progress puts it on the path it follows. */
@@ -265,6 +270,8 @@ export default registerTool({
       face: face.id,
       mode,
       heading: ctx.anim.scene().headingOf(piece, frame),
+      loop: piece.loop,
+      spun: ctx.anim.scene().spinOf(piece, frame),
     };
     // Pulling a bend handle grabs it where the pointer is.
     if (hit.kind === 'tangent') drag.grab = { x: 0, y: 0 };
@@ -281,7 +288,7 @@ export default registerTool({
       if (!piece) return;
       const scene = ctx.anim.scene();
       const change = d.mode === 'fold' ? { fold: foldToward(scene, piece, p, d.s0.fold, e.shift) } : slideOnParent(scene, piece, d.s0, d.start, { x: e.x, y: e.y }, e.shift);
-      if (change) ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, frame, change)));
+      if (change) ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, frame, change, d.loop)));
       return;
     }
     const held = ctx.anim.piece(d.id);
@@ -296,11 +303,11 @@ export default registerTool({
       if (!k) return;
       if (path) {
         const progress = alongPath(path, k, d.start, { x: e.x, y: e.y }, e.shift);
-        ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, hit.frame, { progress })));
+        ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, hit.frame, { progress }, d.loop)));
         return;
       }
       const at = moveState(k, e.x - d.start.x, e.y - d.start.y, e.shift);
-      ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, hit.frame, { x: at.x, y: at.y })));
+      ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, hit.frame, { x: at.x, y: at.y }, d.loop)));
       return;
     }
     if (hit.kind === 'pull' || hit.kind === 'tangent') {
@@ -316,7 +323,7 @@ export default registerTool({
       if (hit.kind === 'pull') change = last ? { in: v, out: null } : first ? { out: v, in: null } : { out: v, in: neg };
       else if (hit.side === 'out') change = e.alt || !k.in ? { out: v } : { out: v, in: neg };
       else change = e.alt || !k.out ? { in: v } : { in: v, out: neg };
-      ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, hit.frame, change)));
+      ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, hit.frame, change, d.loop)));
       return;
     }
     if (d.hit.kind === 'pivot') {
@@ -329,8 +336,9 @@ export default registerTool({
       const midScreen = ctx.view.toScreen(localToDoc(d.s0, d.pivot0, mid).x, localToDoc(d.s0, d.pivot0, mid).y);
       if (near({ x: e.sx, y: e.sy }, midScreen, PIVOT_SNAP_PX)) next = mid;
       const pivot = next;
+      const scene = ctx.anim.scene();
       ctx.anim.preview(d.id, (q) => {
-        q.keyframes = movePivot(d.keys0, d.pivot0, pivot);
+        q.keyframes = placeWithSpin(d.keys0, (f) => scene.spinOf(q, f), (k) => movePivot(k, d.pivot0, pivot));
         q.pivot = { ...pivot };
       });
       return;
@@ -341,7 +349,7 @@ export default registerTool({
     // On a path, it's dragged along it.
     if (hit.kind === 'body' && path) {
       const progress = alongPath(path, d.s0, d.start, { x: e.x, y: e.y }, e.shift);
-      ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, frame, { progress })));
+      ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, frame, { progress }, d.loop)));
       return;
     }
     const geom = { src: piece.src, pivot: d.pivot0 };
@@ -350,8 +358,8 @@ export default registerTool({
     else if (hit.kind !== 'handle') return;
     else if (e.ctrl && (hit.handle === 'n' || hit.handle === 's')) s = skewState(d.s0, geom, hit.handle, p);
     else s = scaleState(d.s0, geom, hit.handle, p, { shift: e.shift, alt: e.alt });
-    const change = stateChange(piece, s, d.heading);
-    ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, frame, change)));
+    const change = stateChange(piece, s, d.heading, d.spun);
+    ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, frame, change, d.loop)));
     // Dragged near another piece's edge, it hinges there when let go (Alt: it doesn't).
     if (hit.kind === 'body') {
       d.snap = hingeSnap(ctx, piece, e.alt);

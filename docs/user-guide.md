@@ -179,6 +179,8 @@ More things you can do:
 - **Keyframe menu:** right-click a diamond for its easing, Copy, Paste and Delete.
 - **Motion path:** shows as a dotted line with a dot at each keyframe. Drag a dot to move that keyframe.
 - **Curves:** Alt-drag a dot to bend the path there, then drag its handles to shape the curve. Double-click a dot, or use **Straighten**, to make it straight again.
+- **Loop:** in the options bar, a piece's moves repeat after its last keyframe, for the whole timeline: **Loop** starts them again from the first keyframe, and **Back and forth** plays them there and back. Key a sign at −20° on the first frame and 20° a few frames later, choose Back and forth, and it swings for ever. For a seamless Loop, make the last keyframe like the first. Everything keyed repeats with it, and the repeats of its keyframes show faded in the timeline.
+- **Spin forever:** the **Spin** button in the options bar turns a piece about its pivot on and on, at a speed in turns a second (negative goes the other way), on top of its keyframes. In the Perspective plane tool it also has **Tilt** and **Turn**, so a coin can flip or a sign revolve. Spin a group and everything in it goes round, like a wind turbine's blades. The speed has keys of its own, in a row under the piece in the timeline, so a turbine can start up or slow down without keying its position, and the turn never jumps when the speed changes. **Fit to the timeline** makes the speed a touch faster or slower so the piece turns a whole number of times over the timeline, and a looping GIF runs on without a jump. **Stop spinning** puts the piece back as its keyframes have it.
 - **Rename, duplicate or delete a piece:** double-click its name in the timeline to rename it, or right-click the name for its menu.
 
 ### Following a path
@@ -289,6 +291,7 @@ On the frame where a new drawing should start, choose **New drawing** (a blank p
 - **Clear drawing** empties the drawing you're on, and **Delete drawing** removes it.
 - In the timeline, each drawing is a block on its layer's row. Drag the start of a block to hold the drawing before it for longer or shorter.
 - **Onion skin** shows the drawings before (orange) and after (blue) the one you're drawing, faintly, so you can line them up. Choose how many to show, and how strong, beside its button in the timeline. It's only on screen: it's never saved or exported.
+- **Loop drawings** (in the Animate tab, or right-click the layer's row in the timeline) repeats a layer's drawings for the whole timeline: **Cycle** plays them round and round (A B C A B C…), and **Back and forth** plays them there and back (A B C B A B C…). Draw cloth on a line twice, with the waves in different places, and it flaps for as long as the animation lasts. The repeats show faded in the timeline; the small loop handle after the last drawing sets how long that one lasts. The repeats are the same drawings, not copies: paint on any repeat and that drawing changes everywhere it shows. New drawings go in the first cycle.
 
 ### Saving and sharing
 

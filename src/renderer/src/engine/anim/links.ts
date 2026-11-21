@@ -12,6 +12,7 @@ import {
 } from './frames';
 import type { Easing, Keyframe } from './interpolate';
 import { cloneKeyframe, copyPieces, makeGroup, MAX_KEYFRAMES, type Piece } from './piece';
+import { cloneSpin } from './spin';
 import { MAX_TREE, Scene, type Motion } from './scene';
 import { NEAR, type Space } from './space';
 
@@ -199,9 +200,11 @@ export function attach(
   const inv = frameInvert(new Scene(pieces, frame, space, motion).pose(parent).frame);
   if (!inv) return 'missing';
   const carry = handleMap(inv);
+  // Where it is by its keyframes alone: its own spin goes on turning it on top.
+  const keyedOnly = unspun(pieces, id);
   let near = { tilt: 0, turn: 0, angle: 0 };
   const keyframes = p.keyframes.map((k) => {
-    const world = new Scene(pieces, k.frame, space, motion).pose(p).frame;
+    const world = new Scene(keyedOnly, k.frame, space, motion).pose(keyedOnly.find((q) => q.id === id)!).frame;
     const parts = localParts(frameChain(inv, world), p.pivot, near);
     near = parts;
     return { ...cloneKeyframe(k), ...parts, in: carry(k.in), out: carry(k.out) };
@@ -245,8 +248,10 @@ export function hinge(
       );
       group.follow = q.follow && { ...q.follow };
       group.face = { ...q.face };
+      group.spin = cloneSpin(q.spin);
       out.push(group, {
         ...q,
+        spin: null,
         keyframes: q.keyframes.map((k) => ({ ...placeNeutral(k, q.pivot), progress: 0 })),
         link: { parent: group.id, hinge: null },
         follow: null,
@@ -284,9 +289,11 @@ export function detach(pieces: readonly Piece[], id: string, space: Space, motio
     }
     return 'linear';
   };
+  // Its own spin isn't baked in: it goes on turning it on top.
+  const keyedOnly = unspun(pieces, id);
   let near = { tilt: 0, turn: 0, angle: 0 };
   const keyframes = frames.map((f): Keyframe => {
-    const pose = new Scene(pieces, f, space, motion).pose(p);
+    const pose = new Scene(keyedOnly, f, space, motion).pose(keyedOnly.find((q) => q.id === id)!);
     const parts = rootParts(pose.frame, p.pivot, space, near);
     near = parts;
     return {
@@ -302,6 +309,11 @@ export function detach(pieces: readonly Piece[], id: string, space: Space, motio
   });
   const freed = pieces.map((q) => (q.id === id ? { ...q, keyframes, link: null } : q));
   return pruneGroups(freed);
+}
+
+/** The pieces with `id` not spinning (to find where its keyframes alone put it). */
+function unspun(pieces: readonly Piece[], id: string): Piece[] {
+  return pieces.map((q) => (q.id === id && q.spin ? { ...q, spin: null } : q));
 }
 
 /** Without groups that have no pieces of pixels under them any more. */
@@ -402,8 +414,10 @@ export function centrePivot(pieces: readonly Piece[], groupId: string, frame: nu
   if (Math.abs(mx - g.pivot.x) < tiny && Math.abs(my - g.pivot.y) < tiny && Math.abs(mz) < tiny) return [...pieces];
   const { cx, cy, f } = space;
   const keyframes = g.keyframes.map((k) => {
-    // Where the middle is in 3D on this keyframe becomes the group's place.
-    const P = frameApply(rootFrame(k, g.pivot, space), mx, my, mz);
+    // Where the middle is in 3D on this keyframe (as it shows, turned by its spin) becomes the group's place.
+    const sp = scene.spinOf(g, k.frame);
+    const shown = sp ? { ...k, angle: k.angle + sp.angle, tilt: k.tilt + sp.tilt, turn: k.turn + sp.turn } : k;
+    const P = frameApply(rootFrame(shown, g.pivot, space), mx, my, mz);
     const depth = Math.max(P[2], -f * (1 - NEAR));
     const s = f / (f + depth);
     return { ...cloneKeyframe(k), x: cx + (P[0] - cx) * s, y: cy + (P[1] - cy) * s, depth };

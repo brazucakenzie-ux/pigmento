@@ -82,6 +82,7 @@ function cloneRaster(l: RasterLayer, name: string): RasterLayer {
       if (!s) copies.set(c.surface, (s = c.surface.clone()));
       return { start: c.start, surface: s };
     });
+    copy.celLoop = l.celLoop && { ...l.celLoop };
   }
   return copy;
 }

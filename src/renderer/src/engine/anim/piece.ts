@@ -1,6 +1,7 @@
 import type { Point, Rect } from '../core/geometry';
 import { Surface } from '../raster/Surface';
 import { cloneTrail, type Trail } from './trail';
+import { cloneSpin, type Spin } from './spin';
 import type { ImageBuf } from '../raster/transform';
 import type { Hinge } from './frames';
 import { identityState, stateAt, STATE_KEYS, type Easing, type Keyframe, type PieceState } from './interpolate';
@@ -52,6 +53,33 @@ export interface Piece {
   face: Face;
   /** What it leaves behind as it moves (up to MAX_TRAILS; see trail.ts). Not keyframed, but their emission is keyed. */
   trails: Trail[];
+  /** After its last keyframe its moves start again from the first (loop) or run back and forth (pingpong). */
+  loop: PieceLoop;
+  /**
+   * Spin forever (null = none): speeds it turns at on and on, keyed on their own (see spin.ts), its
+   * turn so far added to its keyed angle, tilt and turn. Never changes its keyframes.
+   */
+  spin: Spin | null;
+}
+
+export type PieceLoop = 'off' | 'loop' | 'pingpong';
+export const PIECE_LOOPS: readonly PieceLoop[] = ['off', 'loop', 'pingpong'];
+
+/**
+ * The frame of a piece's own keyframes that `frame` shows: itself up to its last keyframe (and
+ * before its first, where it holds); after the last, its moves again from the first (loop), or
+ * back and forth between the first and the last (pingpong).
+ */
+export function loopFrame(keys: readonly { frame: number }[], loop: PieceLoop, frame: number): number {
+  if (loop === 'off' || keys.length < 2) return frame;
+  const f0 = keys[0].frame;
+  const f1 = keys[keys.length - 1].frame;
+  const span = f1 - f0;
+  if (span <= 0 || frame <= f1) return frame;
+  const t = frame - f0;
+  if (loop === 'loop') return f0 + (t % span);
+  const m = t % (2 * span);
+  return f0 + (m <= span ? m : 2 * span - m);
 }
 
 /** Facing the way it goes, and which way the art points as drawn (radians in its own pixels: 0 = right, clockwise). */
@@ -134,6 +162,8 @@ export function makePiece(id: string, name: string, layerId: string, src: ImageB
     follow: null,
     face: { on: false, angle: 0 },
     trails: [],
+    loop: 'off',
+    spin: null,
   };
 }
 
@@ -155,6 +185,8 @@ export function makeGroup(id: string, name: string, layerId: string, home: Rect,
     follow: null,
     face: { on: false, angle: 0 },
     trails: [],
+    loop: 'off',
+    spin: null,
   };
 }
 
@@ -164,7 +196,7 @@ export function cloneLink(l: Link | null): Link | null {
 
 /** The same piece (for undo snapshots: the pixels are shared, not copied). */
 export function clonePiece(p: Piece): Piece {
-  return { ...p, home: { ...p.home }, pivot: { ...p.pivot }, keyframes: p.keyframes.map(cloneKeyframe), link: cloneLink(p.link), follow: p.follow && { ...p.follow }, face: { ...p.face }, trails: p.trails.map(cloneTrail) };
+  return { ...p, home: { ...p.home }, pivot: { ...p.pivot }, keyframes: p.keyframes.map(cloneKeyframe), link: cloneLink(p.link), follow: p.follow && { ...p.follow }, face: { ...p.face }, trails: p.trails.map(cloneTrail), spin: cloneSpin(p.spin) };
 }
 
 /**
@@ -196,7 +228,7 @@ export function cloneKeyframe(k: Keyframe): Keyframe {
 
 export function pieceStateAt(p: Piece, frame: number): PieceState {
   // Never empty, so stateAt always has an answer.
-  return stateAt(p.keyframes, frame) ?? identityState(p.home.x + p.pivot.x, p.home.y + p.pivot.y);
+  return stateAt(p.keyframes, loopFrame(p.keyframes, p.loop, frame)) ?? identityState(p.home.x + p.pivot.x, p.home.y + p.pivot.y);
 }
 
 
@@ -208,14 +240,15 @@ export function keyframeIndex(keys: readonly Keyframe[], frame: number): number 
  * Set values at `frame` (auto-key): change that keyframe, or add one there that starts from
  * what the piece shows at that frame. A new keyframe keeps the easing of the segment it splits.
  */
-export function setKey(keys: readonly Keyframe[], frame: number, change: KeyChange): Keyframe[] {
+export function setKey(keys: readonly Keyframe[], frame: number, change: KeyChange, loop: PieceLoop = 'off'): Keyframe[] {
   const at = keyframeIndex(keys, frame);
   const out = keys.map(cloneKeyframe);
   if (at >= 0) {
     out[at] = { ...out[at], ...change };
     return out;
   }
-  const state = stateAt(keys, frame) ?? identityState(0, 0);
+  // A new key starts from what shows there (on a repeat of a loop, the moves it repeats).
+  const state = stateAt(keys, loopFrame(keys, loop, frame)) ?? identityState(0, 0);
   const before = [...keys].reverse().find((k) => k.frame < frame);
   const easing: Easing = before?.easing ?? 'linear';
   const k: Keyframe = { ...state, frame, easing, in: null, out: null, ...change };
@@ -241,5 +274,5 @@ export function moveKey(keys: readonly Keyframe[], from: number, to: number): Ke
 
 /** Bytes of history a list of pieces holds besides the shared source images. */
 export function piecesBytes(pieces: readonly Piece[]): number {
-  return pieces.reduce((n, p) => n + 200 + p.keyframes.length * 120, 0);
+  return pieces.reduce((n, p) => n + 200 + p.keyframes.length * 120 + (p.spin?.keys.length ?? 0) * 60, 0);
 }

@@ -51,6 +51,7 @@ import {
 import { Surface } from '../raster/Surface';
 import { MAX_DIMENSION, MAX_PIXELS } from './protocol';
 import { EASINGS, type Easing, type Keyframe } from '../anim/interpolate';
+import { cleanSpin, MAX_SPIN, MAX_SPIN_KEYS } from '../anim/spin';
 import { BACKS, MAX_KEYFRAMES, MAX_PIECES, MAX_SCROLL, newPieceId, REPEATS, type Back, type Piece, type Repeat } from '../anim/piece';
 import { EDGES, type Edge } from '../anim/frames';
 import { checkLinks } from '../anim/links';
@@ -89,8 +90,9 @@ function lightMoved(doc: PaintDocument): boolean {
 
 /** The oldest version that holds everything in `doc`. */
 export function versionFor(doc: PaintDocument): 1 | 2 | 3 | 4 {
-  if (doc.pieces.some((p) => p.follow !== null || p.face.on || p.face.angle !== 0 || p.trails.length > 0 || p.keyframes.some((k) => k.progress !== 0))) return 4;
+  if (doc.pieces.some((p) => p.follow !== null || p.face.on || p.face.angle !== 0 || p.trails.length > 0 || p.loop !== 'off' || p.spin !== null || p.keyframes.some((k) => k.progress !== 0))) return 4;
   if (doc.vectorLayers().some((l) => [...walkShapes(l.objects)].some((s) => s.trim || s.trimKeys?.length || s.trimTie))) return 4;
+  if (doc.rasterLayers().some((l) => l.cels && l.celLoop)) return 4;
   const v3 = doc.pieces.some(
     (p) =>
       p.kind !== 'piece' ||
@@ -149,6 +151,8 @@ const RasterJson = z.object({
     .min(2)
     .max(MAX_CELS)
     .optional(),
+  /** Version 4: the drawings repeating for the whole timeline; `end` is the frame after the last drawing's last. */
+  loop: z.object({ mode: z.enum(['cycle', 'pingpong']), end: int.min(1).max(MAX_FRAMES) }).optional(),
 });
 
 /** A saved selection: its coverage as a greyscale PNG (white = selected) placed at x, y. */
@@ -488,6 +492,26 @@ const PieceJson = z.object({
     .default({ on: false, angle: 0 }),
   /** Version 4: what it leaves behind as it moves (see anim/trail.ts). */
   trails: z.array(TrailJson).max(MAX_TRAILS).default([]),
+  /** Version 4: its moves repeating after its last keyframe. */
+  loop: z.enum(['off', 'loop', 'pingpong']).default('off'),
+  /** Version 4: spin forever, its speeds (turns a second) keyed on their own (see anim/spin.ts). */
+  spin: z
+    .object({
+      keys: z
+        .array(
+          z.object({
+            frame: int.min(0).max(MAX_FRAMES - 1),
+            spin: z.number().min(-MAX_SPIN).max(MAX_SPIN),
+            tilt: z.number().min(-MAX_SPIN).max(MAX_SPIN),
+            turn: z.number().min(-MAX_SPIN).max(MAX_SPIN),
+            easing: z.enum(EASINGS as [Easing, ...Easing[]]),
+          }),
+        )
+        .min(1)
+        .max(MAX_SPIN_KEYS),
+    })
+    .nullable()
+    .default(null),
 });
 const CameraKeyJson = z.object({
   frame: int.min(0).max(MAX_FRAMES - 1),
@@ -577,7 +601,7 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
         files[file] = [await codec.encode(c.surface.readRect(cb), cb.w, cb.h), { level: 0 }];
         cels.push({ start: c.start, image: { file, x: cb.x, y: cb.y, w: cb.w, h: cb.h } });
       }
-      return { kind: 'raster', ...common, image: null, cels };
+      return { kind: 'raster', ...common, image: null, cels, ...(l.celLoop ? { loop: { mode: l.celLoop.mode, end: l.celLoop.end } } : {}) };
     }
     const b = l.surface.contentBounds();
     if (!b) return { kind: 'raster', ...common, image: null };
@@ -650,7 +674,7 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
             link: p.link && { parent: p.link.parent, hinge: p.link.hinge && { ...p.link.hinge } },
           }
         : {}),
-      ...(v4 ? { follow: p.follow && { ...p.follow }, face: { ...p.face }, trails: p.trails.map(trailToJson) } : {}),
+      ...(v4 ? { follow: p.follow && { ...p.follow }, face: { ...p.face }, trails: p.trails.map(trailToJson), loop: p.loop, spin: p.spin && { keys: p.spin.keys.map((k) => ({ ...k })) } } : {}),
     });
   }
   const t = doc.timeline;
@@ -794,6 +818,8 @@ export async function loadProject(bytes: Uint8Array, codec: PngCodec): Promise<P
         if (cels.length > 1) {
           layer.cels = cels;
           layer.surface = cels[0].surface;
+          // A loop ends after its last drawing starts.
+          if (l.loop) layer.celLoop = { mode: l.loop.mode, end: Math.max(l.loop.end, cels[cels.length - 1].start + 1) };
         } else layer.surface = cels[0].surface;
       }
     }
@@ -875,6 +901,9 @@ async function readAnimation(doc: PaintDocument, a: NonNullable<DocumentJson['an
       face: { ...p.face },
       // Trails' emission keys inside the timeline, one a frame.
       trails: p.trails.map((t) => trailFromJson(t, a.length)),
+      loop: p.loop,
+      // Speed keys inside the timeline, one a frame.
+      spin: p.spin && cleanSpin({ keys: p.spin.keys.map((k) => ({ ...k, frame: clampFrame(k.frame, a.length) })) }),
     });
   }
   doc.pieces = checkLinks(pieces);
