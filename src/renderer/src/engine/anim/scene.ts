@@ -14,6 +14,7 @@ import type { PieceState } from './interpolate';
 import { pieceStateAt, type Follow, type Piece } from './piece';
 import type { PathMeasure } from './pathMeasure';
 import { artDirection, faceSpan, heading } from './face';
+import { spunAt } from './spin';
 import {
   FLAT_SPACE,
   placementOf,
@@ -38,6 +39,7 @@ export interface Motion {
 }
 
 const NO_MOTION: Motion = { paths: null, fps: 12 };
+const TAU = 2 * Math.PI;
 
 /** Where a piece is at one moment, with what it follows taken into account. */
 export interface Pose {
@@ -141,12 +143,22 @@ export class Scene {
     return heading((t) => this.placeAt(p, t), frame, keys[0].frame, keys[keys.length - 1].frame, faceSpan(this.motion.fps));
   }
 
+  /** How far a piece's spin has turned it by `frame`, in radians (null: it doesn't spin). */
+  spinOf(p: Piece, frame: number): { angle: number; tilt: number; turn: number } | null {
+    if (!p.spin) return null;
+    const t = spunAt(p, frame, this.motion.fps);
+    return { angle: t.spin * TAU, tilt: t.tilt * TAU, turn: t.turn * TAU };
+  }
+
   /**
-   * A piece's own state at `frame`. One that follows nothing else is placed along its path by its
-   * progress, if it follows one, and turned to face the way it goes, if it does.
+   * A piece's own state at `frame`: its keyframes', turned on by its spin, if it spins. One that
+   * follows nothing else is placed along its path by its progress, if it follows one, and turned to
+   * face the way it goes, if it does.
    */
   stateAt(p: Piece, frame: number): PieceState {
-    const s = pieceStateAt(p, frame);
+    const keyed = pieceStateAt(p, frame);
+    const spun = this.spinOf(p, frame);
+    const s = spun ? { ...keyed, angle: keyed.angle + spun.angle, tilt: keyed.tilt + spun.tilt, turn: keyed.turn + spun.turn } : keyed;
     if (p.link) return s;
     const at = this.pathOf(p)?.at(s.progress);
     const turn = this.facing(p, frame, s.sx, s.sy);

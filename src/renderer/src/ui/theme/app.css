@@ -3343,3 +3343,9 @@ dialog.tour::backdrop {
 .trail-swatch.selected {
   box-shadow: 0 0 0 2px var(--accent);
 }
+/* The Spin popover: its speeds, their keys, Fit and Stop (nothing listed above them) */
+.spin-panel {
+  max-width: 440px;
+  padding-top: 0;
+  border-top: none;
+}

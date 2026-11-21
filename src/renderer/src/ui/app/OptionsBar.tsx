@@ -17,6 +17,7 @@ import { SelectedShapeParams, ShapeOption, ShapeToolParams } from './ShapeGaller
 import { BrushPicker } from './BrushPicker';
 import { CameraField, LightFields } from './CameraField';
 import { TrailButton } from './TrailOptions';
+import { SpinButton } from './SpinOptions';
 import { EASINGS, type Easing } from '@engine/anim/interpolate';
 import { BACKS, REPEATS, repeatAxes, type Back, type Follow, type Repeat } from '@engine/anim/piece';
 import type { CameraMoveFields } from '@engine/anim/AnimationController';
@@ -678,6 +679,7 @@ function PieceFields({ plane = false }: { plane?: boolean }) {
           {info.link === 'none' ? <PathField follow={info.follow} /> : null}
           {info.link === 'none' ? <FaceField on={info.face} angle={info.faceAngle} /> : null}
           <TrailButton trails={info.trails} />
+          <SpinButton spin={info.spin} plane={plane} />
         </>
       )}
       {group ? null : (

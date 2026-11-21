@@ -385,6 +385,23 @@ function ShapeRow({ shape, name, frame }: { shape: ShapeKeysInfo; name: string; 
   );
 }
 
+/** A spinning piece's row under its own: the keys of its spin's speeds (not its keyframes). */
+function SpinRow({ piece, name, selected, frame }: { piece: PieceInfo; name: string; selected: boolean; frame: number }) {
+  return (
+    <KeyRow
+      name={name}
+      kind="tl-spin-row"
+      keys={piece.spinKeys}
+      selected={selected}
+      frame={frame}
+      select={() => engine.anim.select(piece.id)}
+      move={(from, to) => engine.anim.moveSpinKey(piece.id, from, to)}
+      remove={(f) => engine.anim.removeSpinKey(piece.id, f)}
+      setEasing={(f, easing) => engine.anim.setSpin(piece.id, f, { easing })}
+    />
+  );
+}
+
 /** A shape layer's row: just a still bar (its shapes' keyed trims have rows of their own beneath it). */
 function ShapeLayerRow({ layer, length, active }: { layer: LayerNode; length: number; active: boolean }) {
   return (
@@ -784,16 +801,22 @@ export function Timeline() {
   // The camera, then each layer and the pieces on it (top first, as the Layers panel stacks them),
   // the pieces linked under one indented beneath it.
   const pieceIndex = new Map(anim.pieces.map((p, i) => [p.id, i]));
-  const rows: ({ kind: 'camera' } | { kind: 'layer'; layer: LayerNode } | { kind: 'piece'; piece: PieceInfo; index: number; level: number } | { kind: 'shape'; shape: ShapeKeysInfo; name: string })[] = [];
+  const rows: ({ kind: 'camera' } | { kind: 'layer'; layer: LayerNode } | { kind: 'piece' | 'spin'; piece: PieceInfo; index: number; level: number } | { kind: 'shape'; shape: ShapeKeysInfo; name: string })[] = [];
+  // A spinning piece's speeds get a row of their own beneath it.
+  const pushPiece = (piece: PieceInfo, level: number) => {
+    const index = pieceIndex.get(piece.id)!;
+    rows.push({ kind: 'piece', piece, index, level });
+    if (piece.spinKeys.length) rows.push({ kind: 'spin', piece, index, level });
+  };
   if (anim.pieces.length) rows.push({ kind: 'camera' });
   for (const l of layers) {
     rows.push({ kind: 'layer', layer: l });
     // A shape layer's keyed shapes, top first.
     for (const sh of anim.shapes.filter((x) => x.layerId === l.id).reverse()) rows.push({ kind: 'shape', shape: sh, name: t('timeline.shapeRow', { layer: l.name, n: sh.n }) });
-    for (const r of treeRows(anim.pieces, l.id)) rows.push({ kind: 'piece', piece: r.piece, index: pieceIndex.get(r.piece.id)!, level: r.level });
+    for (const r of treeRows(anim.pieces, l.id)) pushPiece(r.piece, r.level);
   }
   const listed = new Set(layers.map((l) => l.id));
-  for (const p of anim.pieces) if (!listed.has(p.layerId)) rows.push({ kind: 'piece', piece: p, index: pieceIndex.get(p.id)!, level: 0 });
+  for (const p of anim.pieces) if (!listed.has(p.layerId)) pushPiece(p, 0);
 
   const onResize = (e: ReactPointerEvent<HTMLDivElement>) => {
     const startY = e.clientY;
@@ -940,6 +963,22 @@ export function Timeline() {
                     <span className="tl-name-text">{r.name}</span>
                   </button>
                 </div>
+              ) : r.kind === 'spin' ? (
+                <div key={`spin-${r.piece.id}`} role="listitem" className="tl-name-row tl-piece-name" data-level={r.level + 1} style={{ paddingInlineStart: (r.level + 1) * 12 }}>
+                  <button
+                    type="button"
+                    className={`tl-name ${r.piece.id === anim.selectedId ? 'selected' : ''}`}
+                    data-tip={t('spin.rowTip')}
+                    onClick={() => {
+                      engine.anim.select(r.piece.id);
+                      const tool = useUi.getState().tool;
+                      if (tool !== 'animate' && tool !== 'plane') engine.setTool('animate');
+                    }}
+                  >
+                    <Icon name="rotate-cw" size={13} />
+                    <span className="tl-name-text">{t('spin.row', { piece: pieceLabel(r.piece, r.index) })}</span>
+                  </button>
+                </div>
               ) : r.kind === 'layer' ? (
                 <div key={r.layer.id} role="listitem" className="tl-name-row">
                   <button
@@ -972,6 +1011,8 @@ export function Timeline() {
                 <ShapeLayerRow key={r.layer.id} layer={r.layer} length={anim.length} active={r.layer.id === activeId} />
               ) : r.kind === 'layer' ? (
                 <LayerRow key={r.layer.id} layer={r.layer} starts={anim.cels[r.layer.id]} loop={anim.celLoops[r.layer.id]} length={anim.length} frame={anim.frame} active={r.layer.id === activeId} />
+              ) : r.kind === 'spin' ? (
+                <SpinRow key={`spin-${r.piece.id}`} piece={r.piece} name={t('spin.row', { piece: pieceLabel(r.piece, r.index) })} selected={r.piece.id === anim.selectedId} frame={anim.frame} />
               ) : (
                 <PieceRow key={r.piece.id} piece={r.piece} index={r.index} selected={r.piece.id === anim.selectedId} frame={anim.frame} length={anim.length} />
               ),

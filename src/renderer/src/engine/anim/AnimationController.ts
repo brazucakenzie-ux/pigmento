@@ -14,6 +14,7 @@ import { BOX_FACES, faceSize, makeBox, MAX_BOX_SIDE, type BoxFace, type BoxSize 
 import { MAX_TREE, type Scene } from './scene';
 import { applyPreset, cleanTrail, cloneTrail, emissionAt, makeTrail, MAX_TRAIL_KEYS, MAX_TRAILS, type Trail, type TrailKey, type TrailPreset } from './trail';
 import { bakeFollow, docMotion, docPaths, FollowedPaths, outlinesOf, sceneOf } from './follow';
+import { fitSpin, MAX_SPIN_KEYS, moveSpinKey, placeWithSpin, removeSpinKey, setSpinKey, spinKeyFrame, spinSpeedAt, type SpinAxes } from './spin';
 import type { PathMeasure } from './pathMeasure';
 import { walkShapes } from '../vector/model';
 import { cameraMoveAt, MAX_CAMERA_KEYS, moveCameraKey, removeCameraKey, setCameraKey, type CameraKey, type CameraMove } from './cameraMove';
@@ -66,6 +67,8 @@ export interface PieceInfo {
   hinged: boolean;
   /** How its moves repeat after its last keyframe. */
   loop: PieceLoop;
+  /** Where its spin's speed is keyed (none: it doesn't spin). */
+  spinKeys: { frame: number; easing: Easing }[];
 }
 
 export interface AnimationInfo {
@@ -165,6 +168,20 @@ export interface PieceFields {
   trails: TrailFields[];
   /** How its moves repeat after its last keyframe. */
   loop: PieceLoop;
+  /** Its spin at the frame shown (null: it doesn't spin). */
+  spin: SpinFields | null;
+}
+
+/** A piece's spin at the frame shown, as the options show it. */
+export interface SpinFields extends SpinAxes {
+  /** Its speeds are keyed at the frame shown (on a looping piece's repeat, at the frame it repeats). */
+  keyed: boolean;
+  /** Easing from that key (or the one before it) to the next. */
+  easing: Easing;
+  /** Frames its speeds are keyed at. */
+  keys: number[];
+  /** The frame a speed set now is keyed at (the frame shown, or on a looping piece's repeat, the frame it repeats). */
+  at: number;
 }
 
 /** A trail as the options show it. */
@@ -348,6 +365,7 @@ export class AnimationController {
         parent: p.link?.parent ?? null,
         hinged: !!p.link?.hinge,
         loop: p.loop,
+        spinKeys: p.spin?.keys.map((k) => ({ frame: k.frame, easing: k.easing })) ?? [],
       })),
       paintOnPiece: this.paintOn,
       camera: { ...this.doc.camera },
@@ -460,7 +478,7 @@ export class AnimationController {
       inGroup: rootOf(this.doc.pieces, p).kind === 'group',
       back: p.back,
       shade: p.shade * 100,
-      in3d: s.tilt !== 0 || s.turn !== 0 || s.depth !== 0 || p.link !== null,
+      in3d: s.tilt !== 0 || s.turn !== 0 || s.depth !== 0 || p.link !== null || spins3d(p),
       easing: (at ?? before).easing,
       keyed: at !== undefined,
       curved: at !== undefined && (at.in !== null || at.out !== null),
@@ -471,11 +489,21 @@ export class AnimationController {
       faceAngle: p.face.angle * DEG,
       trails: p.trails.map((t) => ({ ...cloneTrail(t), emission: emissionAt(t, loopFrame(p.keyframes, p.loop, f)), keyed: t.keys.some((k) => k.frame === f) })),
       loop: p.loop,
+      spin: this.spinFields(p, f),
     };
   }
 
+  private spinFields(p: Piece, f: number): SpinFields | null {
+    if (!p.spin) return null;
+    const at = spinKeyFrame(p, f);
+    const keys = p.spin.keys;
+    const key = keys.find((k) => k.frame === at);
+    const before = [...keys].reverse().find((k) => k.frame <= at) ?? keys[0];
+    return { ...spinSpeedAt(p.spin, at), keyed: key !== undefined, easing: (key ?? before).easing, keys: keys.map((k) => k.frame), at };
+  }
+
   /** Set the selected piece's values at the current frame (auto-key), in the options bar's units. */
-  setFields(change: Partial<Omit<PieceFields, 'keyed' | 'curved' | 'repeat' | 'back' | 'in3d' | 'shade' | 'group' | 'link' | 'inGroup' | 'follow' | 'face' | 'faceAngle' | 'trails' | 'loop'>>): boolean {
+  setFields(change: Partial<Omit<PieceFields, 'keyed' | 'curved' | 'repeat' | 'back' | 'in3d' | 'shade' | 'group' | 'link' | 'inGroup' | 'follow' | 'face' | 'faceAngle' | 'trails' | 'loop' | 'spin'>>): boolean {
     const p = this.selected;
     if (!p) return false;
     const k: KeyChange = {};
@@ -617,6 +645,74 @@ export class AnimationController {
     if (!p || p.loop === loop) return false;
     return this.change('history.pieceLoop', () => {
       p.loop = loop;
+      return true;
+    });
+  }
+
+  /**
+   * Set a piece's spin speeds (turns a second) or easing at `frame` (one undo step): that speed key
+   * changed, or one added (on a looping piece's repeat, at the frame it repeats, where its speed is
+   * read). A piece that doesn't spin starts to. Never keys its position. A hinged piece turns with
+   * its group instead.
+   */
+  setSpin(id: string, frame: number, change: Partial<SpinAxes & { easing: Easing }>): boolean {
+    const p = this.piece(id);
+    if (!p) return false;
+    if (p.link?.hinge) {
+      this.host.notify('info', 'notice.spinHinged');
+      return false;
+    }
+    const at = spinKeyFrame(p, frame);
+    if (p.spin && !p.spin.keys.some((k) => k.frame === at) && p.spin.keys.length >= MAX_SPIN_KEYS) {
+      this.host.notify('error', 'notice.tooManyKeyframes', { max: MAX_SPIN_KEYS });
+      return false;
+    }
+    return this.change(p.spin ? 'history.spin' : 'history.spinStart', () => {
+      p.spin = setSpinKey(p.spin, at, change);
+      return true;
+    });
+  }
+
+  /** Remove a piece's speed key at `frame` (one undo step); without keys left it stops spinning. */
+  removeSpinKey(id: string, frame: number): boolean {
+    const p = this.piece(id);
+    const next = p && removeSpinKey(p.spin, frame);
+    if (!p || next === undefined) return false;
+    return this.change('history.spinKeyDelete', () => {
+      p.spin = next;
+      return true;
+    });
+  }
+
+  /** Move a piece's speed key to another frame (one undo step; refused onto another key). */
+  moveSpinKey(id: string, from: number, to: number): boolean {
+    const p = this.piece(id);
+    const target = Math.min(MAX_FRAMES - 1, Math.max(0, Math.round(to)));
+    const next = p && target !== from ? moveSpinKey(p.spin, from, target) : null;
+    if (!p || !next) return false;
+    return this.change('history.spinKeyMove', () => {
+      p.spin = next;
+      return true;
+    });
+  }
+
+  /** Fit to the timeline: its speeds made a touch faster or slower so it turns a whole number of times over the timeline (one undo step). */
+  fitSpin(id: string): boolean {
+    const p = this.piece(id);
+    const next = p && fitSpin(p, this.doc.timeline.length, this.doc.timeline.fps);
+    if (!p || !next) return false;
+    return this.change('history.spinFit', () => {
+      p.spin = next;
+      return true;
+    });
+  }
+
+  /** Stop spinning: the piece goes back to how its keyframes have it (one undo step). */
+  stopSpin(id: string): boolean {
+    const p = this.piece(id);
+    if (!p?.spin) return false;
+    return this.change('history.spinStop', () => {
+      p.spin = null;
       return true;
     });
   }
@@ -1332,9 +1428,14 @@ export class AnimationController {
     return this.change('history.pivot', () => {
       // In 3D the piece stays put too (a flat piece's keyframes come out as movePivot's). A piece
       // following another is placed in that piece's pixels; a hinged one by its hinge alone.
-      const in3d = p.keyframes.some((k) => k.depth !== 0 || k.tilt !== 0 || k.turn !== 0);
-      if (p.link && !p.link.hinge) p.keyframes = movePivotLocal(p.keyframes, p.pivot, pivot);
-      else if (!p.link) p.keyframes = in3d ? movePivot3D(p.keyframes, p.pivot, pivot, this.doc.space) : movePivot(p.keyframes, p.pivot, pivot);
+      // A spinning one stays put as it shows, turned by its spin.
+      const scene = this.scene();
+      const move = (keys: typeof p.keyframes) => {
+        const in3d = keys.some((k) => k.depth !== 0 || k.tilt !== 0 || k.turn !== 0);
+        if (p.link) return movePivotLocal(keys, p.pivot, pivot);
+        return in3d ? movePivot3D(keys, p.pivot, pivot, this.doc.space) : movePivot(keys, p.pivot, pivot);
+      };
+      if (!p.link?.hinge) p.keyframes = placeWithSpin(p.keyframes, (f) => scene.spinOf(p, f), move);
       p.pivot = { ...pivot };
       return true;
     });
@@ -1385,6 +1486,11 @@ function sameAnim(a: AnimSnapshot, b: AnimSnapshot): boolean {
   if (JSON.stringify(a.cameraKeys) !== JSON.stringify(b.cameraKeys)) return false;
   if (a.pieces.some((p, i) => p.src !== b.pieces[i].src)) return false;
   return JSON.stringify(a.pieces.map(strip)) === JSON.stringify(b.pieces.map(strip));
+}
+
+/** It spins in 3D (tilting or turning forever). */
+function spins3d(p: Piece): boolean {
+  return !!p.spin?.keys.some((k) => k.tilt !== 0 || k.turn !== 0);
 }
 
 /** A piece without its pixels, for comparing states. */

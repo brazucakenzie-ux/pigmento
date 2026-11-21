@@ -57,6 +57,8 @@ function picture(): PaintDocument {
   p.follow = { layerId: shapes.id, objectId: 'route', sub: 0 };
   p.face = { on: true, angle: -Math.PI / 2 };
   p.loop = 'pingpong';
+  // Spinning, speeding up and turning back in 3D.
+  p.spin = { keys: [{ frame: 0, spin: 0.5, tilt: 0, turn: -0.25, easing: 'easeIn' }, { frame: 12, spin: 1.5, tilt: 0.125, turn: 0, easing: 'hold' }] };
   // Smoke that lights at frame 4, and an echo.
   p.trails = [
     { ...applyPreset(makeTrail('smoke', 'puffs', { x: 0, y: 2 }, 12345), 'rocketSmoke'), keys: [{ frame: 0, amount: 0, easing: 'hold' }, { frame: 4, amount: 1, easing: 'linear' }] },
@@ -98,6 +100,7 @@ describe('projects, version 4', () => {
     expect(p.face).toEqual({ on: true, angle: -Math.PI / 2 });
     expect(p.trails).toEqual(doc.pieces[0].trails);
     expect(p.loop).toBe('pingpong');
+    expect(p.spin).toEqual(doc.pieces[0].spin);
     expect(p.keyframes.map((k) => [k.frame, k.progress, k.easing])).toEqual([
       [0, 0, 'easeInOut'],
       [23, 1, 'easeInOut'],
@@ -169,6 +172,35 @@ describe('projects, version 4', () => {
       { frame: 3, amount: 0, easing: 'hold' },
       { frame: 23, amount: 1, easing: 'linear' },
     ]);
+  });
+
+  it('are written for a spinning piece alone, and refuse spins out of range, fitting their keys into the timeline', async () => {
+    const doc = new PaintDocument({ width: 100, height: 100 });
+    const p = makePiece('wheel', '', doc.layers[0].id, img, { x: 0, y: 0, w: 8, h: 4 }, 0);
+    p.spin = { keys: [{ frame: 0, spin: 2, tilt: 0, turn: 0, easing: 'linear' }] };
+    doc.pieces = [p];
+    expect(versionFor(doc)).toBe(4);
+    p.spin = null;
+    expect(versionFor(doc)).toBeLessThan(4);
+    const withSpin = async (spin: unknown) => {
+      const files = unzipSync(await saveProject(picture(), codec));
+      const json = JSON.parse(strFromU8(files['document.json'])) as { animation: { pieces: Record<string, unknown>[] } };
+      json.animation.pieces[0].spin = spin;
+      files['document.json'] = strToU8(JSON.stringify(json));
+      return loadProject(zipSync(files), codec);
+    };
+    const k = { frame: 0, spin: 1, tilt: 0, turn: 0, easing: 'linear' };
+    for (const bad of [{ keys: [] }, { keys: [{ ...k, spin: 1e4 }] }, { keys: [{ ...k, easing: 'wobbly' }] }, { keys: [{ ...k, frame: -1 }] }, { speed: 1 }]) {
+      await expect(withSpin(bad)).rejects.toMatchObject({ key: 'error.projectInvalid' });
+    }
+    // Keys past the end of the timeline move to its last frame (the last one given for a frame wins).
+    const back = await withSpin({ keys: [{ ...k, frame: 1500, spin: 3 }, { ...k, frame: 5 }, { ...k, frame: 23, spin: 2 }] });
+    expect(back.pieces[0].spin!.keys.map((q) => [q.frame, q.spin])).toEqual([
+      [5, 1],
+      [23, 2],
+    ]);
+    // None at all: it doesn't spin.
+    expect((await withSpin(null)).pieces[0].spin).toBeNull();
   });
 
   it('refuse numbers out of range', async () => {
