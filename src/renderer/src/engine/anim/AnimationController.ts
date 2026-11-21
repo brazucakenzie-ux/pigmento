@@ -12,6 +12,7 @@ import type { Hinge } from './frames';
 import { attach, centrePivot, detach, duplicateTree, hinge, movePivotLocal, moveTree, removeTree, rootOf, subtree, type LinkRefusal } from './links';
 import { BOX_FACES, faceSize, makeBox, MAX_BOX_SIDE, type BoxFace, type BoxSize } from './box';
 import { MAX_TREE, type Scene } from './scene';
+import { applyPreset, cleanTrail, cloneTrail, emissionAt, makeTrail, MAX_TRAIL_KEYS, MAX_TRAILS, type Trail, type TrailKey, type TrailPreset } from './trail';
 import { bakeFollow, docMotion, docPaths, FollowedPaths, outlinesOf, sceneOf } from './follow';
 import type { PathMeasure } from './pathMeasure';
 import { walkShapes } from '../vector/model';
@@ -154,6 +155,16 @@ export interface PieceFields {
   face: boolean;
   /** Which way its art points as drawn, in degrees (0 = right, 90 = down). */
   faceAngle: number;
+  /** Its trails, each with how much it emits at the frame shown and whether that's keyed there. */
+  trails: TrailFields[];
+}
+
+/** A trail as the options show it. */
+export interface TrailFields extends Trail {
+  /** How much it emits at the frame shown (0 … 1). */
+  emission: number;
+  /** Its emission has a key at the frame shown. */
+  keyed: boolean;
 }
 
 /** A path a piece can follow: one outline of a shape on a shape layer. */
@@ -166,6 +177,8 @@ export interface PathChoice extends Follow {
 }
 
 const DEG = 180 / Math.PI;
+
+let nextTrailId = 1;
 
 /** Everything about the animation an undo step can change (not the frame shown). */
 export interface AnimSnapshot {
@@ -446,11 +459,12 @@ export class AnimationController {
       progress: s.progress * 100,
       face: p.face.on,
       faceAngle: p.face.angle * DEG,
+      trails: p.trails.map((t) => ({ ...cloneTrail(t), emission: emissionAt(t, f), keyed: t.keys.some((k) => k.frame === f) })),
     };
   }
 
   /** Set the selected piece's values at the current frame (auto-key), in the options bar's units. */
-  setFields(change: Partial<Omit<PieceFields, 'keyed' | 'curved' | 'repeat' | 'back' | 'in3d' | 'shade' | 'group' | 'link' | 'inGroup' | 'follow' | 'face' | 'faceAngle'>>): boolean {
+  setFields(change: Partial<Omit<PieceFields, 'keyed' | 'curved' | 'repeat' | 'back' | 'in3d' | 'shade' | 'group' | 'link' | 'inGroup' | 'follow' | 'face' | 'faceAngle' | 'trails'>>): boolean {
     const p = this.selected;
     if (!p) return false;
     const k: KeyChange = {};
@@ -471,6 +485,99 @@ export class AnimationController {
     if (change.depth !== undefined) k.depth = Math.max(-this.doc.space.f * 0.99, Math.min(1e6, change.depth));
     if (change.easing !== undefined) k.easing = change.easing;
     return this.setKey(p.id, this.frame, k);
+  }
+
+  /**
+   * Give a piece a trail, made as a preset, coming from its middle (a group's pivot): one undo
+   * step. Its id, or null (and says why) when the piece has as many as it can.
+   */
+  addTrail(id: string, preset: TrailPreset = 'rocketSmoke'): string | null {
+    const p = this.piece(id);
+    if (!p) return null;
+    if (p.trails.length >= MAX_TRAILS) {
+      this.host.notify('info', 'notice.tooManyTrails', { max: MAX_TRAILS });
+      return null;
+    }
+    const tid = `trail-${Date.now().toString(36)}-${nextTrailId++}`;
+    const emitter = p.kind === 'group' ? { ...p.pivot } : { x: p.src.width / 2, y: p.src.height / 2 };
+    const t = applyPreset(makeTrail(tid, 'puffs', emitter, Math.floor(Math.random() * 2 ** 31)), preset);
+    const done = this.change('history.trailAdd', () => {
+      p.trails = [...p.trails, t];
+      return true;
+    });
+    return done ? tid : null;
+  }
+
+  /** Take a trail off a piece (one undo step). */
+  removeTrail(id: string, trailId: string): boolean {
+    const p = this.piece(id);
+    if (!p?.trails.some((t) => t.id === trailId)) return false;
+    return this.change('history.trailRemove', () => {
+      p.trails = p.trails.filter((t) => t.id !== trailId);
+      return true;
+    });
+  }
+
+  /** Move a trail up or down the piece's list (later ones draw over earlier ones; one undo step). */
+  moveTrail(id: string, trailId: string, dir: -1 | 1): boolean {
+    const p = this.piece(id);
+    const i = p ? p.trails.findIndex((t) => t.id === trailId) : -1;
+    if (!p || i < 0 || i + dir < 0 || i + dir >= p.trails.length) return false;
+    return this.change('history.trailMove', () => {
+      const list = [...p.trails];
+      [list[i], list[i + dir]] = [list[i + dir], list[i]];
+      p.trails = list;
+      return true;
+    });
+  }
+
+  /** Change a trail's settings, kept in range (one undo step). */
+  setTrail(id: string, trailId: string, change: Partial<Omit<Trail, 'id' | 'keys'>>, label: I18nKey = 'history.trail'): boolean {
+    const p = this.piece(id);
+    if (!p?.trails.some((t) => t.id === trailId)) return false;
+    return this.change(label, () => {
+      p.trails = p.trails.map((t) => (t.id === trailId ? cleanTrail({ ...t, ...change }) : t));
+      return true;
+    });
+  }
+
+  /** Make a trail over as a preset, keeping where it comes from and its keyed emission (one undo step). */
+  presetTrail(id: string, trailId: string, preset: TrailPreset): boolean {
+    const p = this.piece(id);
+    if (!p?.trails.some((t) => t.id === trailId)) return false;
+    return this.change('history.trailPreset', () => {
+      p.trails = p.trails.map((t) => (t.id === trailId ? applyPreset(t, preset) : t));
+      return true;
+    });
+  }
+
+  /** Key how much a trail emits at `frame` (0 … 1; one undo step). */
+  keyEmission(id: string, trailId: string, frame: number, amount: number, easing?: Easing): boolean {
+    const p = this.piece(id);
+    const t = p?.trails.find((q) => q.id === trailId);
+    if (!p || !t) return false;
+    if (!t.keys.some((k) => k.frame === frame) && t.keys.length >= MAX_TRAIL_KEYS) {
+      this.host.notify('error', 'notice.tooManyKeyframes', { max: MAX_TRAIL_KEYS });
+      return false;
+    }
+    const before = [...t.keys].reverse().find((k) => k.frame < frame);
+    const at = t.keys.find((k) => k.frame === frame);
+    const key: TrailKey = { frame, amount, easing: easing ?? at?.easing ?? before?.easing ?? 'linear' };
+    return this.change('history.trailKey', () => {
+      p.trails = p.trails.map((q) => (q.id === trailId ? cleanTrail({ ...q, keys: [...q.keys.filter((k) => k.frame !== frame), key] }) : q));
+      return true;
+    });
+  }
+
+  /** Remove a trail's emission key at `frame` (one undo step). */
+  removeEmissionKey(id: string, trailId: string, frame: number): boolean {
+    const p = this.piece(id);
+    const t = p?.trails.find((q) => q.id === trailId);
+    if (!p || !t?.keys.some((k) => k.frame === frame)) return false;
+    return this.change('history.trailKeyDelete', () => {
+      p.trails = p.trails.map((q) => (q.id === trailId ? { ...q, keys: q.keys.filter((k) => k.frame !== frame) } : q));
+      return true;
+    });
   }
 
   /**

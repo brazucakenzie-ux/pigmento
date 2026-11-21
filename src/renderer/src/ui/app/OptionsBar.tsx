@@ -16,6 +16,7 @@ import { GradientButton, PatternPicker } from './PaintOptions';
 import { SelectedShapeParams, ShapeOption, ShapeToolParams } from './ShapeGallery';
 import { BrushPicker } from './BrushPicker';
 import { CameraField, LightFields } from './CameraField';
+import { TrailButton } from './TrailOptions';
 import { EASINGS, type Easing } from '@engine/anim/interpolate';
 import { BACKS, REPEATS, repeatAxes, type Back, type Follow, type Repeat } from '@engine/anim/piece';
 import type { CameraMoveFields } from '@engine/anim/AnimationController';
@@ -659,6 +660,7 @@ function PieceFields({ plane = false }: { plane?: boolean }) {
           {onPath ? null : <FollowsField />}
           {info.link === 'none' ? <PathField follow={info.follow} /> : null}
           {info.link === 'none' ? <FaceField on={info.face} angle={info.faceAngle} /> : null}
+          <TrailButton trails={info.trails} />
         </>
       )}
       {group ? null : (

@@ -110,7 +110,7 @@ export function makeTrail(id: string, kind: TrailKind, emitter: Point, seed: num
       { pos: 0, color: { r: 245, g: 245, b: 245, a: 255 } },
       { pos: 1, color: { r: 140, g: 140, b: 140, a: 255 } },
     ],
-    brush: 'soft-round',
+    brush: 'round-soft',
     stretch: false,
     front: false,
     copies: 5,
@@ -317,4 +317,171 @@ export function echoCopies(t: Trail, frame: number): EchoCopy[] {
     if (opacity > 0) out.push({ frame: f, opacity });
   }
   return out;
+}
+
+export type TrailPreset = 'rocketSmoke' | 'cometTail' | 'sparkles' | 'speedLines' | 'echo';
+export const TRAIL_PRESETS: readonly TrailPreset[] = ['rocketSmoke', 'cometTail', 'sparkles', 'speedLines', 'echo'];
+
+const rgba = (r: number, g: number, b: number, a = 255): RGBA => ({ r, g, b, a });
+
+/** What each preset sets (everything but which trail it is, where it comes from, its keys and seed). */
+const PRESETS: Record<TrailPreset, Omit<Trail, 'id' | 'emitter' | 'keys' | 'seed'>> = {
+  rocketSmoke: {
+    kind: 'puffs',
+    rate: 40,
+    spacing: 6,
+    lifetime: 1.6,
+    size: 18,
+    growth: 3.5,
+    drift: 25,
+    driftAngle: -Math.PI / 2,
+    spread: 20,
+    opacity: 0.85,
+    fade: 1,
+    colors: [
+      { pos: 0, color: rgba(255, 236, 170) },
+      { pos: 0.15, color: rgba(225, 225, 225) },
+      { pos: 1, color: rgba(120, 120, 120) },
+    ],
+    brush: 'round-soft',
+    stretch: false,
+    front: false,
+    copies: 5,
+    gap: 2,
+  },
+  cometTail: {
+    kind: 'puffs',
+    rate: 60,
+    spacing: 3,
+    lifetime: 0.8,
+    size: 16,
+    growth: 0.25,
+    drift: 0,
+    driftAngle: 0,
+    spread: 4,
+    opacity: 0.9,
+    fade: 1,
+    colors: [
+      { pos: 0, color: rgba(255, 255, 255) },
+      { pos: 0.4, color: rgba(170, 215, 255) },
+      { pos: 1, color: rgba(60, 110, 255) },
+    ],
+    brush: 'round-soft',
+    stretch: false,
+    front: false,
+    copies: 5,
+    gap: 2,
+  },
+  sparkles: {
+    kind: 'puffs',
+    rate: 25,
+    spacing: 14,
+    lifetime: 0.7,
+    size: 14,
+    growth: 0.3,
+    drift: 60,
+    driftAngle: Math.PI / 2,
+    spread: 90,
+    opacity: 1,
+    fade: 1,
+    colors: [
+      { pos: 0, color: rgba(255, 255, 255) },
+      { pos: 0.3, color: rgba(255, 230, 90) },
+      { pos: 1, color: rgba(255, 120, 20) },
+    ],
+    brush: 'sparkles',
+    stretch: false,
+    front: true,
+    copies: 5,
+    gap: 2,
+  },
+  speedLines: {
+    kind: 'puffs',
+    rate: 0,
+    spacing: 12,
+    lifetime: 0.25,
+    size: 4,
+    growth: 1,
+    drift: 0,
+    driftAngle: 0,
+    spread: 0,
+    opacity: 0.9,
+    fade: 1,
+    colors: [
+      { pos: 0, color: rgba(255, 255, 255) },
+      { pos: 1, color: rgba(255, 255, 255) },
+    ],
+    brush: 'round-hard',
+    stretch: true,
+    front: false,
+    copies: 5,
+    gap: 2,
+  },
+  echo: {
+    kind: 'echo',
+    rate: 30,
+    spacing: 8,
+    lifetime: 1.5,
+    size: 24,
+    growth: 2.5,
+    drift: 20,
+    driftAngle: -Math.PI / 2,
+    spread: 15,
+    opacity: 0.6,
+    fade: 1,
+    colors: [
+      { pos: 0, color: rgba(245, 245, 245) },
+      { pos: 1, color: rgba(140, 140, 140) },
+    ],
+    brush: 'round-soft',
+    stretch: false,
+    front: false,
+    copies: 4,
+    gap: 2,
+  },
+};
+
+/** A trail made over as a preset (it keeps which trail it is, where it comes from, its keys and seed). */
+export function applyPreset(t: Trail, preset: TrailPreset): Trail {
+  const p = PRESETS[preset];
+  return cloneTrail({ ...t, ...p, colors: p.colors });
+}
+
+const fin = (v: number, lo: number, hi: number, d: number) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
+const turn = (a: number) => (Number.isFinite(a) ? Math.atan2(Math.sin(a), Math.cos(a)) : 0);
+
+/**
+ * A trail with every number kept in range (and colours 2 … 4, in order; keys one a frame, in
+ * order): what the options and the file reader let through.
+ */
+export function cleanTrail(t: Trail): Trail {
+  const colors = [...t.colors]
+    .slice(0, 4)
+    .map((s) => ({ pos: fin(s.pos, 0, 1, 0), color: { r: fin(s.color.r, 0, 255, 0) | 0, g: fin(s.color.g, 0, 255, 0) | 0, b: fin(s.color.b, 0, 255, 0) | 0, a: fin(s.color.a, 0, 255, 255) | 0 } }))
+    .sort((a, b) => a.pos - b.pos);
+  while (colors.length < 2) colors.push({ pos: 1, color: { ...(colors[0]?.color ?? rgba(255, 255, 255)) } });
+  const byFrame = new Map<number, TrailKey>();
+  for (const k of t.keys.slice(0, MAX_TRAIL_KEYS)) {
+    const frame = Math.max(0, Math.round(fin(k.frame, 0, 1e6, 0)));
+    byFrame.set(frame, { frame, amount: fin(k.amount, 0, 1, 1), easing: k.easing });
+  }
+  return {
+    ...t,
+    emitter: { x: fin(t.emitter.x, -1e6, 1e6, 0), y: fin(t.emitter.y, -1e6, 1e6, 0) },
+    rate: fin(t.rate, 0, MAX_RATE, 0),
+    spacing: fin(t.spacing, 0, MAX_SPACING, 0),
+    lifetime: fin(t.lifetime, 0.05, MAX_LIFETIME, 1),
+    size: fin(t.size, 1, MAX_SIZE, 24),
+    growth: fin(t.growth, 0, MAX_GROWTH, 1),
+    drift: fin(t.drift, 0, MAX_DRIFT, 0),
+    driftAngle: turn(t.driftAngle),
+    spread: fin(t.spread, 0, MAX_DRIFT, 0),
+    opacity: fin(t.opacity, 0, 1, 1),
+    fade: fin(t.fade, 0, 1, 1),
+    colors,
+    copies: Math.round(fin(t.copies, 1, MAX_COPIES, 4)),
+    gap: Math.round(fin(t.gap, 1, MAX_GAP, 2)),
+    seed: Math.round(fin(t.seed, 0, 2 ** 31 - 1, 1)),
+    keys: [...byFrame.values()].sort((a, b) => a.frame - b.frame),
+  };
 }

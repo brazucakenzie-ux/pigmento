@@ -204,6 +204,24 @@ export class Overlay {
     c.restore();
   }
 
+  /** A trail's emitter: two rings, one inside the other. */
+  emitter(sp: Point, active = false): void {
+    const c = this.ctx;
+    c.save();
+    for (const [r, w, colour] of [
+      [7, 3, this.theme.handleFill],
+      [7, 1.25, active ? this.theme.accent : this.theme.handleStroke],
+      [3, 1.25, this.theme.accent],
+    ] as const) {
+      c.beginPath();
+      c.arc(sp.x, sp.y, active ? r + 1 : r, 0, Math.PI * 2);
+      c.lineWidth = w;
+      c.strokeStyle = colour;
+      c.stroke();
+    }
+    c.restore();
+  }
+
   /** A pivot: a ring with a cross through it. */
   pivot(sp: Point, active = false): void {
     const c = this.ctx;

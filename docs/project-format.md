@@ -272,6 +272,48 @@ On a shape (in a shape layer's `objects`, in a group or not):
 - **`trimKeys`** (1 to 2,000; left out: not keyed): the trim keyed on the timeline, which wins over `trim`. Each key has a `frame` (0 to 1,999; ones past the end of the timeline move to its last frame, and the last key given for a frame wins) and an `easing` on to the next key (as for piece keyframes). Before the first key and after the last the trim holds. A picture with keyed trims writes its `animation` (for its timeline) even without pieces.
 - **`trimTie`** (left out: none): one end of the trim follows a piece that follows this shape (`piece` is its id). With `end` `"start"` the outline is erased behind the piece; with `"end"` it's drawn up to the piece. That end goes `gap` document pixels (−100,000 to 100,000; negative: ahead) behind where the piece's pivot is along the shape's outlines (taken as one long line, on the piece's current turn round a closed one), clamped to the outline, instead of where `trim` or `trimKeys` say; the other end and `offset` come from them. A tie to a piece that isn't there, or doesn't follow this shape, does nothing.
 
+### Trails
+
+On a piece (version 4):
+
+```json
+{
+  "trails": [
+    {
+      "id": "trail-1",
+      "kind": "puffs",
+      "emitter": { "x": 0, "y": 20 },
+      "rate": 40,
+      "spacing": 6,
+      "lifetime": 1.6,
+      "size": 18,
+      "growth": 3.5,
+      "drift": 25,
+      "driftAngle": -1.5708,
+      "spread": 20,
+      "opacity": 0.85,
+      "fade": 1,
+      "colors": [{ "pos": 0, "color": "#ffecaaff" }, { "pos": 1, "color": "#787878ff" }],
+      "brush": "round-soft",
+      "stretch": false,
+      "front": false,
+      "copies": 5,
+      "gap": 2,
+      "seed": 311206248,
+      "keys": [{ "frame": 0, "amount": 0, "easing": "hold" }, { "frame": 12, "amount": 1, "easing": "linear" }]
+    }
+  ]
+}
+```
+
+- **`trails`** (0 to 4, default none): drawn in this order. `id` (1 to 100 characters) tells them apart; `kind` is `"puffs"` or `"echo"`.
+- **`emitter`**: where it comes from, in the piece's own pixels; it moves and turns with the piece, as the camera at rest places it.
+- Puffs: `rate` (0 to 1,000 a second), `spacing` (0 to 10,000 document pixels travelled a puff; 0 for none), `lifetime` (0.05 to 30 seconds), `size` (1 to 2,000 px wide at birth), `growth` (0 to 20: size at the end of life over size at birth), `drift` (0 to 10,000 px a second) in direction `driftAngle` (radians on the canvas, −10 to 10; −π/2 is up), `spread` (0 to 10,000 px a second, each puff its own way), `colors` (2 to 4 stops at `pos` 0 to 1 through a puff's life, `#rrggbbaa`), `brush` (a brush id; one that isn't there draws as a soft round tip) and `stretch` (stretched along the way the emitter was going).
+- Echo: `copies` (1 to 32) of the piece, `gap` (1 to 60) frames apart.
+- Both: `opacity` (0 to 1) at birth, `fade` (0 to 1) by the end, `front` (drawn in front of the piece instead of behind), `seed` (0 to 2,147,483,647).
+- **`keys`** (up to 2,000): how much it emits (`amount`, 0 to 1) at a `frame` (0 to 1,999; ones past the end of the timeline move to its last frame, one a frame), easing on to the next key; held before the first and after the last; none means always on.
+- Puffs are born at fixed times: one every 1/`rate` seconds, through the whole timeline and before it, and, by distance, in slices of a grid of up to 8 a frame (fewer, so a lifetime's worth is at most 4,096 slices), each due its emitter's distance over `spacing`, the fraction left over decided by `seed`. Where emission is keyed down, births are left out by `seed` in proportion. At most 5,000 live at once (the newest are kept). What shows at a frame therefore depends only on that frame, never on the frames shown before it.
+
 ## Limits and safety
 - Width and height are at most 30,000 px each and 250 megapixels in total. Files may hold at most 2,000 layers, nested at most 64 deep, 200 saved selections and 256 pictures (each at most 4096 × 4096 px; bigger pictures are scaled down when chosen).
 - Each archive entry is capped at 1 GB uncompressed and the whole archive at 2 GB. PNG sizes must match the sizes recorded for them.

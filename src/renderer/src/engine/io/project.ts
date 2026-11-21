@@ -16,6 +16,23 @@ import { guide } from '../doc/guides';
 import { parseHex, toHex8 } from '../core/color';
 import { mapShapes, walkShapes, type VectorNode, type VectorShape } from '../vector/model';
 import { MAX_TIE_GAP, MAX_TRIM_KEYS, MAX_TRIM_OFFSET, type TrimKey } from '../vector/trim';
+import {
+  cleanTrail,
+  cloneTrail,
+  MAX_COPIES,
+  MAX_DRIFT,
+  MAX_GAP,
+  MAX_GROWTH,
+  MAX_LIFETIME,
+  MAX_RATE,
+  MAX_SIZE,
+  MAX_SPACING,
+  MAX_TRAIL_KEYS,
+  MAX_TRAILS,
+  TRAIL_KINDS,
+  type Trail,
+  type TrailKind,
+} from '../anim/trail';
 import type { SubPaths } from '../vector/pathData';
 import type { ShapeStyle } from '../live/ShapeObject';
 import { MAX_STOPS } from '../raster/gradient';
@@ -72,7 +89,7 @@ function lightMoved(doc: PaintDocument): boolean {
 
 /** The oldest version that holds everything in `doc`. */
 export function versionFor(doc: PaintDocument): 1 | 2 | 3 | 4 {
-  if (doc.pieces.some((p) => p.follow !== null || p.face.on || p.face.angle !== 0 || p.keyframes.some((k) => k.progress !== 0))) return 4;
+  if (doc.pieces.some((p) => p.follow !== null || p.face.on || p.face.angle !== 0 || p.trails.length > 0 || p.keyframes.some((k) => k.progress !== 0))) return 4;
   if (doc.vectorLayers().some((l) => [...walkShapes(l.objects)].some((s) => s.trim || s.trimKeys?.length || s.trimTie))) return 4;
   const v3 = doc.pieces.some(
     (p) =>
@@ -317,6 +334,19 @@ function nodeFromJson(n: VectorNodeJson, depth: number, counter: { n: number; an
   };
 }
 
+function trailToJson(t: Trail): z.infer<typeof TrailJson> {
+  return { ...cloneTrail(t), emitter: { x: t.emitter.x, y: t.emitter.y }, colors: t.colors.map((c) => ({ pos: c.pos, color: toHex8(c.color) })), keys: t.keys.map((k) => ({ ...k })) };
+}
+
+function trailFromJson(j: z.infer<typeof TrailJson>, length: number): Trail {
+  const colors = j.colors.map((c) => {
+    const color = parseHex(c.color);
+    if (!color) throw new ProjectError('error.projectInvalid', 'Bad colour');
+    return { pos: c.pos, color };
+  });
+  return cleanTrail({ ...j, emitter: { ...j.emitter }, colors, keys: j.keys.map((k) => ({ ...k, frame: clampFrame(k.frame, length) })) });
+}
+
 /**
  * Trim keys inside the timeline, one a frame (the last one given for a frame wins), in order;
  * keys of shapes on every shape layer.
@@ -362,6 +392,31 @@ const LayerJsonSchema: z.ZodType<LayerJson> = z.lazy(() =>
 );
 
 const PIECE_FILE = /^pieces\/\d{1,6}\.png$/;
+/** Version 4: a trail (bounds as in anim/trail.ts). */
+const TrailJson = z.object({
+  id: z.string().min(1).max(100),
+  kind: z.enum(TRAIL_KINDS as [TrailKind, ...TrailKind[]]),
+  emitter: PointJson,
+  rate: z.number().min(0).max(MAX_RATE),
+  spacing: z.number().min(0).max(MAX_SPACING),
+  lifetime: z.number().min(0.05).max(MAX_LIFETIME),
+  size: z.number().min(1).max(MAX_SIZE),
+  growth: z.number().min(0).max(MAX_GROWTH),
+  drift: z.number().min(0).max(MAX_DRIFT),
+  driftAngle: z.number().min(-10).max(10),
+  spread: z.number().min(0).max(MAX_DRIFT),
+  opacity: z.number().min(0).max(1),
+  fade: z.number().min(0).max(1),
+  colors: z.array(z.object({ pos: z.number().min(0).max(1), color: Hex8 })).min(2).max(4),
+  brush: z.string().min(1).max(100),
+  stretch: z.boolean(),
+  front: z.boolean(),
+  copies: int.min(1).max(MAX_COPIES),
+  gap: int.min(1).max(MAX_GAP),
+  seed: int.min(0).max(2 ** 31 - 1),
+  keys: z.array(z.object({ frame: int.min(0).max(MAX_FRAMES - 1), amount: z.number().min(0).max(1), easing: z.enum(EASINGS as [Easing, ...Easing[]]) })).max(MAX_TRAIL_KEYS),
+});
+
 const KeyframeJson = z.object({
   frame: int.min(0).max(MAX_FRAMES - 1),
   x: num,
@@ -431,6 +486,8 @@ const PieceJson = z.object({
   face: z
     .object({ on: z.boolean(), angle: z.number().min(-1e4).max(1e4) })
     .default({ on: false, angle: 0 }),
+  /** Version 4: what it leaves behind as it moves (see anim/trail.ts). */
+  trails: z.array(TrailJson).max(MAX_TRAILS).default([]),
 });
 const CameraKeyJson = z.object({
   frame: int.min(0).max(MAX_FRAMES - 1),
@@ -593,7 +650,7 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
             link: p.link && { parent: p.link.parent, hinge: p.link.hinge && { ...p.link.hinge } },
           }
         : {}),
-      ...(v4 ? { follow: p.follow && { ...p.follow }, face: { ...p.face } } : {}),
+      ...(v4 ? { follow: p.follow && { ...p.follow }, face: { ...p.face }, trails: p.trails.map(trailToJson) } : {}),
     });
   }
   const t = doc.timeline;
@@ -816,7 +873,8 @@ async function readAnimation(doc: PaintDocument, a: NonNullable<DocumentJson['an
       link: p.link && { parent: p.link.parent, hinge: p.link.hinge && { ...p.link.hinge } },
       follow: p.follow && { ...p.follow },
       face: { ...p.face },
-      trails: [],
+      // Trails' emission keys inside the timeline, one a frame.
+      trails: p.trails.map((t) => trailFromJson(t, a.length)),
     });
   }
   doc.pieces = checkLinks(pieces);

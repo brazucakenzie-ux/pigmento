@@ -8,7 +8,7 @@ import { depthDrag, movePivot3D, resizeDrag, tiltDrag, turnDrag } from '../../an
 import { placementOf, project, unproject } from '../../anim/space';
 import { foldHandle, foldToward, type EdgeSnap } from '../../anim/edgeSnap';
 import { drawHingeSnap, hingeOnRelease, hingeSnap } from '../hingeSnap';
-import { alongPath, drawTree, keyedAngle, selectionKeys, slideOnParent, topPivot, treeHandles, treePieces, treeTop, type TreeHandle } from '../treeEdit';
+import { alongPath, drawTree, emitterHandles, keyedAngle, pieceLocal, selectionKeys, slideOnParent, topPivot, treeHandles, treePieces, treeTop, type TreeHandle } from '../treeEdit';
 import { registerTool } from '../ToolRegistry';
 import type { ToolContext, ToolPointerEvent } from '../Tool';
 
@@ -35,7 +35,9 @@ type Hit =
   /** The handles round a tree's pivot: they tilt, turn and spin the whole tree. */
   | { kind: 'tree'; handle: TreeHandle }
   /** Alt-dragging a piece that follows another: it slides on that piece. */
-  | { kind: 'slide' };
+  | { kind: 'slide' }
+  /** Where one of its trails comes from. */
+  | { kind: 'emitter'; trail: string };
 
 interface Drag {
   /** The piece the drag changes (the top of its tree, when the whole tree moves). */
@@ -132,6 +134,8 @@ const near = (a: Point, b: Point, px = HIT_PX): boolean => Math.abs(a.x - b.x) <
 function hitSelected(ctx: ToolContext, p: Piece, e: ToolPointerEvent): Hit | null {
   const g = geometry(ctx, p);
   const sp = { x: e.sx, y: e.sy };
+  // Trail emitters sit on top of everything else.
+  for (const h of emitterHandles(ctx, ctx.anim.scene(), p)) if (near(sp, h.at)) return { kind: 'emitter', trail: h.id };
   // The tree's handles round its pivot come first (they sit apart from the pieces' own).
   const top = treeTop(ctx, p);
   const c = top && topPivot(ctx, ctx.anim.scene(), top);
@@ -167,6 +171,7 @@ function cursorFor(hit: Hit | null, ctrl: boolean): string {
     case 'pivot':
       return 'crosshair';
     case 'slide':
+    case 'emitter':
       return 'move';
     case 'tree':
       return hit.handle.kind === 'tilt' ? 'ns-resize' : hit.handle.kind === 'turn' ? 'ew-resize' : 'grab';
@@ -269,6 +274,11 @@ export default registerTool({
     const dxs = (e.sx - d.startScreen.x) / zoom;
     const dys = (e.sy - d.startScreen.y) / zoom;
     const hit = d.hit;
+    if (hit.kind === 'emitter') {
+      const local = pieceLocal(ctx.anim.scene(), piece, { x: e.x, y: e.y });
+      if (local) ctx.anim.preview(d.id, (p) => (p.trails = p.trails.map((t) => (t.id === hit.trail ? { ...t, emitter: local } : t))));
+      return;
+    }
     if (hit.kind === 'pivot') {
       const pl = placementOf(d.s0, d.pivot0, piece.src.width, piece.src.height, space);
       const q = pl.affine ? null : unproject(pl, e);
@@ -330,7 +340,7 @@ export default registerTool({
       hingeOnRelease(ctx, d.id, d.snap);
       return;
     }
-    ctx.anim.endDrag(d.hit.kind === 'pivot' ? 'history.pivot' : d.adding ? 'history.keyframeAdd' : 'history.keyframe');
+    ctx.anim.endDrag(d.hit.kind === 'emitter' ? 'history.trailEmitter' : d.hit.kind === 'pivot' ? 'history.pivot' : d.adding ? 'history.keyframeAdd' : 'history.keyframe');
   },
   hover(ctx, e) {
     if (near({ x: e.sx, y: e.sy }, vanishing(ctx))) {
@@ -395,6 +405,7 @@ export default registerTool({
     }
     if (g.pivot) ov.pivot(g.pivot, active?.kind === 'pivot');
     if (g.fold) ov.handle(g.fold, 'circle', active?.kind === 'fold');
+    for (const h of emitterHandles(ctx, ctx.anim.scene(), sel)) ov.emitter(h.at, active?.kind === 'emitter' && active.trail === h.id);
     if (drag?.snap) drawHingeSnap(ctx, ov, drag.snap);
   },
 });

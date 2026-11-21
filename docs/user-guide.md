@@ -207,6 +207,19 @@ Already animated a piece with keyframes? **Motion path to shape** (the pen butto
 
 Tick **Face its way** in the options bar and the piece turns to point where it's heading, along a path or along its own motion path. It turns smoothly through sharp corners. When it stops, it keeps facing the way it was going, and before it sets off it already faces the way it will go. **Art points** says which way your drawing points as drawn: 0° if the rocket points right, −90° if it points up, 90° if down, 180° if left. The piece's own angle (or spin) is added on top, so you can still key a wobble or a lean. A flipped piece still points its way, and so does one in a picture you flip or turn. Like a path, facing is only for a piece that follows no other piece (or the group at the top of its tree).
 
+### Trails
+
+A piece can leave things behind as it moves: smoke from a rocket, a comet's tail, sparks, speed lines, or fading copies of itself. With the piece selected (Animate or Perspective plane tool), open **Trail** in the options bar and **Add a trail**. A piece can have up to four, listed at the top; the arrows put one over another, and the bin removes it.
+
+- **Preset** makes the picked trail over as **Rocket smoke**, **Comet tail**, **Sparkles**, **Speed lines** or **Echo**, keeping where it comes from and its keyed emission.
+- **Puffs** are stamps of a **Brush tip** (any brush, your own included). **Rate** gives off so many a second, moving or not, and **Every** gives one each time the piece travels that far, so a fast piece leaves no gaps. Each puff lives for its **Lifetime**, starts at its **Size** and **Grows to** a share of it, **Drift**s the way **Direction** says (−90° is up, like rising smoke), scatters by up to its **Spread**, fades by its **Fade**, and goes through the **Colours over life** (two to four; pick one to change it). **Stretch along the motion** turns puffs into streaks for speed lines.
+- An **Echo** is fading copies of the piece itself: so many **Copies**, so many frames **Apart**.
+- **In front of the piece** draws the trail over it instead of behind. **Shuffle** gives a different scatter of puffs; the same one comes back every time it plays.
+- **Emission** keys how much it gives off at the frame shown: set it to 0 % at the start and 100 % at the frame the engine lights, and the smoke starts at ignition; key it back to 0 for burn-out. With no keys it's always on, and smoke is already there on the first frame, so a chimney on a piece that doesn't move just smokes.
+- The trail comes out of a small ring on the piece: drag the ring to the nozzle. It moves and turns with the piece.
+
+Trails are worked out from the timeline, so a frame always looks the same whether you play to it, jump to it or export it.
+
 ### More ways to make a piece
 
 - **Piece from layer** turns a whole pixel layer into a piece.

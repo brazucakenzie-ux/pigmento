@@ -21,7 +21,7 @@ import type { EdgeSnap } from '../../anim/edgeSnap';
 import { foldHandle, foldToward } from '../../anim/edgeSnap';
 import { project } from '../../anim/space';
 import { drawHingeSnap, hingeOnRelease, hingeSnap } from '../hingeSnap';
-import { alongPath, keyedAngle, selectionKeys, slideOnParent, treePieces, treeTop } from '../treeEdit';
+import { alongPath, emitterHandles, keyedAngle, pieceLocal, selectionKeys, slideOnParent, treePieces, treeTop } from '../treeEdit';
 import type { PathMeasure } from '../../anim/pathMeasure';
 import { registerTool } from '../ToolRegistry';
 import type { ToolContext, ToolPointerEvent } from '../Tool';
@@ -43,7 +43,9 @@ type Hit =
   /** Pulling bend handles out of a keyframe's dot (Alt-drag). */
   | { kind: 'pull'; frame: number }
   /** One of a keyframe's bend handles. */
-  | { kind: 'tangent'; frame: number; side: 'in' | 'out' };
+  | { kind: 'tangent'; frame: number; side: 'in' | 'out' }
+  /** Where one of its trails comes from. */
+  | { kind: 'emitter'; trail: string };
 
 interface Drag {
   id: string;
@@ -116,6 +118,8 @@ function in3d(ctx: ToolContext, p: Piece): boolean {
 }
 
 function hitSelected(ctx: ToolContext, p: Piece, e: ToolPointerEvent): Hit | null {
+  // Trail emitters sit on top of everything else.
+  for (const h of emitterHandles(ctx, ctx.anim.scene(), p)) if (near({ x: e.sx, y: e.sy }, h.at)) return { kind: 'emitter', trail: h.id };
   // A group is grabbed by any of its pieces.
   if (p.kind === 'group') {
     const over = pieceAt(visiblePieces(ctx), ctx.anim.scene(), e);
@@ -154,6 +158,7 @@ function cursorFor(hit: Hit | null, g: ScreenGeom | null): string {
   if (hit.kind === 'pivot') return 'crosshair';
   if (hit.kind === 'rotate') return 'grab';
   if (hit.kind === 'key' || hit.kind === 'pull' || hit.kind === 'tangent') return 'pointer';
+  if (hit.kind === 'emitter') return 'move';
   return handleCursor(hit.handle, g?.angle ?? 0);
 }
 
@@ -281,6 +286,11 @@ export default registerTool({
     }
     const held = ctx.anim.piece(d.id);
     const path = held && ctx.anim.pathOf(held);
+    if (hit.kind === 'emitter') {
+      const local = held && pieceLocal(ctx.anim.scene(), held, { x: e.x, y: e.y });
+      if (local) ctx.anim.preview(d.id, (q) => (q.trails = q.trails.map((t) => (t.id === hit.trail ? { ...t, emitter: local } : t))));
+      return;
+    }
     if (hit.kind === 'key') {
       const k = d.keys0.find((q) => q.frame === hit.frame);
       if (!k) return;
@@ -357,7 +367,7 @@ export default registerTool({
       return;
     }
     const k = d.hit.kind;
-    ctx.anim.endDrag(k === 'pivot' ? 'history.pivot' : k === 'pull' || k === 'tangent' ? 'history.motionPath' : d.adding && k !== 'key' ? 'history.keyframeAdd' : 'history.keyframe');
+    ctx.anim.endDrag(k === 'emitter' ? 'history.trailEmitter' : k === 'pivot' ? 'history.pivot' : k === 'pull' || k === 'tangent' ? 'history.motionPath' : d.adding && k !== 'key' ? 'history.keyframeAdd' : 'history.keyframe');
   },
   hover(ctx, e) {
     const sel = ctx.anim.selected;
@@ -404,9 +414,10 @@ export default registerTool({
     if (top) for (const p of treePieces(ctx, top)) if (p !== sel) ov.outlineScreen(outline(p), true, true);
     if (sel.kind === 'piece') ov.outlineScreen(outline(sel), true, false);
     if (drag?.snap) drawHingeSnap(ctx, ov, drag.snap);
+    const active = drag?.hit;
+    for (const h of emitterHandles(ctx, ctx.anim.scene(), sel)) ov.emitter(h.at, active?.kind === 'emitter' && active.trail === h.id);
     if (in3d(ctx, sel)) return;
     const g = geometry(ctx, sel);
-    const active = drag?.hit;
     for (const h of PIECE_HANDLES) ov.handle(g.handles[h], 'square', active?.kind === 'handle' && active.handle === h);
     ov.line(g.topMid, g.rotate);
     ov.handle(g.rotate, 'circle', active?.kind === 'rotate');

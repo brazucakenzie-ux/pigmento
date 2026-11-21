@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { PaintDocument, VectorLayer } from '@engine/doc/Document';
 import { makePiece, setKey } from '@engine/anim/piece';
+import { applyPreset, makeTrail } from '@engine/anim/trail';
 import { loadProject, PROJECT_VERSION, saveProject, versionFor, type PngCodec } from '@engine/io/project';
 import type { ShapeStyle } from '@engine/live/ShapeObject';
 import type { VectorShape } from '@engine/vector/model';
@@ -55,6 +56,11 @@ function picture(): PaintDocument {
   p.keyframes = setKey(setKey(p.keyframes, 0, { progress: 0, easing: 'easeInOut' }), 23, { progress: 1 });
   p.follow = { layerId: shapes.id, objectId: 'route', sub: 0 };
   p.face = { on: true, angle: -Math.PI / 2 };
+  // Smoke that lights at frame 4, and an echo.
+  p.trails = [
+    { ...applyPreset(makeTrail('smoke', 'puffs', { x: 0, y: 2 }, 12345), 'rocketSmoke'), keys: [{ frame: 0, amount: 0, easing: 'hold' }, { frame: 4, amount: 1, easing: 'linear' }] },
+    applyPreset(makeTrail('ghost', 'echo', { x: 4, y: 2 }, 7), 'echo'),
+  ];
   doc.pieces = [p];
   return doc;
 }
@@ -89,6 +95,7 @@ describe('projects, version 4', () => {
     const p = back.pieces[0];
     expect(p.follow).toEqual({ layerId: doc.vectorLayers()[0].id, objectId: 'route', sub: 0 });
     expect(p.face).toEqual({ on: true, angle: -Math.PI / 2 });
+    expect(p.trails).toEqual(doc.pieces[0].trails);
     expect(p.keyframes.map((k) => [k.frame, k.progress, k.easing])).toEqual([
       [0, 0, 'easeInOut'],
       [23, 1, 'easeInOut'],
@@ -133,6 +140,32 @@ describe('projects, version 4', () => {
     expect(keyed.trimKeys!.map((k) => [k.frame, k.end])).toEqual([
       [3, 0.2],
       [23, 0.7],
+    ]);
+  });
+
+  it('refuse trails out of range, and fit their keys into the timeline', async () => {
+    const withTrail = async (change: (t: Record<string, unknown>) => void) => {
+      const files = unzipSync(await saveProject(picture(), codec));
+      const json = JSON.parse(strFromU8(files['document.json'])) as { animation: { pieces: { trails: Record<string, unknown>[] }[] } };
+      change(json.animation.pieces[0].trails[0]);
+      files['document.json'] = strToU8(JSON.stringify(json));
+      return loadProject(zipSync(files), codec);
+    };
+    for (const bad of [
+      (t: Record<string, unknown>) => (t.rate = 1e9),
+      (t: Record<string, unknown>) => (t.kind = 'smoke'),
+      (t: Record<string, unknown>) => (t.colors = [{ pos: 0, color: '#ffffffff' }]),
+      (t: Record<string, unknown>) => (t.lifetime = 0),
+      (t: Record<string, unknown>) => (t.seed = -1),
+      (t: Record<string, unknown>) => (t.keys = [{ frame: 0, amount: 2, easing: 'linear' }]),
+    ]) {
+      await expect(withTrail(bad)).rejects.toMatchObject({ key: 'error.projectInvalid' });
+    }
+    // Keys past the end of the timeline move to its last frame.
+    const back = await withTrail((t) => (t.keys = [{ frame: 1500, amount: 1, easing: 'linear' }, { frame: 3, amount: 0, easing: 'hold' }]));
+    expect(back.pieces[0].trails[0].keys).toEqual([
+      { frame: 3, amount: 0, easing: 'hold' },
+      { frame: 23, amount: 1, easing: 'linear' },
     ]);
   });
 
