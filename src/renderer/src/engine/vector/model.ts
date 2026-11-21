@@ -3,7 +3,7 @@ import { matChain, matScale, matTranslate, type Mat } from '../core/matrix';
 import { boxBounds, type BoxGeom } from '../live/BoxGeom';
 import type { ShapeKind, ShapeStyle } from '../live/ShapeObject';
 import { subpathBounds, transformSubpaths, type SubPaths } from './pathData';
-import { FULL_TRIM, type Trim, type TrimKey } from './trim';
+import { FULL_TRIM, type Trim, type TrimKey, type TrimTie } from './trim';
 
 /**
  * Objects on a shape (vector) layer. Immutable: edits make new objects, so history steps can
@@ -31,6 +31,8 @@ export interface VectorShape {
   readonly trim?: Trim;
   /** The trim keyed on the timeline (these win over `trim`; none: not keyed). */
   readonly trimKeys?: readonly TrimKey[];
+  /** An end of the trim tied to a piece following this shape (see trim.ts). */
+  readonly trimTie?: TrimTie;
 }
 
 export interface VectorGroup {
@@ -222,8 +224,8 @@ export function reparamNode(n: VectorNode, params: Readonly<Record<string, numbe
 
 /** New style on every shape in a node. */
 /** What a shape's trim adds, kept when the shape is made again (converted to a path, or edited in place). */
-export function trimPart(n: VectorShape): Pick<VectorShape, 'trim' | 'trimKeys'> {
-  return { ...(n.trim ? { trim: n.trim } : {}), ...(n.trimKeys?.length ? { trimKeys: n.trimKeys } : {}) };
+export function trimPart(n: VectorShape): Pick<VectorShape, 'trim' | 'trimKeys' | 'trimTie'> {
+  return { ...(n.trim ? { trim: n.trim } : {}), ...(n.trimKeys?.length ? { trimKeys: n.trimKeys } : {}), ...(n.trimTie ? { trimTie: n.trimTie } : {}) };
 }
 
 /** A node with every shape in it (itself, or a group's) changed by fn. */
@@ -231,9 +233,15 @@ export function mapShapes(n: VectorNode, fn: (s: VectorShape) => VectorShape): V
   return n.type === 'group' ? { ...n, children: n.children.map((c) => mapShapes(c, fn)) } : fn(n);
 }
 
-/** True if any shape in the list has its trim keyed. */
+/** True if any shape in the list has a trim that changes over the timeline: keyed, or tied to a piece. */
 export function hasTrimKeys(nodes: readonly VectorNode[]): boolean {
-  for (const s of walkShapes(nodes)) if (s.trimKeys?.length) return true;
+  for (const s of walkShapes(nodes)) if (s.trimKeys?.length || s.trimTie) return true;
+  return false;
+}
+
+/** True if any shape in the list has an end of its trim tied to a piece. */
+export function hasTrimTies(nodes: readonly VectorNode[]): boolean {
+  for (const s of walkShapes(nodes)) if (s.trimTie) return true;
   return false;
 }
 

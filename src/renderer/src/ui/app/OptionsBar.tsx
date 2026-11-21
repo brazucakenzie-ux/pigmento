@@ -308,9 +308,15 @@ function VectorBar() {
 function TrimFields() {
   const sel = useUi((s) => s.vectorSelection);
   const length = useUi((s) => s.animation.length);
+  const pieces = useUi((s) => s.animation.pieces);
   const trim = sel.trim;
   if (!trim) return null;
   const keyed = sel.trimKey !== null;
+  const pieceName = (id: string) => {
+    const i = pieces.findIndex((p) => p.id === id);
+    return i < 0 ? '' : pieces[i].name || t('piece.defaultName', { n: i + 1 });
+  };
+  const tieValue = sel.tie ? `${sel.tie.end}:${sel.tie.piece}` : '';
   const blur = () => (document.activeElement as HTMLElement | null)?.blur();
   const field = (key: 'start' | 'end' | 'offset', labelKey: I18nKey, min: number, max: number) => {
     const label = t(labelKey);
@@ -338,6 +344,39 @@ function TrimFields() {
       {field('start', 'trim.start', 0, 100)}
       {field('end', 'trim.end', 0, 100)}
       {field('offset', 'trim.offset', -100000, 100000)}
+      {sel.followers.length || sel.tie ? (
+        <label className="opt" data-tip={t('trim.tieTip')}>
+          <span>{t('trim.tie')}</span>
+          <select
+            className="select"
+            aria-label={t('trim.tie')}
+            value={tieValue}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (!v) return engine.tieTrim(null);
+              const [end, piece] = [v.slice(0, v.indexOf(':')), v.slice(v.indexOf(':') + 1)];
+              engine.tieTrim({ piece, end: end === 'end' ? 'end' : 'start', gap: sel.tie?.gap ?? 0 });
+            }}
+          >
+            <option value="">{t('trim.tieNone')}</option>
+            {[...new Set([...sel.followers, ...(sel.tie ? [sel.tie.piece] : [])])].flatMap((id) => [
+              <option key={`start:${id}`} value={`start:${id}`}>
+                {t('trim.tieStart', { piece: pieceName(id) })}
+              </option>,
+              <option key={`end:${id}`} value={`end:${id}`}>
+                {t('trim.tieEnd', { piece: pieceName(id) })}
+              </option>,
+            ])}
+          </select>
+        </label>
+      ) : null}
+      {sel.tie ? (
+        <span className="opt tf-field" data-tip={t('trim.gapTip')}>
+          <span>{t('trim.gap')}</span>
+          <NumberField className="num tf-num" value={Math.round(sel.tie.gap)} min={-100000} max={100000} label={t('trim.gap')} onChange={(v) => sel.tie && engine.tieTrim({ ...sel.tie, gap: v })} onEnter={blur} />
+          <span className="unit">px</span>
+        </span>
+      ) : null}
       {sel.trimKey ? (
         <label className="opt">
           <span>{t('trim.easing')}</span>

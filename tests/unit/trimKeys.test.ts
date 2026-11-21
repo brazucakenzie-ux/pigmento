@@ -5,6 +5,9 @@ import { AnimationController, type AnimHost } from '@engine/anim/AnimationContro
 import { documentToSvg, type SvgExportDeps } from '@engine/io/svgExport';
 import type { ShapeStyle } from '@engine/live/ShapeObject';
 import { hasTrimKeys, mapShapes, trimPart, type VectorShape } from '@engine/vector/model';
+import { corner } from '@engine/vector/pathData';
+import { makePiece, setKey } from '@engine/anim/piece';
+import { tiedTrimAt } from '@engine/anim/follow';
 import { drawOnKeys, FULL_TRIM, moveTrimKey, removeTrimKey, setTrimKey, trimAt, type TrimKey } from '@engine/vector/trim';
 
 const style: ShapeStyle = { mode: 'outline', width: 4, outline: { r: 215, g: 38, b: 61, a: 255 }, fill: { r: 30, g: 136, b: 229, a: 255 }, radius: 0, antialias: true };
@@ -119,6 +122,48 @@ describe('shapes with keyed trims', () => {
         ],
       },
     ]);
+  });
+
+  it('can tie an end to a piece that follows them, a gap behind it', () => {
+    const doc = new PaintDocument({ width: 400, height: 100 });
+    const two: VectorShape = {
+      type: 'shape',
+      id: 'p',
+      shape: 'path',
+      box: null,
+      points: [],
+      style,
+      subpaths: [
+        { closed: false, anchors: [corner(0, 10), corner(100, 10)] },
+        { closed: false, anchors: [corner(0, 50), corner(300, 50)] },
+      ],
+    };
+    const shapes = new VectorLayer('S', 400, 100, [two]);
+    doc.layers.push(shapes);
+    const p = makePiece('r', '', doc.layers[0].id, { w: 4, h: 4, data: new Uint8ClampedArray(64) }, { x: 0, y: 0, w: 4, h: 4 }, 0);
+    p.keyframes = setKey(setKey(p.keyframes, 0, { progress: 0, easing: 'linear' }), 10, { progress: 1 });
+    p.follow = { layerId: shapes.id, objectId: 'p', sub: 1 };
+    doc.pieces = [p];
+    // Half way along the second part: 100 + 150 of 400 px.
+    const behind = { ...two, trimTie: { piece: 'r', end: 'start' as const, gap: 0 } };
+    expect(tiedTrimAt(doc, shapes.id, behind, 5)).toEqual({ start: 0.625, end: 1, offset: 0 });
+    expect(tiedTrimAt(doc, shapes.id, { ...behind, trimTie: { piece: 'r', end: 'start', gap: 50 } }, 5)!.start).toBeCloseTo(0.5, 12);
+    // Drawn up to it, with the rest of the trim as keyed.
+    const upTo = { ...two, trimKeys: [key(0, 1, 'linear', 0, 0.1)], trimTie: { piece: 'r', end: 'end' as const, gap: 0 } };
+    expect(tiedTrimAt(doc, shapes.id, upTo, 5)).toEqual({ start: 0, end: 0.625, offset: 0.1 });
+    // A piece that doesn't follow this shape (or isn't there) leaves the trim as it is.
+    expect(tiedTrimAt(doc, shapes.id, { ...behind, trimTie: { piece: 'gone', end: 'start', gap: 0 } }, 5)).toBeUndefined();
+    expect(tiedTrimAt(doc, 'other-layer', behind, 5)).toBeUndefined();
+    // Round a closed path more than once: where it is on this turn.
+    const loop: VectorShape = { ...two, subpaths: [{ closed: true, anchors: [corner(0, 0), corner(100, 0), corner(100, 100), corner(0, 100)] }] };
+    p.follow = { layerId: shapes.id, objectId: 'p', sub: 0 };
+    p.keyframes = setKey(p.keyframes, 10, { progress: 2.5 });
+    expect(tiedTrimAt(doc, shapes.id, { ...loop, trimTie: { piece: 'r', end: 'start', gap: 0 } }, 10)!.start).toBeCloseTo(0.5, 12);
+    // A tied shape makes its layer change from frame to frame, and when pieces change.
+    shapes.setObjects([behind]);
+    expect(shapes.keyed).toBe(true);
+    expect(shapes.tied).toBe(true);
+    expect(trimPart(behind)).toEqual({ trimTie: behind.trimTie });
   });
 
   it('export to SVG as they show at the frame shown', async () => {

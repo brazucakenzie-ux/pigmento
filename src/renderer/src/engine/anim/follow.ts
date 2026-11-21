@@ -2,6 +2,7 @@ import type { PaintDocument } from '../doc/Document';
 import { shapeOutline } from '../vector/convert';
 import { walkShapes, type VectorShape } from '../vector/model';
 import type { PathAnchor, SubPath } from '../vector/pathData';
+import { FULL_TRIM, trimAt, type Trim } from '../vector/trim';
 import { measurePath, type PathMeasure } from './pathMeasure';
 import { MAX_KEYFRAMES, pieceStateAt, type Follow, type Piece } from './piece';
 import type { Keyframe } from './interpolate';
@@ -29,6 +30,37 @@ export function outlinesOf(s: VectorShape): readonly (PathMeasure | null)[] {
     measured.set(s, list);
   }
   return list;
+}
+
+/**
+ * A shape's trim at `frame` (see trimAt), with an end tied to a piece that follows it (see
+ * TrimTie) put where that piece is along it, less the gap. A tie to a piece that doesn't follow
+ * this shape (any more) is left out.
+ */
+export function tiedTrimAt(doc: PaintDocument, layerId: string, s: VectorShape, frame: number): Trim | undefined {
+  const base = trimAt(s, frame);
+  const tie = s.trimTie;
+  if (!tie) return base;
+  const p = doc.pieces.find((q) => q.id === tie.piece);
+  const f = p?.follow;
+  if (!p || !f || p.link || f.layerId !== layerId || f.objectId !== s.id) return base;
+  const outlines = outlinesOf(s);
+  const m = outlines[f.sub];
+  if (!m) return base;
+  let before = 0;
+  let total = 0;
+  outlines.forEach((o, i) => {
+    const len = o?.length ?? 0;
+    if (i < f.sub) before += len;
+    total += len;
+  });
+  if (total <= 0) return base;
+  // Where the piece is along all the shape's outlines, as one long line.
+  const progress = pieceStateAt(p, frame).progress;
+  const local = m.closed ? progress - Math.floor(progress) : Math.min(1, Math.max(0, progress));
+  const at = Math.min(1, Math.max(0, (before + local * m.length - tie.gap) / total));
+  const t = { ...FULL_TRIM, ...base };
+  return tie.end === 'start' ? { ...t, start: at } : { ...t, end: at };
 }
 
 /** The paths in a picture, as pieces follow them. */

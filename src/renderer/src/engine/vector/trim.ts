@@ -234,10 +234,26 @@ export interface TrimKey extends Trim {
 /** Most keys one shape's trim can have. */
 export const MAX_TRIM_KEYS = 2000;
 
-/** What a shape's trim comes from: set once, or keyed on the timeline (the keys win). */
+/**
+ * One end of a path's trim tied to a piece that follows the path: its Start (the line is erased
+ * behind the piece) or its End (the line is drawn up to the piece), `gap` document pixels behind
+ * the piece along the path (negative: ahead of it). While the piece follows the path, that end
+ * goes where the piece is instead of where the keys say.
+ */
+export interface TrimTie {
+  readonly piece: string;
+  readonly end: 'start' | 'end';
+  readonly gap: number;
+}
+
+/** Most a tie's gap can be, either way, in document pixels. */
+export const MAX_TIE_GAP = 1e5;
+
+/** What a shape's trim comes from: set once, or keyed on the timeline (the keys win), and maybe an end tied to a piece. */
 export interface Trimmed {
   readonly trim?: Trim;
   readonly trimKeys?: readonly TrimKey[];
+  readonly trimTie?: TrimTie;
 }
 
 const lerpN = (a: number, b: number, e: number) => a + (b - a) * e;

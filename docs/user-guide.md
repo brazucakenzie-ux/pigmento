@@ -199,6 +199,8 @@ A shape's **Trim** (see Shapes) can change over the timeline, so a route draws i
 
 **Draw on…** keys the outline growing from nothing to all of it between two frames (from the frame shown to the end, unless you change them), and **Erase behind…** keys it being taken away from its start. Keyframes of the trim in between are replaced; one undo step either way.
 
+When a piece follows the path, **Tie** (in the same Trim options) ties an end of the line to it instead: **Erase behind** the piece (a fuse burning down, a dotted trail vanishing as the rocket passes) or **Draw up to** it (a route drawn as the car drives). **Gap** sets how far behind the piece the line stops, in pixels along the path; negative puts it ahead. The line keeps up with the piece however its progress is keyed.
+
 Already animated a piece with keyframes? **Motion path to shape** (the pen button in the options bar, or on the Animate tab) turns its motion path, bends and all, into a path on a new shape layer just under the piece's layer, and the piece then follows it with the same timing. Style the path like any shape, or reshape it with the Pen tool, and the motion changes with it. A piece's stops become single points it waits at, and a motion path that ends where it started becomes a closed loop. It's one undo step.
 
 ### Facing the way it goes

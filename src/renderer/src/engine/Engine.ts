@@ -9,7 +9,7 @@ import { LayerController, type LayersInfo } from './doc/LayerController';
 import { AnimationController, type AnimHost, type AnimationInfo } from './anim/AnimationController';
 import { compositeLayers } from './raster/blend';
 import { frameExtras } from './anim/pieceRaster';
-import { motionToPath } from './anim/follow';
+import { motionToPath, tiedTrimAt } from './anim/follow';
 import type { Piece } from './anim/piece';
 import { docToPixel } from './anim/pieceEdit';
 import { PiecePixelsCommand } from './anim/piecePaint';
@@ -73,7 +73,7 @@ import {
   type VectorNode,
   type VectorShape,
 } from './vector/model';
-import { drawOnKeys, FULL_TRIM, MAX_TRIM_KEYS, moveTrimKey, removeTrimKey, setTrimKey, trimAt, type Trim } from './vector/trim';
+import { drawOnKeys, FULL_TRIM, MAX_TIE_GAP, MAX_TRIM_KEYS, moveTrimKey, removeTrimKey, setTrimKey, trimAt, type Trim, type TrimTie } from './vector/trim';
 import { hitTestNodes, lineStyleOf, rasterizeNodes, setSavedPatternSource, shapePad } from './vector/render';
 import { optionsOfStyle, shapeStyle } from './tools/shapeTools';
 import { maskToSubpaths } from './vector/trace';
@@ -139,7 +139,9 @@ const MODIFY_LABEL: Record<SelectionModify, I18nKey> = {
   border: 'history.border',
 };
 
-// Shape layers turn their objects into pixels with Canvas 2D (blending, export, picking).
+
+// Shape layers turn their objects into pixels with Canvas 2D (blending, export, picking); the
+// engine installs one that also knows the pieces trims are tied to.
 VectorLayer.rasterizer = (l) => rasterizeNodes(l.objects, l.width, l.height, l.keyed ? (s) => trimAt(s, l.frame) : null);
 
 /** The objects selected on the active shape layer, as the UI needs them. */
@@ -156,6 +158,10 @@ export interface VectorSelectionInfo {
   trimKeyed: boolean;
   /** Its trim key at the frame shown, if there's one: the easing on to the next. */
   trimKey: { easing: Easing } | null;
+  /** Pieces that follow it (its trim's ends can be tied to them). */
+  followers: string[];
+  /** The end of its trim tied to a piece, if one is. */
+  tie: TrimTie | null;
 }
 
 /** Most a trim's offset can be, either way, in whole outlines (far more than any loop needs). */
@@ -386,6 +392,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       this.emitHistory();
     });
     this.history.amend = () => this.anim.bakeLostPaths();
+    VectorLayer.rasterizer = (l) => rasterizeNodes(l.objects, l.width, l.height, l.keyed ? (sh) => tiedTrimAt(this.doc, l.id, sh, l.frame) : null);
     // Shapes filled with a saved pattern find its tile here.
     setSavedPatternSource((id, scale) => this.patternTile({ pattern: id, fg: { r: 0, g: 0, b: 0, a: 255 }, bg: null, scale }));
   }
@@ -620,14 +627,22 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   }
 
   animationChanged(r: Rect | null): void {
+    // Paths whose trim is tied to a piece change with it (anywhere on the canvas).
+    let tied = false;
+    for (const l of this.doc.vectorLayers()) {
+      if (!l.tied) continue;
+      l.redraw();
+      tied = true;
+    }
+    if (tied) r = null;
     // Frame-by-frame layers may now show another drawing: upload the ones that changed.
     if (this.doc.hasCels) this.renderer.syncTree();
     this.renderer.invalidate(r);
     this.updateReach();
     this.requestRender();
     this.emit('animation', this.anim.info());
-    // A keyed trim shows another value at another frame.
-    if (this.vectorSel.length && this.doc.hasTrimKeys) this.emit('vectorSelection', this.vectorSelectionInfo());
+    // A keyed trim shows another value at another frame, and pieces may follow the selected shapes now.
+    if (this.vectorSel.length) this.emit('vectorSelection', this.vectorSelectionInfo());
     this.notifyPixels();
   }
 
@@ -1617,6 +1632,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     const nodes = this.selectedVectorNodes();
     const one = nodes.length === 1 && nodes[0].type === 'shape' && nodes[0].shape === 'parametric' && nodes[0].shapeId ? nodes[0] : null;
     const first: VectorShape | null = walkShapes(nodes).next().value ?? null;
+    const layer = this.activeVector;
     const firstKey = first?.trimKeys?.find((k) => k.frame === this.doc.timeline.frame) ?? null;
     return {
       count: nodes.length,
@@ -1626,6 +1642,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       trim: first ? { ...FULL_TRIM, ...trimAt(first, this.doc.timeline.frame) } : null,
       trimKeyed: !!first?.trimKeys?.length,
       trimKey: firstKey ? { easing: firstKey.easing } : null,
+      followers: first && layer ? this.doc.pieces.filter((p) => !p.link && p.follow?.layerId === layer.id && p.follow.objectId === first.id).map((p) => p.id) : [],
+      tie: first?.trimTie ?? null,
     };
   }
 
@@ -1769,6 +1787,23 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       ),
     );
     if (changed) this.emit('vectorSelection', this.vectorSelectionInfo());
+  }
+
+/**
+   * Tie an end of the selected shapes' trims to a piece that follows them (null: untie), so the
+   * line is erased behind it or drawn up to it, `gap` pixels behind it (one step).
+   */
+  tieTrim(tie: TrimTie | null): void {
+    const clean = tie && { piece: tie.piece, end: tie.end, gap: Number.isFinite(tie.gap) ? Math.max(-MAX_TIE_GAP, Math.min(MAX_TIE_GAP, tie.gap)) : 0 };
+    this.editSelectedTrims('history.trimTie', (s) => {
+      if (!clean) {
+        if (!s.trimTie) return null;
+        const { trimTie: _t, ...rest } = s;
+        return rest;
+      }
+      const same = s.trimTie && s.trimTie.piece === clean.piece && s.trimTie.end === clean.end && s.trimTie.gap === clean.gap;
+      return same ? null : { ...s, trimTie: clean };
+    });
   }
 
   /** Key the selected shapes' trims at the frame shown, as they are there (one step). */

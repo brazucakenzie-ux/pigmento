@@ -2,7 +2,7 @@ import { toCss } from '../core/color';
 import { rectIntersect, rectUnion, type Rect } from '../core/geometry';
 import { walkLayers, type GroupLayer, type Layer, type PaintDocument, type RasterLayer, type VectorLayer } from '../doc/Document';
 import { drawNodes } from '../vector/render';
-import { trimAt } from '../vector/trim';
+import { tiedTrimAt } from '../anim/follow';
 import type { Surface, Tile } from '../raster/Surface';
 import { TILE_SIZE } from '../raster/Surface';
 import type { PixelView } from '../raster/pixels';
@@ -199,7 +199,7 @@ export class Renderer {
     if (m.version === layer.version && (!layer.keyed || m.frame === frame)) return false;
     m.ctx.setTransform(1, 0, 0, 1, 0, 0);
     m.ctx.clearRect(0, 0, m.canvas.width, m.canvas.height);
-    drawNodes(m.ctx, layer.objects, this.doc.width, this.doc.height, layer.keyed ? (s) => trimAt(s, frame) : null);
+    drawNodes(m.ctx, layer.objects, this.doc.width, this.doc.height, layer.keyed ? (s) => tiedTrimAt(this.doc, layer.id, s, frame) : null);
     m.version = layer.version;
     m.frame = frame;
     return true;

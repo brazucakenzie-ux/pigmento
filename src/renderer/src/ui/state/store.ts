@@ -156,7 +156,7 @@ export const useUi = create<UiState>(() => ({
   brushLibrary: 0,
   patterns: [],
   guides: 0,
-  vectorSelection: { count: 0, groups: 0, bounds: null, shape: null, trim: null, trimKeyed: false, trimKey: null },
+  vectorSelection: { count: 0, groups: 0, bounds: null, shape: null, trim: null, trimKeyed: false, trimKey: null, followers: [], tie: null },
 }));
 
 let pendingPatch: Partial<Settings> = {};

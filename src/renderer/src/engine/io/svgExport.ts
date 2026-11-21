@@ -8,7 +8,8 @@ import type { VectorNode, VectorShape } from '../vector/model';
 import { toCmds } from '../vector/pathData';
 import { arrowParts, isStrokeOnly, lineStyleOf, shapeFillRule, shapeFrame, trimmedLine, trimmedOutline } from '../vector/render';
 import { dashArray, gradientStops, linearEnds, MITER_LIMIT, type ShapeGradient } from '../vector/style';
-import { trimAt } from '../vector/trim';
+import type { Trim } from '../vector/trim';
+import { tiedTrimAt } from '../anim/follow';
 
 /**
  * SVG export: shape layers become real paths (with their gradients, patterns, pictures, dashes
@@ -47,8 +48,8 @@ class Writer {
 
   constructor(
     private readonly deps: SvgExportDeps,
-    /** The frame shown: keyed trims are written as they are there. */
-    private readonly frame = 0,
+    /** A shape's trim as it is at the frame shown (keyed, or tied to a piece). */
+    private readonly trimOf: (layerId: string, s: VectorShape) => Trim | undefined = (_l, s) => s.trim,
   ) {}
 
   id(prefix: string): string {
@@ -87,8 +88,8 @@ class Writer {
     return `url(#${id})`;
   }
 
-  async shape(shape: VectorShape): Promise<string> {
-    const s = shape.trimKeys?.length ? { ...shape, trim: trimAt(shape, this.frame) } : shape;
+  async shape(shape: VectorShape, layerId: string): Promise<string> {
+    const s = shape.trimKeys?.length || shape.trimTie ? { ...shape, trim: this.trimOf(layerId, shape) } : shape;
     const st = s.style;
     const line = isStrokeOnly(s);
     const fills = !line && (st.mode === 'fill' || st.mode === 'both');
@@ -161,9 +162,9 @@ class Writer {
     return out.join('');
   }
 
-  async nodes(list: readonly VectorNode[]): Promise<string> {
+  async nodes(list: readonly VectorNode[], layerId: string): Promise<string> {
     const parts: string[] = [];
-    for (const n of list) parts.push(n.type === 'group' ? `<g>${await this.nodes(n.children)}</g>` : await this.shape(n));
+    for (const n of list) parts.push(n.type === 'group' ? `<g>${await this.nodes(n.children, layerId)}</g>` : await this.shape(n, layerId));
     return parts.join('');
   }
 
@@ -179,7 +180,7 @@ class Writer {
       return `<g style="isolation:isolate${blend ? `;${blend}` : ''}"${opacity}${name}>${inner.join('')}</g>`;
     }
     const attrs = `${opacity}${blend ? ` style="${blend}"` : ''}${name}`;
-    if (l.kind === 'vector') return `<g${attrs}>${await this.nodes(l.objects)}</g>`;
+    if (l.kind === 'vector') return `<g${attrs}>${await this.nodes(l.objects, l.id)}</g>`;
     const b = l.surface.contentBounds();
     if (!b) return '';
     return `<image${attrs} x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" href="${await this.png(l.surface.readRect(b), b.w, b.h)}"/>`;
@@ -187,7 +188,7 @@ class Writer {
 }
 
 export async function documentToSvg(doc: PaintDocument, deps: SvgExportDeps): Promise<string> {
-  const w = new Writer(deps, doc.timeline.frame);
+  const w = new Writer(deps, (layerId, s) => tiedTrimAt(doc, layerId, s, doc.timeline.frame));
   const body: string[] = [];
   if (doc.paper) body.push(`<rect width="${doc.width}" height="${doc.height}" ${paintAttr('fill', doc.paper)}/>`);
   for (const l of doc.layers) body.push(await w.layer(l));
