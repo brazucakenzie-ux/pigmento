@@ -816,6 +816,7 @@ async function readAnimation(doc: PaintDocument, a: NonNullable<DocumentJson['an
       link: p.link && { parent: p.link.parent, hinge: p.link.hinge && { ...p.link.hinge } },
       follow: p.follow && { ...p.follow },
       face: { ...p.face },
+      trails: [],
     });
   }
   doc.pieces = checkLinks(pieces);

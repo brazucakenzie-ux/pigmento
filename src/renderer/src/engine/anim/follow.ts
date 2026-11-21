@@ -7,6 +7,8 @@ import { measurePath, type PathMeasure } from './pathMeasure';
 import { MAX_KEYFRAMES, pieceStateAt, type Follow, type Piece } from './piece';
 import type { Keyframe } from './interpolate';
 import { Scene, type Motion } from './scene';
+import type { EmitterPath } from './trail';
+import type { Point } from '../core/geometry';
 
 /** Finds the path a piece follows, measured (null when it's gone). */
 export type PathResolver = (f: Follow) => PathMeasure | null;
@@ -74,6 +76,19 @@ export function docPaths(doc: PaintDocument): PathResolver {
 /** What places a picture's pieces besides their keyframes: the paths they follow, and its frame rate (for facing). */
 export function docMotion(doc: PaintDocument): Motion {
   return { paths: docPaths(doc), fps: doc.timeline.fps };
+}
+
+/**
+ * Where a point of a piece (its own pixels: a trail's emitter) is in 3D at any time, fractions of
+ * a frame included, as the camera at rest places it (the camera's moves only change how it's seen).
+ */
+export function emitterPath(doc: PaintDocument, pieceId: string, point: Point): EmitterPath {
+  const motion = docMotion(doc);
+  return (t) => {
+    const scene = new Scene(doc.pieces, t, doc.space, motion);
+    const p = scene.piece(pieceId);
+    return p ? scene.worldOf(p, point) : [0, 0, 0];
+  };
 }
 
 /** Every piece's pose at `frame`, as the picture's camera (at that frame) sees it, on the paths they follow. */
