@@ -348,3 +348,63 @@ test('a rocket on a dotted path erases it behind itself, the dots ahead staying 
   await page.keyboard.press('Control+z');
   expect((await ink(12, 260, 540)).length).toBeGreaterThan(30);
 });
+
+test('a line draws itself on over the timeline: Draw on, its row in the timeline, saved and reopened', async () => {
+  const { page, app } = h;
+  // A straight line across the canvas with the Pen, as a shape.
+  await page.getByRole('tab', { name: 'Shapes' }).click();
+  await page.getByRole('button', { name: 'Pen', exact: true }).click();
+  await page.getByRole('radio', { name: 'Shape layer (stays editable)' }).click();
+  await clickDoc(page, 200, 400);
+  await clickDoc(page, 1000, 400);
+  await page.keyboard.press('Enter');
+  // Selected with the Move tool, then drawn on from the first frame to the last.
+  await page.keyboard.press('v');
+  await clickDoc(page, 600, 400);
+  await page.locator('.optionsbar').getByRole('button', { name: 'Draw on…' }).click();
+  const dlg = page.getByRole('dialog', { name: 'Draw on' });
+  await expect(dlg.getByRole('textbox', { name: 'From frame' })).toHaveValue('1');
+  await expect(dlg.getByRole('textbox', { name: 'To frame' })).toHaveValue('24');
+  await dlg.getByRole('combobox', { name: 'Easing' }).selectOption('linear');
+  await dlg.getByRole('button', { name: 'Key it' }).click();
+  await expect(dlg).toBeHidden();
+  // How far along the line it's drawn at a frame (its last dark pixel), or -1.
+  const reach = (frame: number) =>
+    page.evaluate((f) => {
+      const t = window.__pigmentoTest!;
+      t.setFrame(f);
+      let last = -1;
+      for (let x = 190; x <= 1010; x += 2) {
+        const p = t.pixel(x, 400);
+        if (p.r < 120 && p.g < 120 && p.b < 120) last = x;
+      }
+      return last;
+    }, frame);
+  expect(await reach(0)).toBe(-1);
+  const half = await reach(12);
+  expect(half).toBeGreaterThan(200 + 800 * (12 / 23) - 20);
+  expect(half).toBeLessThan(200 + 800 * (12 / 23) + 20);
+  expect(await reach(23)).toBeGreaterThan(990);
+  // Its row in the timeline, under its layer: two keyframes; Alt+Left moves the last one a frame earlier.
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  if (!(await page.locator('.tl-names').isVisible())) await page.locator('.ribbon').getByRole('button', { name: 'Timeline', exact: true }).click();
+  await expect(page.locator('.tl-names').getByRole('button', { name: 'Shapes 1 · shape 1' })).toBeVisible();
+  const keys = page.locator('.tl-shape-row .tl-key');
+  await expect(keys).toHaveCount(2);
+  await keys.nth(1).focus();
+  await page.keyboard.press('Alt+ArrowLeft');
+  await expect(page.locator('.tl-shape-row .tl-key').nth(1)).toHaveAttribute('data-frame', '22');
+  expect(await reach(22)).toBeGreaterThan(990);
+  // Saved and opened again: drawn on just the same.
+  const before = await reach(12);
+  const project = path.join(path.dirname(tempFile('x')), 'draw-on.pigm');
+  await app.evaluate(({ dialog }, file) => {
+    dialog.showSaveDialog = (async () => ({ canceled: false, filePath: file })) as typeof dialog.showSaveDialog;
+  }, project);
+  await page.keyboard.press('Control+Shift+s');
+  await expect.poll(() => existsSync(project)).toBe(true);
+  await page.evaluate((p) => window.__pigmentoTest!.openPath(p), project);
+  await expect.poll(() => page.evaluate(() => window.__pigmentoTest!.history().length)).toBe(0);
+  expect(await reach(12)).toBe(before);
+  expect(await reach(0)).toBe(-1);
+});
