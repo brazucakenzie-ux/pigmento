@@ -18,13 +18,13 @@ The end-to-end tests don't run on GitHub. The runners have no GPU and only 4 CPU
 4. Commit, then tag the commit and push both. The tag must match the version in `package.json`, or the workflow stops:
 
    ```powershell
-   git tag v1.2.0
-   git push origin main v1.2.0
+   git tag v1.3.0
+   git push origin main v1.3.0
    ```
 
 5. On GitHub, open Actions → Release build and wait for the tag's run to finish. With signing on, the run waits twice for an approver to approve its signing request on SignPath. Download the run's artifact (a zip) and extract it.
 6. Open Releases → Draft a new release, choose the tag, paste the version's CHANGELOG section, attach the three files and publish.
-7. Download the installer from the release page and check it: `Get-FileHash .\Pigmento-Setup-1.2.0.exe` should match its line in the checksum file.
+7. Download the installer from the release page and check it: `Get-FileHash .\Pigmento-Setup-1.3.0.exe` should match its line in the checksum file.
 
 A run started by hand from a branch builds the same files without a tag, which is handy for trying the workflow out. Once signing is on, untick **Sign with SignPath** for such a run, so it doesn't ask for an approval (a signing policy limited to tags would refuse it anyway).
 
@@ -46,7 +46,7 @@ Only the repository owner can do these steps: they involve creating accounts and
    - slug `app`, with the contents of [`.github/signpath/app.xml`](../.github/signpath/app.xml)
    - slug `installers`, with the contents of [`.github/signpath/installers.xml`](../.github/signpath/installers.xml)
 
-   Both check that each file's product name is Pigmento and that its product version matches the release (Pigmento.exe gives four parts, such as `1.2.0.0`, and the installers give three). If SignPath rejects a file over its version, the signing request's page shows the value it found. Note the slug of the signing policy to use (for example `release-signing`). It's worth limiting that policy to builds of `v*` tags in its origin verification settings.
+   Both check that each file's product name is Pigmento and that its product version matches the release (Pigmento.exe gives four parts, such as `1.3.0.0`, and the installers give three). If SignPath rejects a file over its version, the signing request's page shows the value it found. Note the slug of the signing policy to use (for example `release-signing`). It's worth limiting that policy to builds of `v*` tags in its origin verification settings.
 5. **Create an API token** in SignPath for a CI user that has the Submitter role on that signing policy.
 6. **On GitHub**, open Settings → Secrets and variables → Actions:
    - Secret `SIGNPATH_API_TOKEN`: the API token.

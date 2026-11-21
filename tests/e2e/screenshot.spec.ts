@@ -806,3 +806,107 @@ test('capture 3D', async () => {
     await h.close();
   }
 });
+
+// Paths, trails and loops (README): a rocket following a drawn path and leaving smoke, the path
+// erased behind it, and a windmill turning for ever, with the timeline.
+test('capture trails', async () => {
+  test.skip(!process.env.PIGMENTO_SCREENSHOT, 'Set PIGMENTO_SCREENSHOT=1 to capture screenshots');
+  const out = process.env.PIGMENTO_SCREENSHOT_DIR ?? path.resolve('test-results');
+  const h = await launchApp();
+  const { page } = h;
+  try {
+    await ready(page);
+    await page.getByRole('tab', { name: 'View' }).click();
+    await page.getByRole('button', { name: 'Light' }).click();
+    const ids = await page.evaluate(() => {
+      const t = window.__pigmentoTest!;
+      const sky = t.layers().activeId;
+      t.fillLayer(sky, { r: 200, g: 226, b: 246, a: 255 }, { x: 0, y: 0, w: 1280, h: 640 });
+      t.fillLayer(sky, { r: 176, g: 214, b: 160, a: 255 }, { x: 0, y: 640, w: 1280, h: 160 });
+      // The windmill's tower, painted on the background.
+      t.fillLayer(sky, { r: 236, g: 236, b: 240, a: 255 }, { x: 1052, y: 500, w: 16, h: 180 });
+      const lift = (r: { x: number; y: number; w: number; h: number }) => {
+        t.selectRect(r.x, r.y, r.w, r.h);
+        t.animateSelection(false);
+        return t.anim().pieces.at(-1)!.id;
+      };
+      // The rocket on a layer of its own: a body, a pale nose and dark fins, pointing right.
+      const layer = t.addLayer();
+      const red = { r: 226, g: 64, b: 52, a: 255 };
+      t.fillLayer(layer, red, { x: 120, y: 104, w: 110, h: 32 });
+      for (let i = 0; i < 6; i++) t.fillLayer(layer, { r: 244, g: 242, b: 236, a: 255 }, { x: 230 + i * 5, y: 106 + Math.round(i * 2.5), w: 5, h: 28 - 2 * Math.round(i * 2.5) });
+      t.fillLayer(layer, { r: 150, g: 34, b: 34, a: 255 }, { x: 110, y: 92, w: 30, h: 12 });
+      t.fillLayer(layer, { r: 150, g: 34, b: 34, a: 255 }, { x: 110, y: 136, w: 30, h: 12 });
+      t.fillLayer(layer, { r: 70, g: 120, b: 200, a: 255 }, { x: 196, y: 112, w: 14, h: 14 });
+      const rocket = lift({ x: 110, y: 92, w: 150, h: 56 });
+      // The windmill's sails: a cross of two bars about the hub.
+      t.fillLayer(layer, { r: 120, g: 90, b: 70, a: 255 }, { x: 980, y: 492, w: 160, h: 16 });
+      t.fillLayer(layer, { r: 120, g: 90, b: 70, a: 255 }, { x: 1052, y: 420, w: 16, h: 160 });
+      const sails = lift({ x: 980, y: 420, w: 160, h: 160 });
+      // The path goes on a shape layer just above the sky, under the rocket.
+      t.setActiveLayer(sky);
+      return { rocket, sails };
+    });
+    // A curving path to fly along, drawn with the Pen on a shape layer.
+    await page.getByRole('tab', { name: 'Shapes' }).click();
+    await page.getByRole('button', { name: 'Pen', exact: true }).click();
+    await page.getByRole('radio', { name: 'Shape layer (stays editable)' }).click();
+    await clickDoc(page, 120, 600);
+    await drag(page, [
+      [520, 160],
+      [640, 160],
+      [760, 160],
+    ]);
+    await clickDoc(page, 1180, 340);
+    await page.keyboard.press('Enter');
+    const bar = page.locator('.optionsbar');
+    // The rocket follows it, facing its way, with smoke from its tail.
+    await page.evaluate((id) => window.__pigmentoTest!.selectPiece(id), ids.rocket);
+    await page.locator('.canvas-host').focus();
+    await page.keyboard.press('a');
+    await bar.getByRole('combobox', { name: 'Path' }).selectOption({ index: 1 });
+    await bar.getByRole('checkbox', { name: 'Face its way' }).check();
+    await bar.locator('.opt-pop-btn', { hasText: 'Trail' }).click();
+    const trail = page.getByRole('dialog', { name: 'Trail' });
+    await trail.getByRole('button', { name: 'Add a trail' }).click();
+    for (const [name, v] of [
+      ['Emitter X', '0'],
+      ['Emitter Y', '28'],
+    ]) {
+      await trail.getByRole('textbox', { name, exact: true }).fill(v);
+      await trail.getByRole('textbox', { name, exact: true }).press('Enter');
+    }
+    await page.keyboard.press('Escape');
+    // The sails turn for ever, fitted to the timeline.
+    await page.evaluate((id) => window.__pigmentoTest!.selectPiece(id), ids.sails);
+    await bar.locator('.opt-pop-btn', { hasText: 'Spin' }).click();
+    const spin = page.getByRole('dialog', { name: 'Spin' });
+    await spin.getByRole('textbox', { name: 'Spin', exact: true }).fill('0.3');
+    await spin.getByRole('textbox', { name: 'Spin', exact: true }).press('Enter');
+    await spin.getByRole('button', { name: 'Fit to the timeline' }).click();
+    await page.keyboard.press('Escape');
+    // The path erased behind the rocket.
+    await page.locator('.canvas-host').focus();
+    await page.keyboard.press('v');
+    await page.evaluate(() => {
+      const t = window.__pigmentoTest!;
+      const shapes = t.layers().tree.find((l) => l.kind === 'vector')!.id;
+      t.setActiveLayer(shapes);
+      t.setVectorSelection([(t.vectorObjects(shapes) as { id: string }[])[0].id]);
+    });
+    await bar.getByRole('combobox', { name: 'Tie' }).selectOption({ label: 'Erase behind Piece 1' });
+    await page.evaluate(() => window.__pigmentoTest!.setVectorSelection([]));
+    await page.getByRole('tab', { name: 'Animate' }).click();
+    if (!(await page.locator('.tl-names').isVisible())) await page.locator('.ribbon').getByRole('button', { name: 'Timeline', exact: true }).click();
+    await page.evaluate(() => {
+      window.__pigmentoTest!.selectPiece(null);
+      window.__pigmentoTest!.setFrame(14);
+    });
+    await page.mouse.move(1260, 120);
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: path.join(out, 'trails.png') });
+    console.warn('errors:', JSON.stringify(h.errors));
+  } finally {
+    await h.close();
+  }
+});

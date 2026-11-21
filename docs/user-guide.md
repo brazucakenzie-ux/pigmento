@@ -345,6 +345,8 @@ These are the defaults; F1 always shows the current ones.
 | Play or stop the animation | Ctrl+Space |
 | Previous, next frame | , and . |
 | Previous, next keyframe | Shift+, and Shift+. |
+| Move a keyframe (or a trim or speed key) a frame, in the timeline | Alt+Left, Alt+Right on its diamond |
+| Make a looping layer's last drawing longer or shorter, in the timeline | Left, Right on the loop's end |
 | Keyboard shortcuts | F1 |
 | Move between the ribbon, options bar, picture, side panel and status bar | F6, Shift+F6 |
 

@@ -240,7 +240,7 @@ Pieces in 1.2 can be bigger than the canvas and sit anywhere, partly or wholly o
 
 ## Paths and trims in 1.3 (version 4)
 
-Pigmento 1.3 writes version 4 only when a piece follows a path or faces the way it goes (or has a keyed progress or an art angle left over), or a shape's outline is trimmed; otherwise it writes the oldest version that holds the picture, as 1.2 did. Pigmento 1.2 refuses a version 4 file with its "made with a newer Pigmento" message. Version 4 adds:
+Pigmento 1.3 writes version 4 only when a piece follows a path or faces the way it goes (or has a keyed progress or an art angle left over), leaves a trail, loops or spins, a frame-by-frame layer loops, or a shape's outline is trimmed; otherwise it writes the oldest version that holds the picture, as 1.2 did. Pigmento 1.2 refuses a version 4 file with its "made with a newer Pigmento" message. Version 4 adds:
 
 ```json
 {

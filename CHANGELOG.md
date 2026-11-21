@@ -2,6 +2,35 @@
 
 All notable changes to Pigmento. Versions follow [Semantic Versioning](https://semver.org).
 
+## [1.3.0] — 2026-11-22
+
+Paths, trails and loops: things that travel leave marks, and short cycles repeat by themselves.
+
+### Along a path
+- A piece can **follow a path** drawn on a shape layer (any outline: a pen path, a curve, a rectangle or ellipse). Its keyed **progress** places it by distance along the path, and closed paths can go round more than once. Edit the path and the motion follows; delete it and the motion stays, baked into keyframes.
+- **Face its way** turns a piece to point where it's heading, smoothly round corners, with an angle for art drawn pointing another way.
+- **Motion path to shape** turns a piece's keyframed motion path into a path you can style, trim or reshape, which the piece then follows.
+
+### Drawing on and erasing behind
+- A shape's outline can be **trimmed** to show only from its Start to its End, with an Offset that slides both, keyed on the timeline with a row of its own. Dashes stay put and arrowheads sit at the ends that show.
+- **Draw on…** and **Erase behind…** key it for you, and a path a piece follows can tie its start or end to the piece, so it's erased right behind a rocket or drawn up to it, like a burning fuse.
+
+### Trails
+- Up to four **trails** a piece, from an emitter point on it: **Puffs** stamped with any brush tip (rate by time and by distance, lifetime, size, growth, drift, spread, fade and colours over life, stretched into speed lines if you like), or an **Echo** of fading copies.
+- Presets: **Rocket smoke**, **Comet tail**, **Sparkles**, **Speed lines** and **Echo**. Emission is keyed, so smoke can start at ignition and stop at burn-out.
+- Trails are worked out from the timeline, so scrubbing, playback and exports always show the same smoke. Drawn on the GPU, with the same picture in exports and flattening; in 3D, puffs shrink with distance.
+
+### Loops and spinning
+- **Loop drawings:** a frame-by-frame layer's drawings repeat as a **Cycle** or **Back and forth** for the whole timeline, so cloth drawn twice flaps for as long as it plays. Paint on a repeat and that drawing changes everywhere.
+- **Loop keyframes:** after its last keyframe, a piece's moves start again (**Loop**) or play there and back (**Back and forth**), its trails' emission too.
+- **Spin forever:** a speed in turns a second for spin, and tilt and turn in 3D, with keys of its own in a timeline row of its own, so a turbine can start up and slow down without keying its position. **Fit to the timeline** makes it turn a whole number of times, so a looping GIF runs on without a jump.
+
+### Files
+- Projects keep all of this in `.pigm` version 4. A picture that uses none of it is still saved as version 3, 2 or 1, so Pigmento 1.2 opens it.
+
+### Not in this release
+- Physics (gravity, bouncing, collisions), emitters that aren't on a piece, wind, motion blur, and trails on frame-by-frame drawings.
+
 ## [1.2.0] — 2026-11-20
 
 Pieces in 3D: sheets you tilt and turn, hinge into boxes and film with a moving camera.
