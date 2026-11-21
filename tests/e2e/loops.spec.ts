@@ -116,6 +116,13 @@ test('cloth loops, a sign swings back and forth and a turbine spins forever whil
   await page.evaluate(() => window.__pigmentoTest!.addLayer());
   const clothLayer = await page.evaluate(() => window.__pigmentoTest!.layers().activeId);
   await page.getByRole('tab', { name: 'Animate' }).click();
+  // The blade's speed has a row of its own in the timeline, under the blade's.
+  if (!(await page.locator('.tl-names').isVisible())) await page.locator('.ribbon').getByRole('button', { name: 'Timeline', exact: true }).click();
+  const timeline = page.getByRole('region', { name: 'Timeline' });
+  const spinRow = timeline.locator('.tl-spin-row');
+  await expect(spinRow).toHaveCount(1);
+  await expect(spinRow.locator('.tl-key')).toHaveCount(1);
+  await expect(timeline.getByRole('button', { name: 'Piece 3 · spin', exact: true })).toBeVisible();
   const draw = async (cloth: Box) => {
     await page.evaluate(([id, c, r]) => window.__pigmentoTest!.fillLayer(id, c, r), [clothLayer, BLACK, { x: 480, y: 96, w: 260, h: 4 }] as const);
     await page.evaluate(([id, c, r]) => window.__pigmentoTest!.fillLayer(id, c, r), [clothLayer, GREEN, cloth] as const);
