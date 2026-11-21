@@ -320,6 +320,13 @@ On a piece (version 4):
 - **`keys`** (up to 2,000): how much it emits (`amount`, 0 to 1) at a `frame` (0 to 1,999; ones past the end of the timeline move to its last frame, one a frame), easing on to the next key; held before the first and after the last; none means always on.
 - Puffs are born at fixed times: one every 1/`rate` seconds, through the whole timeline and before it, and, by distance, in slices of a grid of up to 8 a frame (fewer, so a lifetime's worth is at most 4,096 slices), each due its emitter's distance over `spacing`, the fraction left over decided by `seed`. Where emission is keyed down, births are left out by `seed` in proportion. At most 5,000 live at once (the newest are kept). What shows at a frame therefore depends only on that frame, never on the frames shown before it.
 
+## Drawings on pieces (version 5)
+
+Pigmento writes version 5 only when a piece is drawn frame by frame; otherwise it writes the oldest version that holds the picture. Pigmento 1.3 refuses a version 5 file with its "made with a newer Pigmento" message rather than open it without the drawings. Version 5 adds, on a piece:
+
+- **`drawings`** (left out: none): `[{ "start": 0, "file": "pieces/0001.png" }, { "start": 3, "file": "pieces/0001-2.png" }]`, 2 to 2,000 of them. Each drawing shows from its `start` frame (0 to 1,999) until the next one's, like a frame-by-frame layer's. Its `file` is a PNG the size of the piece's `image` (which is the first drawing): `pieces/<n>.png` or `pieces/<n>-<m>.png`. A drawing used more than once (a repeat) names the same file. When a file is opened, the drawings are sorted, one a start (the last given wins), and the first starts at frame 0; drawings that come down to one leave a piece with that one picture. A missing file or one of another size is refused, and all pieces together hold at most 20,000 drawings.
+- **`drawingLoop`** (left out: none): `{ "mode": "cycle", "end": 6 }`. The drawings repeat for the whole timeline: `"cycle"` from frame 0 to `end` and round again, or `"pingpong"` forward and back (A B C B A B C…). `end` (1 to 2,000) is the frame after the last drawing's last; one at or before the last drawing's start becomes the frame after it.
+
 ## Limits and safety
 - Width and height are at most 30,000 px each and 250 megapixels in total. Files may hold at most 2,000 layers, nested at most 64 deep, 200 saved selections and 256 pictures (each at most 4096 × 4096 px; bigger pictures are scaled down when chosen).
 - Each archive entry is capped at 1 GB uncompressed and the whole archive at 2 GB. PNG sizes must match the sizes recorded for them.

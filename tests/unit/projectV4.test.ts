@@ -91,7 +91,7 @@ const shapesOf = (doc: PaintDocument) => {
 describe('projects, version 4', () => {
   it('keep paths followed, facing, progress, and trims set, keyed and tied', async () => {
     const doc = picture();
-    expect(PROJECT_VERSION).toBe(4);
+    expect(PROJECT_VERSION).toBe(5);
     expect(versionFor(doc)).toBe(4);
     const { doc: back, json } = await reopen(doc);
     expect(json.version).toBe(4);

@@ -293,6 +293,17 @@ On the frame where a new drawing should start, choose **New drawing** (a blank p
 - **Onion skin** shows the drawings before (orange) and after (blue) the one you're drawing, faintly, so you can line them up. Choose how many to show, and how strong, beside its button in the timeline. It's only on screen: it's never saved or exported.
 - **Loop drawings** (in the Animate tab, or right-click the layer's row in the timeline) repeats a layer's drawings for the whole timeline: **Cycle** plays them round and round (A B C A B C…), and **Back and forth** plays them there and back (A B C B A B C…). Draw cloth on a line twice, with the waves in different places, and it flaps for as long as the animation lasts. The repeats show faded in the timeline; the small loop handle after the last drawing sets how long that one lasts (drag it, or Tab to it and press Left or Right). The repeats are the same drawings, not copies: paint on any repeat and that drawing changes everywhere it shows. New drawings go in the first cycle.
 
+#### Drawings on a piece
+
+A piece can have drawings too, so it changes as it moves, or as it stays put: a robe's folds in the wind, a sign that flickers, a face that blinks.
+
+- Select the piece and turn on **Paint on piece** (the brush button on its row in the timeline, or the check box in a painting tool's options). **New drawing**, **Copy drawing**, **Clear drawing**, **Delete drawing** and **Loop drawings** in the Animate tab then act on the piece instead of the layer, and the painting tools paint the drawing that's showing.
+- For example: draw a red square and lift it with **Animate selection**. Turn on Paint on piece, go to frame 3 and choose **Copy drawing**, then draw a blue line across it. Set **Loop drawings** to **Cycle**, and it switches between the plain square and the one with the line for the whole animation, without moving.
+- The piece's drawings get a row of their own under it in the timeline, like a layer's: drag a block's start, drag the loop's end, and right-click for the drawing commands. Clicking the row turns on Paint on piece for that piece.
+- **Animate selection** (or **Piece from layer**) on a layer drawn frame by frame lifts the area out of every drawing, so the piece keeps them all, with the same timing and loop.
+- Onion skin shows the piece's drawings before and after the one you're painting, where the piece is.
+- The piece still moves, turns and loops its keyframes as before; its drawings change on their own timing on top of that.
+
 ### Saving and sharing
 
 - **Projects:** a Pigmento project (`.pigm`) keeps the whole animation.
