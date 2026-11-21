@@ -3274,3 +3274,40 @@ dialog.tour::backdrop {
   top: 2px;
   transform: translate(8px, 0);
 }
+
+/* Trails (Animate and Perspective plane tools). */
+.trail-panel {
+  display: grid;
+  gap: 10px;
+}
+.trail-list {
+  display: grid;
+  gap: 4px;
+}
+.trail-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.trail-row .trail-pick {
+  flex: 1;
+  justify-content: flex-start;
+}
+.trail-row.selected .trail-pick {
+  border-color: var(--accent);
+}
+.trail-settings {
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.trail-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+.trail-swatch.selected {
+  box-shadow: 0 0 0 2px var(--accent);
+}

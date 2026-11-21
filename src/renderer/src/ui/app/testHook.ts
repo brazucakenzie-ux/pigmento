@@ -13,7 +13,9 @@ import type { ShapeStyle } from '@engine/live/ShapeObject';
 import { makePiece, newPieceId, pieceStateAt, setKey, type Piece } from '@engine/anim/piece';
 import { Scene } from '@engine/anim/scene';
 import { defaultLight, project, spaceOf } from '@engine/anim/space';
-import { drawPiece, drawRuns, hingedIds, runSheets } from '@engine/anim/pieceRaster';
+import { drawPiece, drawRuns, frameExtras, hingedIds, runSheets } from '@engine/anim/pieceRaster';
+import { applyPreset, makeTrail, type TrailPreset } from '@engine/anim/trail';
+import { PaintDocument } from '@engine/doc/Document';
 import { BOX_FACES, faceSize, makeBox, type BoxFace, type BoxSize } from '@engine/anim/box';
 import { sampleProjectiveBatch } from '@engine/anim/pieceProject';
 import { encodeAnimation } from '@engine/io/animExport';
@@ -160,6 +162,50 @@ async function trimSheet(): Promise<{ ids: string[]; w: number; h: number; png: 
   return { ids: cases.map((c) => c[0]), w: W, h: CELL, png: Array.from(png) };
 }
 
+/**
+ * The trail sheet (golden-image test): a small piece moving up across each cell, leaving one
+ * trail (each preset, a trail pushed back in 3D, an echo), drawn by the CPU path exports and
+ * flattening use, at a fixed frame and seed.
+ */
+async function trailSheet(): Promise<{ ids: string[]; w: number; h: number; png: number[] }> {
+  const CELL = 160;
+  const cases: [string, TrailPreset, number][] = [
+    ['rocket-smoke', 'rocketSmoke', 0],
+    ['comet-tail', 'cometTail', 0],
+    ['sparkles', 'sparkles', 0],
+    ['speed-lines', 'speedLines', 0],
+    ['echo', 'echo', 0],
+    ['smoke-in-depth', 'rocketSmoke', 400],
+  ];
+  const W = CELL * cases.length;
+  const sheet = new Uint8ClampedArray(W * CELL * 4).fill(255);
+  for (const [i, [, preset, depth]] of cases.entries()) {
+    const doc = new PaintDocument({ width: CELL, height: CELL });
+    const body = new Uint8ClampedArray(24 * 12 * 4);
+    for (let k = 0; k < body.length; k += 4) body.set([40, 90, 200, 255], k);
+    const p = makePiece('p', '', doc.layers[0].id, { w: 24, h: 12, data: body }, { x: 0, y: 0, w: 24, h: 12 }, 0);
+    p.keyframes = setKey(setKey(p.keyframes, 0, { x: 20, y: 135, depth, easing: 'linear' }), 23, { x: 140, y: 30, depth });
+    const trail = applyPreset(makeTrail('t', 'puffs', { x: 0, y: 6 }, 4242), preset);
+    // Speed lines are white (for skies); dark here, so they show on the white sheet.
+    const dark = { r: 30, g: 40, b: 70, a: 255 };
+    p.trails = [preset === 'speedLines' ? { ...trail, colors: [{ pos: 0, color: dark }, { pos: 1, color: dark }] } : trail];
+    doc.pieces = [p];
+    const view = { data: new Uint8ClampedArray(CELL * CELL * 4), stride: CELL, ox: 0, oy: 0 };
+    frameExtras(doc, 18)!.draw(doc.layers[0], { x: 0, y: 0, w: CELL, h: CELL }, view);
+    // Over white, into its cell.
+    for (let y = 0; y < CELL; y++) {
+      for (let x = 0; x < CELL; x++) {
+        const s = (y * CELL + x) * 4;
+        const a = view.data[s + 3] / 255;
+        const d = (y * W + i * CELL + x) * 4;
+        for (let c = 0; c < 3; c++) sheet[d + c] = Math.round(view.data[s + c] * a + 255 * (1 - a));
+      }
+    }
+  }
+  const png = await engine.codecs.encode('png', W, CELL, sheet, 100, 96);
+  return { ids: cases.map((c) => c[0]), w: W, h: CELL, png: Array.from(png) };
+}
+
 /** Pixels per cell that differ (any channel by more than 24) between two sheets. */
 /**
  * The motion sheet (golden-image test): one row per easing and per kind of motion, each showing
@@ -281,6 +327,16 @@ export function installTestHook(): void {
       const d = ctx.getImageData(x, y, 1, 1).data;
       return { r: d[0], g: d[1], b: d[2], a: d[3] };
     },
+    /** Many points of the composited picture as the screen draws it (GPU), after one frame. */
+    screenPixels: async (points: { x: number; y: number }[]) => {
+      await new Promise<void>((r) => requestAnimationFrame(() => r()));
+      const ctx = engine.renderer.compositeCanvas.getContext('2d')!;
+      const img = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height).data;
+      return points.map(({ x, y }) => {
+        const i = (y * ctx.canvas.width + x) * 4;
+        return { r: img[i], g: img[i + 1], b: img[i + 2], a: img[i + 3] };
+      });
+    },
     /** What the screen shows at document point (x, y): after zoom, rotation and the reference image. */
     displayPixel: async (x: number, y: number) => {
       await new Promise<void>((r) => requestAnimationFrame(() => r()));
@@ -354,6 +410,7 @@ export function installTestHook(): void {
     /** Where a point of a piece (its own pixels) shows in the document at the frame shown. */
     cubeSheet,
     trimSheet,
+    trailSheet,
     /**
      * The 3D performance scene on top of what's there: a 6000 px striped background repeating across
      * the bottom layer and scrolling round, and a shaded box of 1024 px faces spinning once round

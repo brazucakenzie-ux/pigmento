@@ -18,6 +18,9 @@ import type { Tiling } from '../anim/pieceSample';
 import { PlaneRenderer } from './PlaneRenderer';
 import { drawRuns, hingedIds, piecesByLayer, runSheets } from '../anim/pieceRaster';
 import { celAt, celIndexAt } from '../anim/cels';
+import { paintPuffs, pieceTrailsAt, puffBounds, puffTip, type PuffQuad, type TrailDrawing } from '../anim/trailDraw';
+import { subtree } from '../anim/links';
+import type { TipMask } from '../brush/tips';
 
 /** Onion-skin tints: drawings before the one shown, and after it. */
 const ONION_BEFORE = '#ff6a14';
@@ -305,46 +308,96 @@ export class Renderer {
     area: Rect = r ?? { x: 0, y: 0, w: this.doc.width, h: this.doc.height },
   ): void {
     const scene = sceneOf(this.doc, frame);
-    const order = scene.backToFront(pieces).filter((p) => scene.shows(p) && (!r || scene.touches(p, r)));
+    // Trails reach far beyond their pieces: the pieces (and groups) on this layer that leave one.
+    const layerId = pieces[0]?.layerId;
+    const owners = layerId === undefined ? [] : this.doc.pieces.filter((q) => q.layerId === layerId && q.trails.length > 0);
+    const trails = new Map(owners.map((q) => [q.id, pieceTrailsAt(this.doc, q, frame)]));
+    const groups = owners.filter((q) => q.kind === 'group');
+    const shown = (p: Piece) => scene.shows(p) && (!r || scene.touches(p, r));
+    const order = scene.backToFront(pieces).filter((p) => shown(p) || trails.has(p.id));
+    // A group's trail goes behind (or in front of) its whole tree; a piece's just behind (or in front of) it.
+    for (const g of groups) this.drawTrails(ctx, g, trails.get(g.id)!, false, area, alpha);
     for (const run of drawRuns(order, hingedIds(this.doc.pieces))) {
-      if (run.length > 1) {
-        this.drawJoined(ctx, run, scene, area, alpha);
-        continue;
+      for (const p of run) this.drawTrails(ctx, p, trails.get(p.id), false, area, alpha);
+      const visible = run.filter(shown);
+      if (visible.length > 1) this.drawJoined(ctx, visible, scene, area, alpha);
+      else if (visible.length === 1) this.drawOne(ctx, visible[0], scene, area, alpha);
+      for (const p of run) this.drawTrails(ctx, p, trails.get(p.id), true, area, alpha);
+    }
+    for (const g of groups) this.drawTrails(ctx, g, trails.get(g.id)!, true, area, alpha);
+  }
+
+  /** One piece as `scene` has it, inside `area`, at `alpha` times its own opacity. */
+  private drawOne(ctx: Ctx2D | CanvasRenderingContext2D, p: Piece, scene: Scene, area: Rect, alpha: number): void {
+    const { state: st, placement: pl, opacity } = scene.pose(p);
+    ctx.save();
+    ctx.globalAlpha = opacity * alpha;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    if (!pl.affine) {
+      // Tilted or turned: a true perspective image needs the GPU (or the CPU path if it can't).
+      const tiling = pieceTiling(p, st);
+      const where = tiling ? area : rectIntersect(area, scene.bounds(p));
+      const shade = scene.shade(p, this.doc.light);
+      if (where && !this.planes.draw(ctx, p.src, pl, tiling, where, shade)) this.drawOnCpu(ctx, p, pl, tiling, where, shade);
+      ctx.restore();
+      return;
+    }
+    const m = pl.affine;
+    if (p.repeat === 'none') {
+      ctx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
+      ctx.drawImage(this.pieceCanvas(p.src), 0, 0);
+    } else if (!this.planes.draw(ctx, p.src, pl, pieceTiling(p, st), area, 1)) {
+      // On the GPU it's one pass over what's showing (a pattern from a picture this big is slow to
+      // fill); without it, tiles as a pattern in the piece's own space, slid by its scroll on the
+      // axes it repeats along.
+      const pat = this.piecePattern(ctx, p.src, p.repeat);
+      if (pat) {
+        const ax = repeatAxes(p.repeat);
+        const t = matChain(matTranslate(ax.x ? st.scrollX : 0, ax.y ? st.scrollY : 0), m);
+        pat.setTransform(new DOMMatrix([t[0], t[1], t[2], t[3], t[4], t[5]]));
+        ctx.fillStyle = pat;
+        ctx.fillRect(area.x, area.y, area.w, area.h);
       }
-      const p = run[0];
-      const { state: st, placement: pl, opacity } = scene.pose(p);
-      ctx.save();
-      ctx.globalAlpha = opacity * alpha;
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      if (!pl.affine) {
-        // Tilted or turned: a true perspective image needs the GPU (or the CPU path if it can't).
-        const tiling = pieceTiling(p, st);
-        const where = tiling ? area : rectIntersect(area, scene.bounds(p));
-        const shade = scene.shade(p, this.doc.light);
-        if (where && !this.planes.draw(ctx, p.src, pl, tiling, where, shade)) this.drawOnCpu(ctx, p, pl, tiling, where, shade);
-        ctx.restore();
-        continue;
-      }
-      const m = pl.affine;
-      if (p.repeat === 'none') {
-        ctx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
-        ctx.drawImage(this.pieceCanvas(p.src), 0, 0);
-      } else if (!this.planes.draw(ctx, p.src, pl, pieceTiling(p, st), area, 1)) {
-        // On the GPU it's one pass over what's showing (a pattern from a picture this big is slow to
-        // fill); without it, tiles as a pattern in the piece's own space, slid by its scroll on the
-        // axes it repeats along.
-        const pat = this.piecePattern(ctx, p.src, p.repeat);
-        if (pat) {
-          const ax = repeatAxes(p.repeat);
-          const t = matChain(matTranslate(ax.x ? st.scrollX : 0, ax.y ? st.scrollY : 0), m);
-          pat.setTransform(new DOMMatrix([t[0], t[1], t[2], t[3], t[4], t[5]]));
-          ctx.fillStyle = pat;
-          ctx.fillRect(area.x, area.y, area.w, area.h);
+    }
+    ctx.restore();
+  }
+
+  /**
+   * A piece's trails that go behind it (or in front): puffs on the GPU (the CPU if it can't), and
+   * echoes as the piece (a group: its pieces) drawn again as it was a few frames back.
+   */
+  private drawTrails(ctx: Ctx2D | CanvasRenderingContext2D, p: Piece, drawings: readonly TrailDrawing[] | undefined, front: boolean, area: Rect, alpha: number): void {
+    if (!drawings) return;
+    for (const d of drawings) {
+      if (d.trail.front !== front) continue;
+      if (d.trail.kind === 'echo') {
+        const shapes = p.kind === 'group' ? subtree(this.doc.pieces, p.id).filter((q) => q.kind === 'piece') : [p];
+        for (const copy of d.echoes) {
+          const then = sceneOf(this.doc, copy.frame);
+          for (const q of then.backToFront(shapes)) if (then.shows(q)) this.drawOne(ctx, q, then, area, alpha * copy.opacity);
         }
+        continue;
       }
+      const tip = puffTip(d.trail.brush);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      if (!this.planes.drawPuffs(ctx, d.puffs, tip, area)) this.drawPuffsOnCpu(ctx, d.puffs, tip, area);
       ctx.restore();
     }
+  }
+
+  /** Puffs drawn by the CPU (no GPU): painted at document resolution, then laid over the target. */
+  private drawPuffsOnCpu(ctx: Ctx2D | CanvasRenderingContext2D, puffs: readonly PuffQuad[], tip: TipMask, area: Rect): void {
+    let b: Rect | null = null;
+    for (const q of puffs) b = rectUnion(b, puffBounds(q));
+    const where = b && rectIntersect(b, area);
+    if (!where || where.w <= 0 || where.h <= 0) return;
+    const view = { data: new Uint8ClampedArray(where.w * where.h * 4), stride: where.w, ox: where.x, oy: where.y };
+    paintPuffs(view, where, puffs, tip);
+    const c = new OffscreenCanvas(where.w, where.h);
+    c.getContext('2d')!.putImageData(new ImageData(view.data, where.w, where.h), 0, 0);
+    ctx.drawImage(c, where.x, where.y);
   }
 
   /**

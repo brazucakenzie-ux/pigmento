@@ -63,6 +63,28 @@ export function drawTree(ctx: ToolContext, ov: Overlay, scene: Scene, top: Piece
   ov.pivot(c, false);
 }
 
+/** Where a piece's trail emitters show on screen at the frame shown (one behind the camera is left out). */
+export function emitterHandles(ctx: ToolContext, scene: Scene, p: Piece): { id: string; at: Point }[] {
+  if (!p.trails.length) return [];
+  const pl = scene.placement(p);
+  return p.trails.flatMap((t) => {
+    const d = project(pl, t.emitter);
+    return d ? [{ id: t.id, at: ctx.view.toScreen(d.x, d.y) }] : [];
+  });
+}
+
+/** A point on the canvas in a piece's own pixels, as it's placed in `scene` (null where that can't be told). */
+export function pieceLocal(scene: Scene, p: Piece, at: Point): Point | null {
+  const pl = scene.placement(p);
+  if (!pl.affine) return unproject(pl, at);
+  const m = pl.affine;
+  const det = m[0] * m[3] - m[1] * m[2];
+  if (Math.abs(det) < 1e-12) return null;
+  const x = at.x - m[4];
+  const y = at.y - m[5];
+  return { x: (m[3] * x - m[2] * y) / det, y: (-m[1] * x + m[0] * y) / det };
+}
+
 /**
  * Alt-dragging a piece that follows another: it slides on that piece's plane, following the
  * pointer from `start` to `now` (canvas points); Shift keeps it level or upright there.

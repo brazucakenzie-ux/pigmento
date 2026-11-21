@@ -113,6 +113,36 @@ test('the shaded box matches its golden image at every angle', async () => {
   expect(changed).toEqual([]);
 });
 
+const TRAIL = 160;
+
+/**
+ * Trails (each preset, one in depth, an echo) as the CPU path draws them for exports. After an
+ * intended change, run with PIGMENTO_UPDATE_GOLDEN=1 and review tests/golden/trails.png.
+ */
+test('trails match their golden image', async () => {
+  h = await launchApp();
+  const { page } = h;
+  await ready(page);
+  const sheet = await page.evaluate(() => window.__pigmentoTest!.trailSheet());
+  const png = path.join(GOLDEN, 'trails.png');
+  const meta = path.join(GOLDEN, 'trails.json');
+  if (process.env.PIGMENTO_UPDATE_GOLDEN) {
+    mkdirSync(GOLDEN, { recursive: true });
+    writeFileSync(png, Buffer.from(sheet.png));
+    writeFileSync(meta, `${JSON.stringify({ cell: TRAIL, ids: sheet.ids }, null, 1)}\n`);
+    test.info().annotations.push({ type: 'golden', description: `wrote ${sheet.ids.length} trails to ${png}` });
+    return;
+  }
+  expect(existsSync(png), 'Golden image missing: run with PIGMENTO_UPDATE_GOLDEN=1').toBe(true);
+  const saved = JSON.parse(readFileSync(meta, 'utf8')) as { ids: string[] };
+  expect(sheet.ids).toEqual(saved.ids);
+  const counts = await page.evaluate(([a, b, c, k]) => window.__pigmentoTest!.compareSheets([...a], [...b], c, k), [sheet.png, [...readFileSync(png)], TRAIL, sheet.ids.length] as const);
+  expect(counts[0], 'The trail sheet changed size').not.toBe(-1);
+  const changed = counts.map((n, i) => ({ id: sheet.ids[i], pixels: n })).filter((c) => c.id && c.pixels > TRAIL * TRAIL * 0.005);
+  if (changed.length) writeFileSync(test.info().outputPath('trails-actual.png'), Buffer.from(sheet.png));
+  expect(changed).toEqual([]);
+});
+
 const TRIM = 120;
 
 /**

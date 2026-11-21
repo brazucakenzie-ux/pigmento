@@ -31,6 +31,7 @@ export interface PigmentoTestHook {
   autosaveNow(): Promise<boolean>;
   layers(): { tree: LayerNode[]; activeId: string; count: number };
   screenPixel(x: number, y: number): Promise<{ r: number; g: number; b: number; a: number }>;
+  screenPixels(points: { x: number; y: number }[]): Promise<{ r: number; g: number; b: number; a: number }[]>;
   displayPixel(x: number, y: number): Promise<{ r: number; g: number; b: number; a: number }>;
   viewRotation(): number;
   breakInterface(): void;
@@ -43,7 +44,7 @@ export interface PigmentoTestHook {
     frame: number;
     selectedId: string | null;
     pieces: { id: string; name: string; layerId: string; keys: { frame: number; easing: string }[]; kind: 'piece' | 'group'; parent: string | null; hinged: boolean }[];
-    current: { x: number; y: number; w: number; h: number; angle: number; skew: number; opacity: number; easing: string; keyed: boolean; curved: boolean; fold: number; group: boolean; link: 'none' | 'follows' | 'hinged'; follow: { layerId: string; objectId: string; sub: number } | null; progress: number; face: boolean; faceAngle: number } | null;
+    current: { x: number; y: number; w: number; h: number; angle: number; skew: number; opacity: number; easing: string; keyed: boolean; curved: boolean; fold: number; group: boolean; link: 'none' | 'follows' | 'hinged'; follow: { layerId: string; objectId: string; sub: number } | null; progress: number; face: boolean; faceAngle: number; trails: { id: string; kind: string; brush: string; size: number; emitter: { x: number; y: number }; colors: { pos: number }[]; keys: { frame: number; amount: number }[]; emission: number; keyed: boolean }[] } | null;
     playing: boolean;
     cels: Record<string, number[]>;
     paintOnPiece: boolean;
@@ -72,6 +73,7 @@ export interface PigmentoTestHook {
   pieceHandle(id: string, x: number, y: number): { x: number; y: number };
   cubeSheet(): Promise<{ ids: string[]; w: number; h: number; png: number[] }>;
   trimSheet(): Promise<{ ids: string[]; w: number; h: number; png: number[] }>;
+  trailSheet(): Promise<{ ids: string[]; w: number; h: number; png: number[] }>;
   selectCamera(): void;
   perfBoxScene(background?: boolean): { group: string; background: string | null; width: number };
   dragTimes(id: string, steps: number): number[];

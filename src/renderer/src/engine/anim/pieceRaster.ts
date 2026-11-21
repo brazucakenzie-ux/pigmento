@@ -10,6 +10,8 @@ import type { Scene } from './scene';
 import { sceneOf } from './follow';
 import { defaultLight, type Light } from './space';
 import { celAt } from './cels';
+import { subtree } from './links';
+import { paintPuffs, pieceTrailsAt, puffTip, type TrailDrawing } from './trailDraw';
 
 /** The pieces of pixels (not groups, which are never drawn) by the layer they belong to, bottom to top. */
 export function piecesByLayer(pieces: readonly Piece[]): Map<string, Piece[]> {
@@ -79,7 +81,7 @@ export function pieceTiling(p: Piece, s: PieceState): Tiling | null {
  * Draw one piece as `scene` has it into view, inside r (bilinear, premultiplied, like the
  * screen): flat ones through their affine, ones in 3D through their homography (see pieceProject).
  */
-export function drawPiece(view: PixelView, r: Rect, p: Piece, scene: Scene, light: Light = defaultLight()): void {
+export function drawPiece(view: PixelView, r: Rect, p: Piece, scene: Scene, light: Light = defaultLight(), alpha = 1): void {
   if (!scene.shows(p)) return;
   const { state: s, placement: pl, opacity } = scene.pose(p);
   const tiling = pieceTiling(p, s);
@@ -92,7 +94,25 @@ export function drawPiece(view: PixelView, r: Rect, p: Piece, scene: Scene, ligh
     img = sampleProjective(p.src, pl, r, tiling, tiling ? null : scene.bounds(p), scene.shade(p, light));
   }
   if (img.w === 0 || img.h === 0) return;
-  applyImage(view, { x: img.x, y: img.y, w: img.w, h: img.h }, { data: img.data, stride: img.w, ox: img.x, oy: img.y }, 'over', opacity);
+  applyImage(view, { x: img.x, y: img.y, w: img.w, h: img.h }, { data: img.data, stride: img.w, ox: img.x, oy: img.y }, 'over', opacity * alpha);
+}
+
+/**
+ * A piece's trails that go behind it (or in front) drawn into view inside r by the CPU: puffs
+ * painted with their tip, echoes as the piece (a group: its pieces) as it was a few frames back.
+ */
+function drawTrailsCpu(doc: PaintDocument, view: PixelView, r: Rect, p: Piece, drawings: readonly TrailDrawing[] | undefined, front: boolean): void {
+  if (!drawings) return;
+  for (const d of drawings) {
+    if (d.trail.front !== front) continue;
+    if (d.trail.kind === 'echo') {
+      const shapes = p.kind === 'group' ? subtree(doc.pieces, p.id).filter((q) => q.kind === 'piece') : [p];
+      for (const copy of d.echoes) {
+        const then = sceneOf(doc, copy.frame);
+        for (const q of then.backToFront(shapes)) drawPiece(view, r, q, then, doc.light, copy.opacity);
+      }
+    } else paintPuffs(view, r, d.puffs, puffTip(d.trail.brush));
+  }
 }
 
 /**
@@ -108,17 +128,35 @@ export function frameExtras(doc: PaintDocument, frame: number): LayerExtras | un
   const hinged = hingedIds(doc.pieces);
   const visibleIn = (layer: Layer, r: Rect): Piece[] =>
     (byLayer.get(layer.id) ?? []).filter((p) => scene.shows(p) && scene.touches(p, r));
+  // Trails reach far beyond their pieces: worked out once a layer for this frame.
+  const trails = new Map<string, Map<string, TrailDrawing[]>>();
+  const trailsOn = (layer: Layer): Map<string, TrailDrawing[]> => {
+    let t = trails.get(layer.id);
+    if (!t) {
+      t = new Map(doc.pieces.filter((p) => p.layerId === layer.id && p.trails.length > 0).map((p) => [p.id, pieceTrailsAt(doc, p, frame)]));
+      trails.set(layer.id, t);
+    }
+    return t;
+  };
   return {
-    covers: (layer, r) => layer.kind === 'raster' && visibleIn(layer, r).length > 0,
+    covers: (layer, r) => layer.kind === 'raster' && (visibleIn(layer, r).length > 0 || trailsOn(layer).size > 0),
     draw: (layer, r, view) => {
-      for (const run of drawRuns(scene.backToFront(visibleIn(layer, r)), hinged)) {
-        if (run.length === 1) {
-          drawPiece(view, r, run[0], scene, doc.light);
-          continue;
+      const t = trailsOn(layer);
+      const groups = doc.pieces.filter((p) => p.kind === 'group' && t.has(p.id));
+      const shown = new Set(visibleIn(layer, r));
+      const order = scene.backToFront((byLayer.get(layer.id) ?? []).filter((p) => shown.has(p) || t.has(p.id)));
+      for (const g of groups) drawTrailsCpu(doc, view, r, g, t.get(g.id), false);
+      for (const run of drawRuns(order, hinged)) {
+        for (const p of run) drawTrailsCpu(doc, view, r, p, t.get(p.id), false);
+        const visible = run.filter((p) => shown.has(p));
+        if (visible.length === 1) drawPiece(view, r, visible[0], scene, doc.light);
+        else if (visible.length > 1) {
+          const img = sampleProjectiveBatch(runSheets(visible, scene, doc.light), r);
+          if (img.w > 0 && img.h > 0) applyImage(view, { x: img.x, y: img.y, w: img.w, h: img.h }, { data: img.data, stride: img.w, ox: img.x, oy: img.y }, 'over', 1);
         }
-        const img = sampleProjectiveBatch(runSheets(run, scene, doc.light), r);
-        if (img.w > 0 && img.h > 0) applyImage(view, { x: img.x, y: img.y, w: img.w, h: img.h }, { data: img.data, stride: img.w, ox: img.x, oy: img.y }, 'over', 1);
+        for (const p of run) drawTrailsCpu(doc, view, r, p, t.get(p.id), true);
       }
+      for (const g of groups) drawTrailsCpu(doc, view, r, g, t.get(g.id), true);
     },
     surfaceOf: cels ? (layer) => (layer.cels ? celAt(layer.cels, frame).surface : null) : undefined,
   };

@@ -1,5 +1,6 @@
 import type { Point, Rect } from '../core/geometry';
 import { Surface } from '../raster/Surface';
+import { cloneTrail, type Trail } from './trail';
 import type { ImageBuf } from '../raster/transform';
 import type { Hinge } from './frames';
 import { identityState, stateAt, STATE_KEYS, type Easing, type Keyframe, type PieceState } from './interpolate';
@@ -49,6 +50,8 @@ export interface Piece {
    * where it's heading on the canvas, its keyed angle added on top (not keyframed).
    */
   face: Face;
+  /** What it leaves behind as it moves (up to MAX_TRAILS; see trail.ts). Not keyframed, but their emission is keyed. */
+  trails: Trail[];
 }
 
 /** Facing the way it goes, and which way the art points as drawn (radians in its own pixels: 0 = right, clockwise). */
@@ -130,6 +133,7 @@ export function makePiece(id: string, name: string, layerId: string, src: ImageB
     link: null,
     follow: null,
     face: { on: false, angle: 0 },
+    trails: [],
   };
 }
 
@@ -150,6 +154,7 @@ export function makeGroup(id: string, name: string, layerId: string, home: Rect,
     link: null,
     follow: null,
     face: { on: false, angle: 0 },
+    trails: [],
   };
 }
 
@@ -159,7 +164,7 @@ export function cloneLink(l: Link | null): Link | null {
 
 /** The same piece (for undo snapshots: the pixels are shared, not copied). */
 export function clonePiece(p: Piece): Piece {
-  return { ...p, home: { ...p.home }, pivot: { ...p.pivot }, keyframes: p.keyframes.map(cloneKeyframe), link: cloneLink(p.link), follow: p.follow && { ...p.follow }, face: { ...p.face } };
+  return { ...p, home: { ...p.home }, pivot: { ...p.pivot }, keyframes: p.keyframes.map(cloneKeyframe), link: cloneLink(p.link), follow: p.follow && { ...p.follow }, face: { ...p.face }, trails: p.trails.map(cloneTrail) };
 }
 
 /**

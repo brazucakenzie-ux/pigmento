@@ -624,6 +624,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   }
 
   animationChanged(r: Rect | null): void {
+    // Trails reach far beyond the pieces that leave them.
+    if (this.doc.pieces.some((p) => p.trails.length > 0)) r = null;
     // Paths whose trim is tied to a piece change with it (anywhere on the canvas).
     let tied = false;
     for (const l of this.doc.vectorLayers()) {
