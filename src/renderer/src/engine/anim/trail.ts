@@ -398,13 +398,13 @@ const PRESETS: Record<TrailPreset, Omit<Trail, 'id' | 'emitter' | 'keys' | 'seed
   speedLines: {
     kind: 'puffs',
     rate: 0,
-    spacing: 12,
-    lifetime: 0.25,
-    size: 4,
+    spacing: 8,
+    lifetime: 0.3,
+    size: 3,
     growth: 1,
     drift: 0,
     driftAngle: 0,
-    spread: 0,
+    spread: 90,
     opacity: 0.9,
     fade: 1,
     colors: [

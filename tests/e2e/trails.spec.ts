@@ -87,3 +87,44 @@ test('trail options: added from the options bar, made over as a preset, its emit
   await page.keyboard.press('Control+z');
   expect(await trails(page)).toEqual([]);
 });
+
+test('smoke looks the same on screen (GPU) as in the picture (CPU path)', async () => {
+  const { page } = h;
+  const id = await piece(page);
+  for (const [f, x, y] of [
+    [0, 200, 600],
+    [23, 1000, 250],
+  ] as const) {
+    await page.evaluate(([pid, frame, px, py]) => window.__pigmentoTest!.setPieceKey(pid as string, frame as number, { x: px as number, y: py as number }), [id, f, x, y] as const);
+  }
+  await page.keyboard.press('a');
+  await page.locator('.optionsbar .opt-pop-btn', { hasText: 'Trail' }).click();
+  const pop = page.getByRole('dialog', { name: 'Trail' });
+  await pop.getByRole('button', { name: 'Add a trail' }).click();
+  await page.keyboard.press('Escape');
+  expect(await page.evaluate(() => window.__pigmentoTest!.gpuPlanes())).toBe(true);
+  await page.evaluate(() => window.__pigmentoTest!.setFrame(15));
+  // On a grid over where the smoke is (behind the piece, which is at about x = 720 by now).
+  const r = { x: 300, y: 300, w: 400, h: 300 };
+  const result = await page.evaluate(
+    async ({ r, step, tol }) => {
+      const t = window.__pigmentoTest!;
+      const points: { x: number; y: number }[] = [];
+      for (let y = r.y; y < r.y + r.h; y += step) for (let x = r.x; x < r.x + r.w; x += step) points.push({ x, y });
+      const screen = await t.screenPixels(points);
+      let off = 0;
+      let smoke = 0;
+      points.forEach(({ x, y }, i) => {
+        const cpu = t.pixel(x, y);
+        const gpu = screen[i];
+        if (cpu.r < 250 || cpu.g < 250 || cpu.b < 250) smoke++;
+        if (Math.max(Math.abs(cpu.r - gpu.r), Math.abs(cpu.g - gpu.g), Math.abs(cpu.b - gpu.b)) > tol) off++;
+      });
+      return { checked: points.length, off, smoke };
+    },
+    { r, step: 3, tol: 16 },
+  );
+  // There's smoke there, and the two agree within a little nearly everywhere.
+  expect(result.smoke).toBeGreaterThan(result.checked * 0.05);
+  expect(result.off).toBeLessThan(result.checked * 0.02);
+});

@@ -98,6 +98,57 @@ void main() {
   outColor = vec4(c.rgb * uShade, c.a);
 }`;
 
+/**
+ * Puffs: one quad each, many at once (instanced). A corner (-1 … 1 along and across the puff) is
+ * its middle plus half its length along its angle and half its width across, in document pixels,
+ * then device pixels; the tip is sampled across it (its smaller copies for small puffs).
+ */
+const PUFF_VS = `#version 300 es
+in vec2 aQ;
+in vec4 aMid;
+in vec2 aAcross;
+in vec4 aColor;
+uniform mat3 uM;
+uniform vec4 uView;
+out vec2 vUV;
+out vec4 vColor;
+void main() {
+  vec2 p = aMid.xy + aMid.zw * aQ.x + aAcross * aQ.y;
+  vec3 d = uM * vec3(p, 1.0);
+  gl_Position = vec4(2.0 * (d.x - uView.x) / uView.z - 1.0, 1.0 - 2.0 * (d.y - uView.y) / uView.w, 0.0, 1.0);
+  vUV = (aQ + 1.0) * 0.5;
+  vColor = aColor;
+}`;
+
+const PUFF_FS = `#version 300 es
+precision highp float;
+in vec2 vUV;
+in vec4 vColor;
+uniform sampler2D uTip;
+out vec4 outColor;
+void main() {
+  outColor = vColor * texture(uTip, vUV).r;
+}`;
+
+/** One puff for the GPU (see anim/trailDraw): middle, half-length along, half-width across, straight colour and alpha. */
+export interface GpuPuff {
+  readonly x: number;
+  readonly y: number;
+  readonly ax: number;
+  readonly ay: number;
+  readonly bx: number;
+  readonly by: number;
+  readonly color: { readonly r: number; readonly g: number; readonly b: number };
+  readonly alpha: number;
+}
+
+/** A tip (greyscale mask) as the GPU samples it. */
+export interface GpuTip {
+  readonly w: number;
+  readonly h: number;
+  readonly data: Uint8Array;
+}
+
 interface Program {
   prog: WebGLProgram;
   loc: Record<string, WebGLUniformLocation | null>;
@@ -148,6 +199,11 @@ export class PlaneRenderer {
   private sheet: Program | null = null;
   private plane: Program | null = null;
   private batch: Program | null = null;
+  private puff: (Program & { attrs: { q: number; mid: number; across: number; color: number } }) | null = null;
+  private puffCorners: WebGLBuffer | null = null;
+  private puffBuffer: WebGLBuffer | null = null;
+  private puffVao: WebGLVertexArrayObject | null = null;
+  private tips = new Map<GpuTip, WebGLTexture>();
   private quad: WebGLBuffer | null = null;
   private batchBuffer: WebGLBuffer | null = null;
   private screenQuad: WebGLBuffer | null = null;
@@ -178,6 +234,8 @@ export class PlaneRenderer {
         e.preventDefault();
         this.lost = true;
         this.textures.clear();
+        this.tips.clear();
+        this.puffVao = null;
       });
       canvas.addEventListener('webglcontextrestored', () => {
         this.lost = false;
@@ -188,6 +246,12 @@ export class PlaneRenderer {
       this.sheet = this.program(gl, SHEET_VS, SHEET_FS, ['uH', 'uView', 'uTex', 'uSize', 'uShade']);
       this.plane = this.program(gl, PLANE_VS, PLANE_FS, ['uInv', 'uView', 'uTex', 'uSize', 'uScroll', 'uWrap', 'uShade']);
       this.batch = this.program(gl, BATCH_VS, BATCH_FS, ['uView', 'uTex', 'uSize', 'uShade', 'uOpacity']);
+      const puff = this.program(gl, PUFF_VS, PUFF_FS, ['uM', 'uView', 'uTip']);
+      this.puff = { ...puff, attrs: { q: gl.getAttribLocation(puff.prog, 'aQ'), mid: gl.getAttribLocation(puff.prog, 'aMid'), across: gl.getAttribLocation(puff.prog, 'aAcross'), color: gl.getAttribLocation(puff.prog, 'aColor') } };
+      this.puffCorners = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.puffCorners);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+      this.puffBuffer = gl.createBuffer();
       this.quad = gl.createBuffer();
       this.batchBuffer = gl.createBuffer();
       this.screenQuad = gl.createBuffer();
@@ -440,6 +504,134 @@ export class PlaneRenderer {
           gl.drawArrays(gl.TRIANGLE_STRIP, i * 4, 4);
         });
         gl.disableVertexAttribArray(1);
+        gl.disable(gl.SCISSOR_TEST);
+        target.save();
+        target.setTransform(1, 0, 0, 1, 0, 0);
+        target.drawImage(this.canvas, 0, 0, w, hh, cx, cy, w, hh);
+        target.restore();
+      }
+    }
+    return true;
+  }
+
+  /** The tip as a texture (with its smaller copies), made once. */
+  private tipTexture(gl: WebGL2RenderingContext, tip: GpuTip): WebGLTexture | null {
+    const hit = this.tips.get(tip);
+    if (hit) return hit;
+    const tex = gl.createTexture();
+    if (!tex) return null;
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    const levels = Math.floor(Math.log2(Math.max(tip.w, tip.h))) + 1;
+    gl.texStorage2D(gl.TEXTURE_2D, levels, gl.R8, tip.w, tip.h);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, tip.w, tip.h, gl.RED, gl.UNSIGNED_BYTE, tip.data);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    if (this.tips.size > 32) {
+      const [old, t] = this.tips.entries().next().value!;
+      gl.deleteTexture(t);
+      this.tips.delete(old);
+    }
+    this.tips.set(tip, tex);
+    return tex;
+  }
+
+  /**
+   * Draw puffs (oldest first, each over the ones before) stamped with `tip` into the target
+   * inside `area` (document pixels), as one picture laid over it (with the target's own
+   * transform, clip and alpha). False when the GPU can't: nothing was drawn.
+   */
+  drawPuffs(target: Ctx2D, puffs: readonly GpuPuff[], tip: GpuTip, area: Rect): boolean {
+    if (!puffs.length) return true;
+    const gl = this.init();
+    if (!gl || !this.canvas || !this.puff || gl.isContextLost()) return false;
+    const m = target.getTransform();
+    // Where they reach, in device pixels.
+    let lx = Infinity;
+    let ly = Infinity;
+    let hx = -Infinity;
+    let hy = -Infinity;
+    for (const q of puffs) {
+      const ex = Math.abs(q.ax) + Math.abs(q.bx);
+      const ey = Math.abs(q.ay) + Math.abs(q.by);
+      lx = Math.min(lx, q.x - ex);
+      ly = Math.min(ly, q.y - ey);
+      hx = Math.max(hx, q.x + ex);
+      hy = Math.max(hy, q.y + ey);
+    }
+    const ax0 = Math.max(lx, area.x);
+    const ay0 = Math.max(ly, area.y);
+    const ax1 = Math.min(hx, area.x + area.w);
+    const ay1 = Math.min(hy, area.y + area.h);
+    if (ax1 <= ax0 || ay1 <= ay0) return true;
+    const corners = [
+      [ax0, ay0],
+      [ax1, ay0],
+      [ax0, ay1],
+      [ax1, ay1],
+    ].map(([x, y]) => ({ x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f }));
+    const x0 = Math.max(0, Math.floor(Math.min(...corners.map((p) => p.x))));
+    const y0 = Math.max(0, Math.floor(Math.min(...corners.map((p) => p.y))));
+    const x1 = Math.min(target.canvas.width, Math.ceil(Math.max(...corners.map((p) => p.x))));
+    const y1 = Math.min(target.canvas.height, Math.ceil(Math.max(...corners.map((p) => p.y))));
+    if (x1 <= x0 || y1 <= y0) return true;
+    const tex = this.tipTexture(gl, tip);
+    if (!tex) return false;
+    const data = new Float32Array(puffs.length * 10);
+    puffs.forEach((q, i) => {
+      const a = Math.min(1, Math.max(0, q.alpha));
+      data.set([q.x, q.y, q.ax, q.ay, q.bx, q.by, (q.color.r / 255) * a, (q.color.g / 255) * a, (q.color.b / 255) * a, a], i * 10);
+    });
+    const p = this.puff;
+    if (!this.puffVao) {
+      this.puffVao = gl.createVertexArray();
+      gl.bindVertexArray(this.puffVao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.puffCorners);
+      gl.enableVertexAttribArray(p.attrs.q);
+      gl.vertexAttribPointer(p.attrs.q, 2, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.puffBuffer);
+      for (const [loc, size, offset] of [
+        [p.attrs.mid, 4, 0],
+        [p.attrs.across, 2, 16],
+        [p.attrs.color, 4, 24],
+      ] as const) {
+        gl.enableVertexAttribArray(loc);
+        gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 40, offset);
+        gl.vertexAttribDivisor(loc, 1);
+      }
+      gl.bindVertexArray(null);
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.puffBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STREAM_DRAW);
+    const cw = Math.min(CHUNK, x1 - x0);
+    const ch = Math.min(CHUNK, y1 - y0);
+    if (this.canvas.width < cw || this.canvas.height < ch) {
+      this.canvas.width = Math.max(this.canvas.width, cw);
+      this.canvas.height = Math.max(this.canvas.height, ch);
+    }
+    const H = this.canvas.height;
+    for (let cy = y0; cy < y1; cy += CHUNK) {
+      for (let cx = x0; cx < x1; cx += CHUNK) {
+        const w = Math.min(CHUNK, x1 - cx);
+        const hh = Math.min(CHUNK, y1 - cy);
+        gl.viewport(0, H - hh, w, hh);
+        gl.enable(gl.SCISSOR_TEST);
+        gl.scissor(0, H - hh, w, hh);
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.useProgram(p.prog);
+        gl.uniformMatrix3fv(p.loc.uM, false, new Float32Array([m.a, m.b, 0, m.c, m.d, 0, m.e, m.f, 1]));
+        gl.uniform4f(p.loc.uView, cx, cy, w, hh);
+        gl.uniform1i(p.loc.uTip, 0);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.bindVertexArray(this.puffVao);
+        gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, puffs.length);
+        gl.bindVertexArray(null);
         gl.disable(gl.SCISSOR_TEST);
         target.save();
         target.setTransform(1, 0, 0, 1, 0, 0);

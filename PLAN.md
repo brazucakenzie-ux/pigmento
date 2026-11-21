@@ -482,7 +482,7 @@ Decisions (agreed for Stops 7A, 7B and 7C; the rest proposed, to agree with the 
 **Stop 7C — Trails**
 - [x] 7.9 The trail model: Echo and Puffs; the emitter point (dragged on the piece, turning with it); rate by time and by distance; lifetime, size, growth, drift, spread, fade and colour over life; a seed; keyed emission on and off. Worked out from the timeline alone, so any frame comes out the same however it's reached (+ unit tests, including scrubbing back and forth)
 - [x] 7.10 Trail options: a Trail popover in the Animate and Perspective plane tools' options with presets (Rocket smoke, Comet tail, Sparkles, Speed lines), a brush-tip picker, a colour-over-life ramp and the emitter handle on the canvas; undoable (+ e2e)
-- [ ] 7.11 Drawing trails: puffs drawn many at a time on the GPU, with the CPU path for exports and flattening matching within a small tolerance; in 3D they face the camera at the emitter's depth; behind or in front of the piece (+ golden trail sheet, GPU/CPU comparison)
+- [x] 7.11 Drawing trails: puffs drawn many at a time on the GPU, with the CPU path for exports and flattening matching within a small tolerance; in 3D they face the camera at the emitter's depth; behind or in front of the piece (+ golden trail sheet, GPU/CPU comparison)
 - [ ] 7.12 E2e: a rocket follows a path, facing its way, with smoke that starts at ignition and thins out, its path erased behind it; save and reopen, export a GIF and an MP4; `npm run check` green; report
 
 **Stop 7D — Loops and spinning**

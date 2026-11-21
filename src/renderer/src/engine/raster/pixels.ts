@@ -34,7 +34,7 @@ export function maskAt(m: MaskView, x: number, y: number): number {
 }
 
 /** Source-over of a straight-alpha colour with coverage `a` (0–1) onto dst[i..i+3]. */
-function over(dst: Uint8ClampedArray, i: number, r: number, g: number, b: number, sa: number): void {
+export function over(dst: Uint8ClampedArray, i: number, r: number, g: number, b: number, sa: number): void {
   if (sa <= 0) return;
   const da = dst[i + 3] / 255;
   if (sa >= 1 || da === 0) {

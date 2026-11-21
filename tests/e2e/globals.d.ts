@@ -31,6 +31,7 @@ export interface PigmentoTestHook {
   autosaveNow(): Promise<boolean>;
   layers(): { tree: LayerNode[]; activeId: string; count: number };
   screenPixel(x: number, y: number): Promise<{ r: number; g: number; b: number; a: number }>;
+  screenPixels(points: { x: number; y: number }[]): Promise<{ r: number; g: number; b: number; a: number }[]>;
   displayPixel(x: number, y: number): Promise<{ r: number; g: number; b: number; a: number }>;
   viewRotation(): number;
   breakInterface(): void;
@@ -72,6 +73,7 @@ export interface PigmentoTestHook {
   pieceHandle(id: string, x: number, y: number): { x: number; y: number };
   cubeSheet(): Promise<{ ids: string[]; w: number; h: number; png: number[] }>;
   trimSheet(): Promise<{ ids: string[]; w: number; h: number; png: number[] }>;
+  trailSheet(): Promise<{ ids: string[]; w: number; h: number; png: number[] }>;
   selectCamera(): void;
   perfBoxScene(background?: boolean): { group: string; background: string | null; width: number };
   dragTimes(id: string, steps: number): number[];
