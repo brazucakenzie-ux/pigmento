@@ -17,7 +17,7 @@ import { sampleProjective, sampleProjectiveBatch } from '../anim/pieceProject';
 import type { Tiling } from '../anim/pieceSample';
 import { PlaneRenderer } from './PlaneRenderer';
 import { drawRuns, hingedIds, piecesByLayer, runSheets } from '../anim/pieceRaster';
-import { celAt, celIndexAt } from '../anim/cels';
+import { celShownIndex } from '../anim/cels';
 import { paintPuffs, pieceTrailsAt, puffBounds, puffTip, type PuffQuad, type TrailDrawing } from '../anim/trailDraw';
 import { subtree } from '../anim/links';
 import type { TipMask } from '../brush/tips';
@@ -615,7 +615,7 @@ export class Renderer {
     const o = this.onion;
     if (!o || !layer.cels || layer.cels.length < 2) return;
     const cels = layer.cels;
-    const at = celIndexAt(cels, this.doc.timeline.frame);
+    const at = celShownIndex(cels, layer.celLoop, this.doc.timeline.frame);
     if (!this.onionScratch || this.onionScratch.canvas.width !== this.doc.width || this.onionScratch.canvas.height !== this.doc.height) {
       const canvas = new OffscreenCanvas(this.doc.width, this.doc.height);
       this.onionScratch = { canvas, ctx: ctx2d(canvas) };
@@ -684,7 +684,7 @@ export class Renderer {
         let over: Piece[] | null = null;
         if (layer.kind === 'raster') {
           // Another frame's drawing comes from its own GPU copy.
-          source = exportFrame !== null && layer.cels ? this.drawingCanvas(celAt(layer.cels, exportFrame).surface) : this.mirrorFor(layer).canvas;
+          source = exportFrame !== null && layer.cels ? this.drawingCanvas(layer.cels[celShownIndex(layer.cels, layer.celLoop, exportFrame)].surface) : this.mirrorFor(layer).canvas;
           const pieces = this.passPieces?.get(layer.id);
           if (pieces?.length && layer.blend === 'normal' && layer.opacity === 1) over = pieces;
           else if (pieces?.length) {

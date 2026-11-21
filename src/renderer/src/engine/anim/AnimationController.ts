@@ -1,7 +1,7 @@
 import type { Point, Rect } from '../core/geometry';
 import type { PaintDocument, RasterLayer } from '../doc/Document';
 import { Surface } from '../raster/Surface';
-import { celAt, celIndexAt, celSurfaces, insertCel, MAX_CELS, moveCelStart, removeCelAt, type Cel } from './cels';
+import { celShownIndex, celSurfaces, defaultLoopEnd, insertCel, loopedFrame, MAX_CELS, moveCelStart, removeCelAt, type Cel, type CelLoop, type CelLoopMode } from './cels';
 import type { Command, History } from '../history/History';
 import type { ImageBuf } from '../raster/transform';
 import type { I18nKey, I18nParams } from '../../i18n';
@@ -40,7 +40,7 @@ import {
   type Back,
   type Repeat,
 } from './piece';
-import { advance, clampFps, clampFrame, clampLength, type LoopMode, type PlayState, type Timeline } from './timeline';
+import { advance, clampFps, clampFrame, clampLength, MAX_FRAMES, type LoopMode, type PlayState, type Timeline } from './timeline';
 
 /** What the animation controller needs from the engine. */
 export interface AnimHost {
@@ -76,6 +76,8 @@ export interface AnimationInfo {
   playing: boolean;
   /** Frame-by-frame layers: where each drawing starts (layers not listed are still). */
   cels: Record<string, number[]>;
+  /** Frame-by-frame layers whose drawings loop (layers not listed don't). */
+  celLoops: Record<string, CelLoop>;
   /** Painting tools paint on the selected piece instead of the active layer. */
   paintOnPiece: boolean;
   /** The camera 3D pieces are seen through. */
@@ -330,6 +332,7 @@ export class AnimationController {
       current: this.fields(),
       playing: this.playing,
       cels: Object.fromEntries(this.doc.rasterLayers().flatMap((l) => (l.cels ? [[l.id, l.cels.map((c) => c.start)]] : []))),
+      celLoops: Object.fromEntries(this.doc.rasterLayers().flatMap((l) => (l.cels && l.celLoop ? [[l.id, { ...l.celLoop }]] : []))),
       pieces: this.doc.pieces.map((p) => ({
         id: p.id,
         name: p.name,
@@ -782,15 +785,18 @@ export class AnimationController {
   /** Change one layer's drawings as one undo step (fn returns false when nothing changed). */
   private celChange(label: I18nKey, layer: RasterLayer, fn: () => boolean): boolean {
     this.host.commitLive();
-    const before: CelSnapshot = { surface: layer.surface, cels: layer.cels && layer.cels.map((c) => ({ ...c })) };
+    const before: CelSnapshot = { surface: layer.surface, cels: layer.cels && layer.cels.map((c) => ({ ...c })), loop: layer.celLoop && { ...layer.celLoop } };
     if (!fn()) return false;
-    // Down to one drawing: the layer is a still layer again.
+    // Down to one drawing: the layer is a still layer again (with nothing to loop).
     if (layer.cels && layer.cels.length === 1) {
       layer.surface = layer.cels[0].surface;
       layer.cels = null;
     }
+    if (!layer.cels) layer.celLoop = null;
+    // A loop always ends after its last drawing starts.
+    else if (layer.celLoop && layer.celLoop.end <= layer.cels[layer.cels.length - 1].start) layer.celLoop = { ...layer.celLoop, end: layer.cels[layer.cels.length - 1].start + 1 };
     layer.showFrame(this.frame);
-    const after: CelSnapshot = { surface: layer.surface, cels: layer.cels && layer.cels.map((c) => ({ ...c })) };
+    const after: CelSnapshot = { surface: layer.surface, cels: layer.cels && layer.cels.map((c) => ({ ...c })), loop: layer.celLoop && { ...layer.celLoop } };
     this.host.history.push(new CelCommand(label, this.host, layer, before, after));
     this.host.animationChanged(null);
     return true;
@@ -818,7 +824,12 @@ export class AnimationController {
       this.host.notify('info', 'notice.drawingHere');
       return false;
     }
-    const surface = copy ? celAt(cels, frame).surface.clone() : new Surface(this.doc.width, this.doc.height);
+    // A repeat of the loop shows drawings from its first cycle: new ones go there.
+    if (layer.celLoop && frame >= layer.celLoop.end) {
+      this.host.notify('info', 'notice.drawingInRepeat', { end: layer.celLoop.end });
+      return false;
+    }
+    const surface = copy ? cels[celShownIndex(cels, layer.celLoop, frame)].surface.clone() : new Surface(this.doc.width, this.doc.height);
     return this.celChange(copy ? 'history.copyDrawing' : 'history.newDrawing', layer, () => {
       const next = insertCel(cels, frame, surface);
       if (!next) return false;
@@ -830,7 +841,7 @@ export class AnimationController {
   /** Delete the drawing shown at the current frame (the one before shows on in its place). */
   deleteDrawing(layerId: string): boolean {
     const layer = this.rasterLayer(layerId);
-    const next = layer?.cels ? removeCelAt(layer.cels, this.frame) : null;
+    const next = layer?.cels ? removeCelAt(layer.cels, loopedFrame(layer.cels, layer.celLoop, this.frame)) : null;
     if (!layer || !next) return false;
     return this.celChange('history.deleteDrawing', layer, () => {
       layer.cels = next;
@@ -848,7 +859,7 @@ export class AnimationController {
         layer.surface = blank;
         return true;
       }
-      const i = celIndexAt(layer.cels, this.frame);
+      const i = celShownIndex(layer.cels, layer.celLoop, this.frame);
       layer.cels = layer.cels.map((c, k) => (k === i ? { start: c.start, surface: blank } : { ...c }));
       return true;
     });
@@ -859,8 +870,42 @@ export class AnimationController {
     const layer = this.rasterLayer(layerId);
     const next = layer?.cels ? moveCelStart(layer.cels, index, clampFrame(start, this.doc.timeline.length)) : null;
     if (!layer || !next) return false;
+    // The last drawing still starts before the loop ends.
+    if (layer.celLoop && next[next.length - 1].start >= layer.celLoop.end) return false;
     return this.celChange('history.holdDrawing', layer, () => {
       layer.cels = next;
+      return true;
+    });
+  }
+
+  /**
+   * Loop a frame-by-frame layer's drawings for the whole timeline (cycle or back and forth), or
+   * stop (null): one undo step. The cycle keeps its end, or starts with the last drawing as long
+   * as the one before it. Says why not for a layer with one drawing.
+   */
+  setDrawingLoop(layerId: string, mode: CelLoopMode | null): boolean {
+    const layer = this.rasterLayer(layerId);
+    if (!layer) return false;
+    if (mode && !layer.cels) {
+      this.host.notify('info', 'notice.loopNeedsDrawings');
+      return false;
+    }
+    if ((layer.celLoop?.mode ?? null) === mode) return false;
+    return this.celChange('history.loopDrawings', layer, () => {
+      layer.celLoop = mode && layer.cels ? { mode, end: layer.celLoop?.end ?? defaultLoopEnd(layer.cels) } : null;
+      return true;
+    });
+  }
+
+  /** Where a looping layer's cycle ends (the frame after its last drawing's last): one undo step. */
+  setLoopEnd(layerId: string, end: number): boolean {
+    const layer = this.rasterLayer(layerId);
+    const loop = layer?.celLoop;
+    if (!layer?.cels || !loop) return false;
+    const e = Math.min(MAX_FRAMES, Math.max(layer.cels[layer.cels.length - 1].start + 1, Math.round(end)));
+    if (e === loop.end) return false;
+    return this.celChange('history.loopEnd', layer, () => {
+      layer.celLoop = { ...loop, end: e };
       return true;
     });
   }
@@ -1352,6 +1397,7 @@ function nonZero(v: number): number {
 interface CelSnapshot {
   surface: Surface;
   cels: Cel[] | null;
+  loop: CelLoop | null;
 }
 
 /** A change to a layer's frame-by-frame drawings. */
@@ -1377,6 +1423,7 @@ export class CelCommand implements Command {
 
   private apply(s: CelSnapshot): void {
     this.layer.cels = s.cels && s.cels.map((c) => ({ ...c }));
+    this.layer.celLoop = s.loop && { ...s.loop };
     this.layer.surface = s.surface;
     this.layer.showFrame(this.host.doc.timeline.frame);
     this.host.animationChanged(null);

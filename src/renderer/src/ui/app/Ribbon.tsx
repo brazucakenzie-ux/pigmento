@@ -313,6 +313,9 @@ function AnimateTab() {
           <ActionButton id="clearDrawing" variant="small" />
           <ActionButton id="deleteDrawing" variant="small" />
         </div>
+        <div className="rb-stack rb-fields">
+          <LoopDrawingsField />
+        </div>
         <ActionButton id="onionSkin" />
       </RibbonGroup>
       <RibbonGroup label={t('group.playback')}>
@@ -642,5 +645,28 @@ export function Ribbon() {
         {tab === 'home' ? <HomeTab /> : tab === 'shapes' ? <ShapesTab /> : tab === 'brushes' ? <BrushesTab /> : tab === 'effects' ? <EffectsTab /> : tab === 'animate' ? <AnimateTab /> : tab === 'image' ? <ImageTab /> : <ViewTab />}
       </div>
     </div>
+  );
+}
+
+/** The active layer's Loop (its drawings repeating for the whole timeline), when it's frame-by-frame. */
+function LoopDrawingsField() {
+  const layerId = useUi((st) => st.layers.activeId);
+  const framed = useUi((st) => st.animation.cels[layerId] !== undefined);
+  const mode = useUi((st) => st.animation.celLoops[layerId]?.mode ?? 'off');
+  return (
+    <label className="opt" data-tip={t('loop.drawingsTip')}>
+      <span>{t('loop.drawings')}</span>
+      <select
+        className="select"
+        aria-label={t('loop.drawings')}
+        value={mode}
+        disabled={!framed}
+        onChange={(e) => engine.anim.setDrawingLoop(layerId, e.target.value === 'cycle' ? 'cycle' : e.target.value === 'pingpong' ? 'pingpong' : null)}
+      >
+        <option value="off">{t('loop.off')}</option>
+        <option value="cycle">{t('loop.cycle')}</option>
+        <option value="pingpong">{t('loop.backAndForth')}</option>
+      </select>
+    </label>
   );
 }

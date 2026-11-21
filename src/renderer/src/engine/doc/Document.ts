@@ -2,7 +2,7 @@ import type { RGBA } from '../core/color';
 import { Surface } from '../raster/Surface';
 import { defaultTimeline, type Timeline } from '../anim/timeline';
 import { clonePiece, type Piece } from '../anim/piece';
-import { celAt, celSurfaces, type Cel } from '../anim/cels';
+import { celShownIndex, celSurfaces, type Cel, type CelLoop } from '../anim/cels';
 import { defaultCamera, defaultLight, spaceOf, type Camera, type Light, type Space } from '../anim/space';
 import { cameraMoveAt, type CameraKey } from '../anim/cameraMove';
 import type { Selection } from './Selection';
@@ -94,6 +94,8 @@ export class RasterLayer extends LayerBase {
    * set, `surface` is always the drawing of the cel shown at the document's current frame.
    */
   cels: Cel[] | null = null;
+  /** Its drawings repeating for the whole timeline (frame-by-frame layers only; null: they don't). */
+  celLoop: CelLoop | null = null;
 
   constructor(name: string, surface: Surface, id?: string) {
     super(name, id, 'layer');
@@ -107,7 +109,7 @@ export class RasterLayer extends LayerBase {
 
   /** Show the drawing for `frame` (frame-by-frame layers only). */
   showFrame(frame: number): void {
-    if (this.cels) this.surface = celAt(this.cels, frame).surface;
+    if (this.cels) this.surface = this.cels[celShownIndex(this.cels, this.celLoop, frame)].surface;
   }
 
   /**

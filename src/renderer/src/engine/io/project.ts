@@ -91,6 +91,7 @@ function lightMoved(doc: PaintDocument): boolean {
 export function versionFor(doc: PaintDocument): 1 | 2 | 3 | 4 {
   if (doc.pieces.some((p) => p.follow !== null || p.face.on || p.face.angle !== 0 || p.trails.length > 0 || p.keyframes.some((k) => k.progress !== 0))) return 4;
   if (doc.vectorLayers().some((l) => [...walkShapes(l.objects)].some((s) => s.trim || s.trimKeys?.length || s.trimTie))) return 4;
+  if (doc.rasterLayers().some((l) => l.cels && l.celLoop)) return 4;
   const v3 = doc.pieces.some(
     (p) =>
       p.kind !== 'piece' ||
@@ -149,6 +150,8 @@ const RasterJson = z.object({
     .min(2)
     .max(MAX_CELS)
     .optional(),
+  /** Version 4: the drawings repeating for the whole timeline; `end` is the frame after the last drawing's last. */
+  loop: z.object({ mode: z.enum(['cycle', 'pingpong']), end: int.min(1).max(MAX_FRAMES) }).optional(),
 });
 
 /** A saved selection: its coverage as a greyscale PNG (white = selected) placed at x, y. */
@@ -577,7 +580,7 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
         files[file] = [await codec.encode(c.surface.readRect(cb), cb.w, cb.h), { level: 0 }];
         cels.push({ start: c.start, image: { file, x: cb.x, y: cb.y, w: cb.w, h: cb.h } });
       }
-      return { kind: 'raster', ...common, image: null, cels };
+      return { kind: 'raster', ...common, image: null, cels, ...(l.celLoop ? { loop: { mode: l.celLoop.mode, end: l.celLoop.end } } : {}) };
     }
     const b = l.surface.contentBounds();
     if (!b) return { kind: 'raster', ...common, image: null };
@@ -794,6 +797,8 @@ export async function loadProject(bytes: Uint8Array, codec: PngCodec): Promise<P
         if (cels.length > 1) {
           layer.cels = cels;
           layer.surface = cels[0].surface;
+          // A loop ends after its last drawing starts.
+          if (l.loop) layer.celLoop = { mode: l.loop.mode, end: Math.max(l.loop.end, cels[cels.length - 1].start + 1) };
         } else layer.surface = cels[0].surface;
       }
     }

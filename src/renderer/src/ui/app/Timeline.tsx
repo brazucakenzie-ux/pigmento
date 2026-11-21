@@ -3,6 +3,7 @@ import { EASINGS, type Easing } from '@engine/anim/interpolate';
 import type { KeyChange } from '@engine/anim/piece';
 import { LOOP_MODES, MAX_FPS, MAX_FRAMES, MIN_FPS, type LoopMode } from '@engine/anim/timeline';
 import type { PieceInfo, ShapeKeysInfo } from '@engine/anim/AnimationController';
+import { celRepeats, type CelLoop } from '@engine/anim/cels';
 import type { LayerNode } from '@engine/doc/LayerController';
 import { toolRegistry } from '@engine/tools/ToolRegistry';
 import { t, type I18nKey } from '../../i18n';
@@ -577,6 +578,7 @@ function pixelLayers(tree: LayerNode[], keyed: ReadonlySet<string> = new Set()):
 /** The frame commands for one layer at the frame shown. */
 function DrawingMenu({ layerId, anchor, onClose }: { layerId: string; anchor: RefObject<HTMLElement | null>; onClose: () => void }) {
   const cels = useUi((s) => s.animation.cels[layerId]);
+  const loop = useUi((s) => s.animation.celLoops[layerId]?.mode ?? null);
   return (
     <Menu anchor={anchor} open onClose={onClose} label={t('timeline.celMenu')}>
       <MenuItem label={t('action.newDrawing')} icon="new" close={onClose} onSelect={() => void addDrawing(layerId, false)} />
@@ -584,13 +586,22 @@ function DrawingMenu({ layerId, anchor, onClose }: { layerId: string; anchor: Re
       <MenuSeparator />
       <MenuItem label={t('action.clearDrawing')} icon="eraser" close={onClose} onSelect={() => engine.anim.clearDrawing(layerId)} />
       <MenuItem label={t('action.deleteDrawing')} icon="delete" disabled={!cels} close={onClose} onSelect={() => engine.anim.deleteDrawing(layerId)} />
+      <MenuSeparator />
+      <SubMenu label={t('loop.drawings')}>
+        {(close) =>
+          ([null, 'cycle', 'pingpong'] as const).map((m) => (
+            <MenuItem key={m ?? 'off'} label={t(m === 'cycle' ? 'loop.cycle' : m === 'pingpong' ? 'loop.backAndForth' : 'loop.off')} checked={loop === m} disabled={m !== null && !cels} close={close} onSelect={() => engine.anim.setDrawingLoop(layerId, m)} />
+          ))
+        }
+      </SubMenu>
     </Menu>
   );
 }
 
 /** A pixel layer's row: one bar for a still layer, a block per drawing for a frame-by-frame one. */
-function LayerRow({ layer, starts, length, frame, active }: { layer: LayerNode; starts: number[] | undefined; length: number; frame: number; active: boolean }) {
+function LayerRow({ layer, starts, loop, length, frame, active }: { layer: LayerNode; starts: number[] | undefined; loop: CelLoop | undefined; length: number; frame: number; active: boolean }) {
   const [drag, setDrag] = useState<{ index: number; to: number } | null>(null);
+  const [endDrag, setEndDrag] = useState<number | null>(null);
   const [menu, setMenu] = useState(false);
   const anchor = useRef<HTMLElement | null>(null);
   const row = useRef<HTMLDivElement | null>(null);
@@ -615,6 +626,27 @@ function LayerRow({ layer, starts, length, frame, active }: { layer: LayerNode; 
     setMenu(true);
   };
   const shown = starts && drag ? starts.map((s, i) => (i === drag.index ? drag.to : s)) : starts;
+  // A loop: the cycle ends where its end handle is (dragged or not), and repeats follow.
+  const cycle = loop && shown ? { ...loop, end: endDrag ?? loop.end } : null;
+  const repeats = cycle && shown ? celRepeats(shown.map((start) => ({ start })), cycle, length) : [];
+  const startEndDrag = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0 || !loop) return;
+    e.stopPropagation();
+    const el = e.currentTarget;
+    let to = loop.end;
+    const move = (ev: PointerEvent) => {
+      to = Math.max(1, frameAt(ev.clientX, el) + 1);
+      setEndDrag(to);
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      setEndDrag(null);
+      if (to !== loop.end) engine.anim.setLoopEnd(layer.id, to);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
   const startDrag = (e: ReactPointerEvent<HTMLButtonElement>, index: number) => {
     if (e.button !== 0) return;
     e.stopPropagation();
@@ -649,7 +681,7 @@ function LayerRow({ layer, starts, length, frame, active }: { layer: LayerNode; 
     >
       {!shown ? <span className="tl-still" data-tip={t('timeline.still')} style={{ width: length * CELL }} /> : null}
       {shown?.map((s, i) => {
-        const end = i + 1 < shown.length ? shown[i + 1] - 1 : length - 1;
+        const end = i + 1 < shown.length ? shown[i + 1] - 1 : cycle ? cycle.end - 1 : length - 1;
         const label = t('timeline.celLabel', { n: s + 1, layer: layer.name, end: end + 1 });
         return (
           <span key={`cel-${starts![i]}`} className={`tl-cel ${frame >= s && frame <= end ? 'current' : ''}`} style={{ left: s * CELL, width: Math.max(1, end - s + 1) * CELL }}>
@@ -689,6 +721,28 @@ function LayerRow({ layer, starts, length, frame, active }: { layer: LayerNode; 
           </span>
         );
       })}
+      {repeats.map((r) => (
+        <span key={`rep-${r.from}`} className={`tl-cel repeat ${frame >= r.from && frame <= r.to ? 'current' : ''}`} data-tip={t('timeline.repeat', { n: r.index + 1 })} style={{ left: r.from * CELL, width: (r.to - r.from + 1) * CELL }} />
+      ))}
+      {cycle ? (
+        <button
+          type="button"
+          className="tl-loop-end"
+          data-frame={cycle.end}
+          aria-label={t('timeline.loopEnd')}
+          data-tip={t('timeline.loopEnd')}
+          style={{ left: cycle.end * CELL }}
+          onPointerDown={startEndDrag}
+          onKeyDown={(e) => {
+            if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e.altKey && loop) {
+              e.preventDefault();
+              engine.anim.setLoopEnd(layer.id, loop.end + (e.key === 'ArrowLeft' ? -1 : 1));
+            }
+          }}
+        >
+          <Icon name="loop" size={11} />
+        </button>
+      ) : null}
       {menu ? <DrawingMenu layerId={layer.id} anchor={anchor} onClose={() => setMenu(false)} /> : null}
     </div>
   );
@@ -903,7 +957,7 @@ export function Timeline() {
               ) : r.kind === 'layer' && r.layer.kind === 'vector' ? (
                 <ShapeLayerRow key={r.layer.id} layer={r.layer} length={anim.length} active={r.layer.id === activeId} />
               ) : r.kind === 'layer' ? (
-                <LayerRow key={r.layer.id} layer={r.layer} starts={anim.cels[r.layer.id]} length={anim.length} frame={anim.frame} active={r.layer.id === activeId} />
+                <LayerRow key={r.layer.id} layer={r.layer} starts={anim.cels[r.layer.id]} loop={anim.celLoops[r.layer.id]} length={anim.length} frame={anim.frame} active={r.layer.id === activeId} />
               ) : (
                 <PieceRow key={r.piece.id} piece={r.piece} index={r.index} selected={r.piece.id === anim.selectedId} frame={anim.frame} />
               ),

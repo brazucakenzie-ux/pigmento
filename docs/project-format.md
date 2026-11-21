@@ -232,6 +232,10 @@ Pieces in 1.2 can be bigger than the canvas and sit anywhere, partly or wholly o
   - One key per frame (the last given wins); frames past the end of the timeline move to its last frame.
 - Links that don't hold are dropped when a file is opened (the piece then follows nothing): one to a missing piece or one on another layer, a link from a group, a hinge onto a group, a loop, and pieces past the 64th in one tree.
 
+## Loops in 1.3 (version 4)
+
+- **`loop`** (on a frame-by-frame pixel layer, left out: no loop): `{ "mode": "cycle", "end": 12 }`. Its drawings repeat for the whole timeline: `"cycle"` from frame 0 to `end` and round again, or `"pingpong"` forward through every drawing and back through the middle ones (A B C B A B C…). `end` (1 to 2,000) is the frame after the last drawing's last one; one at or before the last drawing's start becomes the frame after it.
+
 ## Paths and trims in 1.3 (version 4)
 
 Pigmento 1.3 writes version 4 only when a piece follows a path or faces the way it goes (or has a keyed progress or an art angle left over), or a shape's outline is trimmed; otherwise it writes the oldest version that holds the picture, as 1.2 did. Pigmento 1.2 refuses a version 4 file with its "made with a newer Pigmento" message. Version 4 adds:

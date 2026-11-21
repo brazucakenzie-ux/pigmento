@@ -289,6 +289,7 @@ On the frame where a new drawing should start, choose **New drawing** (a blank p
 - **Clear drawing** empties the drawing you're on, and **Delete drawing** removes it.
 - In the timeline, each drawing is a block on its layer's row. Drag the start of a block to hold the drawing before it for longer or shorter.
 - **Onion skin** shows the drawings before (orange) and after (blue) the one you're drawing, faintly, so you can line them up. Choose how many to show, and how strong, beside its button in the timeline. It's only on screen: it's never saved or exported.
+- **Loop drawings** (in the Animate tab, or right-click the layer's row in the timeline) repeats a layer's drawings for the whole timeline: **Cycle** plays them round and round (A B C A B C…), and **Back and forth** plays them there and back (A B C B A B C…). Draw cloth on a line twice, with the waves in different places, and it flaps for as long as the animation lasts. The repeats show faded in the timeline; the small loop handle after the last drawing sets how long that one lasts. The repeats are the same drawings, not copies: paint on any repeat and that drawing changes everywhere it shows. New drawings go in the first cycle.
 
 ### Saving and sharing
 
