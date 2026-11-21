@@ -4,6 +4,7 @@ import type { KeyChange } from '@engine/anim/piece';
 import { LOOP_MODES, MAX_FPS, MAX_FRAMES, MIN_FPS, type LoopMode } from '@engine/anim/timeline';
 import type { PieceInfo, ShapeKeysInfo } from '@engine/anim/AnimationController';
 import { celRepeats, type CelLoop } from '@engine/anim/cels';
+import { loopFrame } from '@engine/anim/piece';
 import type { LayerNode } from '@engine/doc/LayerController';
 import { toolRegistry } from '@engine/tools/ToolRegistry';
 import { t, type I18nKey } from '../../i18n';
@@ -49,7 +50,7 @@ function pieceLabel(p: PieceInfo, i: number): string {
 }
 
 /** A row of keyframes for one piece. */
-function PieceRow({ piece, index, selected, frame }: { piece: PieceInfo; index: number; selected: boolean; frame: number }) {
+function PieceRow({ piece, index, selected, frame, length }: { piece: PieceInfo; index: number; selected: boolean; frame: number; length: number }) {
   const [drag, setDrag] = useState<{ from: number; to: number } | null>(null);
   const [menu, setMenu] = useState<number | null>(null);
   const anchor = useRef<HTMLElement | null>(null);
@@ -103,6 +104,13 @@ function PieceRow({ piece, index, selected, frame }: { piece: PieceInfo; index: 
 
   // While a diamond is dragged it shows where it would land (keyed by where it was, so it stays one element).
   const keys = piece.keys.map((k) => ({ ...k, at: k.frame, frame: drag && k.frame === drag.from ? drag.to : k.frame })).sort((a, b) => a.frame - b.frame);
+  // A looping piece's keyframes again after its last one, faded (where its moves repeat them).
+  const ghosts: number[] = [];
+  const lastKey = keys[keys.length - 1]?.frame ?? 0;
+  if (piece.loop !== 'off' && keys.length > 1) {
+    const at = new Set(keys.map((k) => k.frame));
+    for (let f = lastKey + 1; f < length; f++) if (at.has(loopFrame(keys, piece.loop, f))) ghosts.push(f);
+  }
   return (
     <div
       ref={row}
@@ -121,6 +129,12 @@ function PieceRow({ piece, index, selected, frame }: { piece: PieceInfo; index: 
           className={`tl-seg ${k.easing === 'hold' ? 'hold' : ''}`}
           style={{ left: k.frame * CELL + CELL / 2, width: (keys[i + 1].frame - k.frame) * CELL }}
         />
+      ))}
+      {ghosts.length ? <span className="tl-seg ghost" aria-hidden="true" style={{ left: lastKey * CELL + CELL / 2, width: (length - 1 - lastKey) * CELL }} /> : null}
+      {ghosts.map((f) => (
+        <span key={`ghost-${f}`} className="tl-key ghost" aria-hidden="true" data-tip={t('timeline.keyRepeat', { n: loopFrame(keys, piece.loop, f) + 1 })} style={{ left: f * CELL }}>
+          <Icon name="keyframe" size={12} />
+        </span>
       ))}
       {keys.map((k) => (
         <button
@@ -959,7 +973,7 @@ export function Timeline() {
               ) : r.kind === 'layer' ? (
                 <LayerRow key={r.layer.id} layer={r.layer} starts={anim.cels[r.layer.id]} loop={anim.celLoops[r.layer.id]} length={anim.length} frame={anim.frame} active={r.layer.id === activeId} />
               ) : (
-                <PieceRow key={r.piece.id} piece={r.piece} index={r.index} selected={r.piece.id === anim.selectedId} frame={anim.frame} />
+                <PieceRow key={r.piece.id} piece={r.piece} index={r.index} selected={r.piece.id === anim.selectedId} frame={anim.frame} length={anim.length} />
               ),
             )}
             {anim.pieces.length === 0 && Object.keys(anim.cels).length === 0 && anim.shapes.length === 0 ? <p className="tl-empty">{t('timeline.empty')}</p> : null}

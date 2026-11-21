@@ -32,6 +32,8 @@ import {
   removeKey,
   setKey,
   pieceStateAt,
+  loopFrame,
+  type PieceLoop,
   type KeyChange,
   type Piece,
   type PieceKind,
@@ -62,6 +64,8 @@ export interface PieceInfo {
   parent: string | null;
   /** It hangs off its parent's edge. */
   hinged: boolean;
+  /** How its moves repeat after its last keyframe. */
+  loop: PieceLoop;
 }
 
 export interface AnimationInfo {
@@ -159,6 +163,8 @@ export interface PieceFields {
   faceAngle: number;
   /** Its trails, each with how much it emits at the frame shown and whether that's keyed there. */
   trails: TrailFields[];
+  /** How its moves repeat after its last keyframe. */
+  loop: PieceLoop;
 }
 
 /** A trail as the options show it. */
@@ -341,6 +347,7 @@ export class AnimationController {
         kind: p.kind,
         parent: p.link?.parent ?? null,
         hinged: !!p.link?.hinge,
+        loop: p.loop,
       })),
       paintOnPiece: this.paintOn,
       camera: { ...this.doc.camera },
@@ -462,12 +469,13 @@ export class AnimationController {
       progress: s.progress * 100,
       face: p.face.on,
       faceAngle: p.face.angle * DEG,
-      trails: p.trails.map((t) => ({ ...cloneTrail(t), emission: emissionAt(t, f), keyed: t.keys.some((k) => k.frame === f) })),
+      trails: p.trails.map((t) => ({ ...cloneTrail(t), emission: emissionAt(t, loopFrame(p.keyframes, p.loop, f)), keyed: t.keys.some((k) => k.frame === f) })),
+      loop: p.loop,
     };
   }
 
   /** Set the selected piece's values at the current frame (auto-key), in the options bar's units. */
-  setFields(change: Partial<Omit<PieceFields, 'keyed' | 'curved' | 'repeat' | 'back' | 'in3d' | 'shade' | 'group' | 'link' | 'inGroup' | 'follow' | 'face' | 'faceAngle' | 'trails'>>): boolean {
+  setFields(change: Partial<Omit<PieceFields, 'keyed' | 'curved' | 'repeat' | 'back' | 'in3d' | 'shade' | 'group' | 'link' | 'inGroup' | 'follow' | 'face' | 'faceAngle' | 'trails' | 'loop'>>): boolean {
     const p = this.selected;
     if (!p) return false;
     const k: KeyChange = {};
@@ -599,6 +607,16 @@ export class AnimationController {
     }
     return this.change('history.face', () => {
       p.face = next;
+      return true;
+    });
+  }
+
+  /** How a piece's moves repeat after its last keyframe: not at all, round again, or back and forth (one undo step). */
+  setPieceLoop(id: string, loop: PieceLoop): boolean {
+    const p = this.piece(id);
+    if (!p || p.loop === loop) return false;
+    return this.change('history.pieceLoop', () => {
+      p.loop = loop;
       return true;
     });
   }
@@ -1270,7 +1288,7 @@ export class AnimationController {
       return false;
     }
     return this.change(adding ? 'history.keyframeAdd' : 'history.keyframe', () => {
-      p.keyframes = setKey(p.keyframes, frame, change);
+      p.keyframes = setKey(p.keyframes, frame, change, p.loop);
       return true;
     });
   }

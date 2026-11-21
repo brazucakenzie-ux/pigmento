@@ -1,7 +1,7 @@
 import type { Point } from '../../core/geometry';
 import { handleCursor, ROTATE_HANDLE_OFFSET } from '../../live/BoxGeom';
 import { movePivot, type Keyframe, type PieceState } from '../../anim/interpolate';
-import { cloneKeyframe, pieceStateAt, setKey, type Piece } from '../../anim/piece';
+import { cloneKeyframe, pieceStateAt, setKey, type Piece, type PieceLoop } from '../../anim/piece';
 import { piecesInDrawOrder } from '../../anim/pieceRaster';
 import {
   docToLocal,
@@ -65,6 +65,8 @@ interface Drag {
   mode: 'own' | 'fold' | 'slide';
   /** Which way it was heading when the drag began, if it faces the way it goes. */
   heading: number | null;
+  /** How its moves repeat (a key added on a repeat starts from what shows there). */
+  loop: PieceLoop;
 }
 
 let drag: Drag | null = null;
@@ -265,6 +267,7 @@ export default registerTool({
       face: face.id,
       mode,
       heading: ctx.anim.scene().headingOf(piece, frame),
+      loop: piece.loop,
     };
     // Pulling a bend handle grabs it where the pointer is.
     if (hit.kind === 'tangent') drag.grab = { x: 0, y: 0 };
@@ -281,7 +284,7 @@ export default registerTool({
       if (!piece) return;
       const scene = ctx.anim.scene();
       const change = d.mode === 'fold' ? { fold: foldToward(scene, piece, p, d.s0.fold, e.shift) } : slideOnParent(scene, piece, d.s0, d.start, { x: e.x, y: e.y }, e.shift);
-      if (change) ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, frame, change)));
+      if (change) ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, frame, change, d.loop)));
       return;
     }
     const held = ctx.anim.piece(d.id);
@@ -296,11 +299,11 @@ export default registerTool({
       if (!k) return;
       if (path) {
         const progress = alongPath(path, k, d.start, { x: e.x, y: e.y }, e.shift);
-        ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, hit.frame, { progress })));
+        ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, hit.frame, { progress }, d.loop)));
         return;
       }
       const at = moveState(k, e.x - d.start.x, e.y - d.start.y, e.shift);
-      ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, hit.frame, { x: at.x, y: at.y })));
+      ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, hit.frame, { x: at.x, y: at.y }, d.loop)));
       return;
     }
     if (hit.kind === 'pull' || hit.kind === 'tangent') {
@@ -316,7 +319,7 @@ export default registerTool({
       if (hit.kind === 'pull') change = last ? { in: v, out: null } : first ? { out: v, in: null } : { out: v, in: neg };
       else if (hit.side === 'out') change = e.alt || !k.in ? { out: v } : { out: v, in: neg };
       else change = e.alt || !k.out ? { in: v } : { in: v, out: neg };
-      ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, hit.frame, change)));
+      ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, hit.frame, change, d.loop)));
       return;
     }
     if (d.hit.kind === 'pivot') {
@@ -341,7 +344,7 @@ export default registerTool({
     // On a path, it's dragged along it.
     if (hit.kind === 'body' && path) {
       const progress = alongPath(path, d.s0, d.start, { x: e.x, y: e.y }, e.shift);
-      ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, frame, { progress })));
+      ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, frame, { progress }, d.loop)));
       return;
     }
     const geom = { src: piece.src, pivot: d.pivot0 };
@@ -351,7 +354,7 @@ export default registerTool({
     else if (e.ctrl && (hit.handle === 'n' || hit.handle === 's')) s = skewState(d.s0, geom, hit.handle, p);
     else s = scaleState(d.s0, geom, hit.handle, p, { shift: e.shift, alt: e.alt });
     const change = stateChange(piece, s, d.heading);
-    ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, frame, change)));
+    ctx.anim.preview(d.id, (q) => (q.keyframes = setKey(d.keys0, frame, change, d.loop)));
     // Dragged near another piece's edge, it hinges there when let go (Alt: it doesn't).
     if (hit.kind === 'body') {
       d.snap = hingeSnap(ctx, piece, e.alt);

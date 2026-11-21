@@ -235,6 +235,7 @@ Pieces in 1.2 can be bigger than the canvas and sit anywhere, partly or wholly o
 ## Loops in 1.3 (version 4)
 
 - **`loop`** (on a frame-by-frame pixel layer, left out: no loop): `{ "mode": "cycle", "end": 12 }`. Its drawings repeat for the whole timeline: `"cycle"` from frame 0 to `end` and round again, or `"pingpong"` forward through every drawing and back through the middle ones (A B C B A B C…). `end` (1 to 2,000) is the frame after the last drawing's last one; one at or before the last drawing's start becomes the frame after it.
+- **`loop`** (on a piece, default `"off"`): after its last keyframe its moves start again from the first (`"loop"`: the frame after the last shows what the frame after the first does) or run back and forth between the first and the last (`"pingpong"`). Every keyed value repeats with them, and so does its trails' emission; before its first keyframe it holds.
 
 ## Paths and trims in 1.3 (version 4)
 

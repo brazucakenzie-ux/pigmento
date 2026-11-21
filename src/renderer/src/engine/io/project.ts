@@ -89,7 +89,7 @@ function lightMoved(doc: PaintDocument): boolean {
 
 /** The oldest version that holds everything in `doc`. */
 export function versionFor(doc: PaintDocument): 1 | 2 | 3 | 4 {
-  if (doc.pieces.some((p) => p.follow !== null || p.face.on || p.face.angle !== 0 || p.trails.length > 0 || p.keyframes.some((k) => k.progress !== 0))) return 4;
+  if (doc.pieces.some((p) => p.follow !== null || p.face.on || p.face.angle !== 0 || p.trails.length > 0 || p.loop !== 'off' || p.keyframes.some((k) => k.progress !== 0))) return 4;
   if (doc.vectorLayers().some((l) => [...walkShapes(l.objects)].some((s) => s.trim || s.trimKeys?.length || s.trimTie))) return 4;
   if (doc.rasterLayers().some((l) => l.cels && l.celLoop)) return 4;
   const v3 = doc.pieces.some(
@@ -491,6 +491,8 @@ const PieceJson = z.object({
     .default({ on: false, angle: 0 }),
   /** Version 4: what it leaves behind as it moves (see anim/trail.ts). */
   trails: z.array(TrailJson).max(MAX_TRAILS).default([]),
+  /** Version 4: its moves repeating after its last keyframe. */
+  loop: z.enum(['off', 'loop', 'pingpong']).default('off'),
 });
 const CameraKeyJson = z.object({
   frame: int.min(0).max(MAX_FRAMES - 1),
@@ -653,7 +655,7 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
             link: p.link && { parent: p.link.parent, hinge: p.link.hinge && { ...p.link.hinge } },
           }
         : {}),
-      ...(v4 ? { follow: p.follow && { ...p.follow }, face: { ...p.face }, trails: p.trails.map(trailToJson) } : {}),
+      ...(v4 ? { follow: p.follow && { ...p.follow }, face: { ...p.face }, trails: p.trails.map(trailToJson), loop: p.loop } : {}),
     });
   }
   const t = doc.timeline;
@@ -880,6 +882,7 @@ async function readAnimation(doc: PaintDocument, a: NonNullable<DocumentJson['an
       face: { ...p.face },
       // Trails' emission keys inside the timeline, one a frame.
       trails: p.trails.map((t) => trailFromJson(t, a.length)),
+      loop: p.loop,
     });
   }
   doc.pieces = checkLinks(pieces);

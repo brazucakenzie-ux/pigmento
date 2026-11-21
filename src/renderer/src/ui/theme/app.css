@@ -3220,6 +3220,12 @@ dialog.tour::backdrop {
   cursor: ew-resize;
   pointer-events: auto;
 }
+/* A looping piece's keyframes again after its last, faded */
+.tl-key.ghost,
+.tl-seg.ghost {
+  opacity: 0.35;
+  pointer-events: none;
+}
 /* A loop's repeats: the same drawings again, faded */
 .tl-cel.repeat {
   opacity: 0.45;

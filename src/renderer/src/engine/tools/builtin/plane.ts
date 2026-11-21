@@ -1,7 +1,7 @@
 import type { Point } from '../../core/geometry';
 import { ROTATE_HANDLE_OFFSET } from '../../live/BoxGeom';
 import type { Keyframe, PieceState } from '../../anim/interpolate';
-import { cloneKeyframe, setKey, type Piece } from '../../anim/piece';
+import { cloneKeyframe, setKey, type Piece, type PieceLoop } from '../../anim/piece';
 import { piecesInDrawOrder } from '../../anim/pieceRaster';
 import { insidePiece, moveState, pieceAt, rotateState } from '../../anim/pieceEdit';
 import { depthDrag, movePivot3D, resizeDrag, tiltDrag, turnDrag } from '../../anim/planeEdit';
@@ -60,6 +60,8 @@ interface Drag {
   snap: EdgeSnap | null;
   /** Which way it was heading when the drag began, if it faces the way it goes. */
   heading: number | null;
+  /** How its moves repeat (a key added on a repeat starts from what shows there). */
+  loop: PieceLoop;
 }
 
 let drag: Drag | null = null;
@@ -249,6 +251,7 @@ export default registerTool({
       adding: !target.keyframes.some((k) => k.frame === frame),
       snap: null,
       heading: ctx.anim.scene().headingOf(target, frame),
+      loop: target.loop,
     };
     ctx.anim.beginDrag();
   },
@@ -297,12 +300,12 @@ export default registerTool({
     }
     if (hit.kind === 'fold') {
       const fold = foldToward(ctx.anim.scene(), piece, { x: e.x + d.grab.x, y: e.y + d.grab.y }, d.s0.fold, e.shift);
-      ctx.anim.preview(d.id, (p) => (p.keyframes = setKey(d.keys0, frame, { fold })));
+      ctx.anim.preview(d.id, (p) => (p.keyframes = setKey(d.keys0, frame, { fold }, d.loop)));
       return;
     }
     if (hit.kind === 'slide') {
       const at = slideOnParent(ctx.anim.scene(), piece, d.s0, d.start, { x: e.x, y: e.y }, e.shift);
-      if (at) ctx.anim.preview(d.id, (p) => (p.keyframes = setKey(d.keys0, frame, at)));
+      if (at) ctx.anim.preview(d.id, (p) => (p.keyframes = setKey(d.keys0, frame, at, d.loop)));
       return;
     }
     const handle = hit.kind === 'tree' ? hit.handle : hit;
@@ -310,7 +313,7 @@ export default registerTool({
     const path = handle.kind === 'body' && !d.depth ? ctx.anim.pathOf(piece) : null;
     if (path) {
       const progress = alongPath(path, d.s0, d.start, { x: e.x, y: e.y }, e.shift);
-      ctx.anim.preview(d.id, (p) => (p.keyframes = setKey(d.keys0, frame, { progress })));
+      ctx.anim.preview(d.id, (p) => (p.keyframes = setKey(d.keys0, frame, { progress }, d.loop)));
       return;
     }
     let s: PieceState;
@@ -321,7 +324,7 @@ export default registerTool({
     else if (handle.kind === 'corner') s = resizeDrag(d.s0, { pivot: d.pivot0, w: piece.src.width, h: piece.src.height }, handle.corner, { x: e.x, y: e.y }, space, e.shift);
     else return;
     const change = stateChange(piece, s, d.heading);
-    ctx.anim.preview(d.id, (p) => (p.keyframes = setKey(d.keys0, frame, change)));
+    ctx.anim.preview(d.id, (p) => (p.keyframes = setKey(d.keys0, frame, change, d.loop)));
     if (hit.kind === 'body' && !d.depth) {
       d.snap = hingeSnap(ctx, piece, e.alt);
       ctx.invalidateOverlay();

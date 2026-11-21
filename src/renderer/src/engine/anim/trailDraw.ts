@@ -6,7 +6,7 @@ import { forEachDabPixel, dabShapeOf } from '../brush/dab';
 import { makeTip, sampleMask, tipLevel, type Mask, type TipMask } from '../brush/tips';
 import { over, type PixelView } from '../raster/pixels';
 import { emitterPath } from './follow';
-import type { Piece } from './piece';
+import { loopFrame, type Piece } from './piece';
 import { projectWorld } from './space';
 import { echoCopies, trailPuffs, type EchoCopy, type Trail } from './trail';
 
@@ -69,10 +69,12 @@ export function pieceTrailsAt(doc: PaintDocument, p: Piece, frame: number): Trai
   if (!p.trails.length) return [];
   const space = doc.spaceAt(frame);
   const fps = doc.timeline.fps;
+  // Emission loops with the piece's moves.
+  const looped = (f: number) => loopFrame(p.keyframes, p.loop, f);
   return p.trails.map((trail) => {
-    if (trail.kind === 'echo') return { trail, puffs: [], echoes: echoCopies(trail, frame) };
+    if (trail.kind === 'echo') return { trail, puffs: [], echoes: echoCopies(trail, frame, looped) };
     const puffs: PuffQuad[] = [];
-    for (const pf of trailPuffs(trail, emitterPath(doc, p.id, trail.emitter), frame, fps)) {
+    for (const pf of trailPuffs(trail, emitterPath(doc, p.id, trail.emitter), frame, fps, looped)) {
       const at = projectWorld(pf.at, space);
       if (!at) continue;
       // The camera's scale at the puff's depth.

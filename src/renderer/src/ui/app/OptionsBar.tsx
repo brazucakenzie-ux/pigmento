@@ -590,6 +590,23 @@ function PieceFields({ plane = false }: { plane?: boolean }) {
           </select>
         </label>
       ) : null}
+      <label className="opt" data-tip={t('loop.pieceTip')}>
+        <span>{t('loop.piece')}</span>
+        <select
+          className="select"
+          aria-label={t('loop.piece')}
+          value={info.loop}
+          onChange={(e) => {
+            const id = engine.anim.selectedId;
+            const v = e.target.value;
+            if (id) engine.anim.setPieceLoop(id, v === 'loop' ? 'loop' : v === 'pingpong' ? 'pingpong' : 'off');
+          }}
+        >
+          <option value="off">{t('loop.off')}</option>
+          <option value="loop">{t('loop.again')}</option>
+          <option value="pingpong">{t('loop.backAndForth')}</option>
+        </select>
+      </label>
       <label className="opt">
         <span>{t('piece.easing')}</span>
         <select className="select" aria-label={t('piece.easing')} value={info.easing} onChange={(e) => engine.anim.setFields({ easing: e.target.value as Easing })}>

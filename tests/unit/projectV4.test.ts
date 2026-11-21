@@ -56,6 +56,7 @@ function picture(): PaintDocument {
   p.keyframes = setKey(setKey(p.keyframes, 0, { progress: 0, easing: 'easeInOut' }), 23, { progress: 1 });
   p.follow = { layerId: shapes.id, objectId: 'route', sub: 0 };
   p.face = { on: true, angle: -Math.PI / 2 };
+  p.loop = 'pingpong';
   // Smoke that lights at frame 4, and an echo.
   p.trails = [
     { ...applyPreset(makeTrail('smoke', 'puffs', { x: 0, y: 2 }, 12345), 'rocketSmoke'), keys: [{ frame: 0, amount: 0, easing: 'hold' }, { frame: 4, amount: 1, easing: 'linear' }] },
@@ -96,6 +97,7 @@ describe('projects, version 4', () => {
     expect(p.follow).toEqual({ layerId: doc.vectorLayers()[0].id, objectId: 'route', sub: 0 });
     expect(p.face).toEqual({ on: true, angle: -Math.PI / 2 });
     expect(p.trails).toEqual(doc.pieces[0].trails);
+    expect(p.loop).toBe('pingpong');
     expect(p.keyframes.map((k) => [k.frame, k.progress, k.easing])).toEqual([
       [0, 0, 'easeInOut'],
       [23, 1, 'easeInOut'],

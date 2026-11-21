@@ -179,6 +179,7 @@ More things you can do:
 - **Keyframe menu:** right-click a diamond for its easing, Copy, Paste and Delete.
 - **Motion path:** shows as a dotted line with a dot at each keyframe. Drag a dot to move that keyframe.
 - **Curves:** Alt-drag a dot to bend the path there, then drag its handles to shape the curve. Double-click a dot, or use **Straighten**, to make it straight again.
+- **Loop:** in the options bar, a piece's moves repeat after its last keyframe, for the whole timeline: **Loop** starts them again from the first keyframe, and **Back and forth** plays them there and back. Key a sign at −20° on the first frame and 20° a few frames later, choose Back and forth, and it swings for ever. For a seamless Loop, make the last keyframe like the first. Everything keyed repeats with it, and the repeats of its keyframes show faded in the timeline.
 - **Rename, duplicate or delete a piece:** double-click its name in the timeline to rename it, or right-click the name for its menu.
 
 ### Following a path
