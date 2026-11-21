@@ -193,6 +193,11 @@ async function probeVideo(file: string, probes: { t: number; x: number; y: numbe
         video.onseeked = () => res();
         video.currentTime = p.t;
       });
+      // A seek can be reported before its frame is on show: wait for the frame (or a moment, if it already is).
+      await new Promise((res) => {
+        video.requestVideoFrameCallback(() => res());
+        setTimeout(res, 300);
+      });
       ctx.drawImage(video, 0, 0);
       pixels.push(Array.from(ctx.getImageData(p.x, p.y, 1, 1).data));
     }
