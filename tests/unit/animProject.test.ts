@@ -123,7 +123,7 @@ describe('projects with what 1.2 adds to pieces (version 3)', () => {
     const json = JSON.parse(strFromU8(unzipSync(bytes)['document.json'])) as { version: number };
     // Nothing from 1.3 in it, so Pigmento 1.2 can open it.
     expect(json.version).toBe(3);
-    expect(PROJECT_VERSION).toBe(4);
+    expect(PROJECT_VERSION).toBe(5);
     const back = await loadProject(bytes, rawCodec);
     expect(back.pieces[0].repeat).toBe('x');
     expect(back.pieces[0].keyframes).toEqual(doc.pieces[0].keyframes);

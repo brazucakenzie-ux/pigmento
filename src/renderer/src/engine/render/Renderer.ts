@@ -3,11 +3,11 @@ import { rectIntersect, rectUnion, type Rect } from '../core/geometry';
 import { walkLayers, type GroupLayer, type Layer, type PaintDocument, type RasterLayer, type VectorLayer } from '../doc/Document';
 import { drawNodes } from '../vector/render';
 import { tiedTrimAt } from '../anim/follow';
-import type { Surface, Tile } from '../raster/Surface';
-import { TILE_SIZE } from '../raster/Surface';
+import type { Tile } from '../raster/Surface';
+import { Surface, TILE_SIZE } from '../raster/Surface';
 import type { PixelView } from '../raster/pixels';
 import type { View } from './View';
-import { repeatAxes, type Piece, type Repeat } from '../anim/piece';
+import { pieceSurfaces, repeatAxes, type Piece, type Repeat } from '../anim/piece';
 import { matChain, matTranslate } from '../core/matrix';
 import type { Placement } from '../anim/space';
 import type { Scene } from '../anim/scene';
@@ -105,6 +105,10 @@ export class Renderer {
   private exportScaled: GroupCanvas | null = null;
   /** Onion skin on the active frame-by-frame layer (null = off). */
   onion: { count: number; opacity: number } | null = null;
+  /** The piece being painted on (its drawings get onion skin too), if any. */
+  onionPiece: (() => Piece | null) | null = null;
+  /** Onion-skin copies of piece drawings, in each tint, while their tiles are the same. */
+  private tints = new WeakMap<Surface, { tiles: readonly (Tile | null)[]; copies: Map<string, Surface> }>();
   private onionScratch: GroupCanvas | null = null;
   /** Pieces per layer for the composite pass under way. */
   private passPieces: Map<string, Piece[]> | null = null;
@@ -196,7 +200,7 @@ export class Renderer {
     // Drawings no longer in the picture (deleted, cleared, or replaced by a resize) let their copies go.
     for (const s of [...this.celMirrors.keys()]) if (!liveCels.has(s)) this.celMirrors.delete(s);
     // Textures of pieces that are gone (undo can bring a piece back: it's uploaded again then).
-    this.planes.retain(new Set(this.doc.pieces.map((p) => p.src)));
+    this.planes.retain(new Set(this.doc.pieces.flatMap((p) => pieceSurfaces(p))));
     this.invalidate(null);
   }
 
@@ -343,7 +347,7 @@ export class Renderer {
   }
 
   /** One piece as `scene` has it, inside `area`, at `alpha` times its own opacity. */
-  private drawOne(ctx: Ctx2D | CanvasRenderingContext2D, p: Piece, scene: Scene, area: Rect, alpha: number): void {
+  private drawOne(ctx: Ctx2D | CanvasRenderingContext2D, p: Piece, scene: Scene, area: Rect, alpha: number, src: Surface = scene.src(p)): void {
     const { state: st, placement: pl, opacity } = scene.pose(p);
     ctx.save();
     ctx.globalAlpha = opacity * alpha;
@@ -354,19 +358,19 @@ export class Renderer {
       const tiling = pieceTiling(p, st);
       const where = tiling ? area : rectIntersect(area, scene.bounds(p));
       const shade = scene.shade(p, this.doc.light);
-      if (where && !this.planes.draw(ctx, p.src, pl, tiling, where, shade)) this.drawOnCpu(ctx, p, pl, tiling, where, shade);
+      if (where && !this.planes.draw(ctx, src, pl, tiling, where, shade)) this.drawOnCpu(ctx, src, pl, tiling, where, shade);
       ctx.restore();
       return;
     }
     const m = pl.affine;
     if (p.repeat === 'none') {
       ctx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
-      ctx.drawImage(this.pieceCanvas(p.src), 0, 0);
-    } else if (!this.planes.draw(ctx, p.src, pl, pieceTiling(p, st), area, 1)) {
+      ctx.drawImage(this.pieceCanvas(src), 0, 0);
+    } else if (!this.planes.draw(ctx, src, pl, pieceTiling(p, st), area, 1)) {
       // On the GPU it's one pass over what's showing (a pattern from a picture this big is slow to
       // fill); without it, tiles as a pattern in the piece's own space, slid by its scroll on the
       // axes it repeats along.
-      const pat = this.piecePattern(ctx, p.src, p.repeat);
+      const pat = this.piecePattern(ctx, src, p.repeat);
       if (pat) {
         const ax = repeatAxes(p.repeat);
         const t = matChain(matTranslate(ax.x ? st.scrollX : 0, ax.y ? st.scrollY : 0), m);
@@ -439,8 +443,8 @@ export class Renderer {
   }
 
   /** A piece in 3D drawn by the CPU path when the GPU can't (no WebGL2, or the GPU reset). */
-  private drawOnCpu(ctx: Ctx2D | CanvasRenderingContext2D, p: Piece, pl: Placement, tiling: Tiling | null, where: Rect, shade: number): void {
-    const img = sampleProjective(p.src, pl, where, tiling, tiling ? null : where, shade);
+  private drawOnCpu(ctx: Ctx2D | CanvasRenderingContext2D, src: Surface, pl: Placement, tiling: Tiling | null, where: Rect, shade: number): void {
+    const img = sampleProjective(src, pl, where, tiling, tiling ? null : where, shade);
     if (img.w === 0 || img.h === 0) return;
     const c = new OffscreenCanvas(img.w, img.h);
     ctx2d(c).putImageData(new ImageData(img.data as Uint8ClampedArray<ArrayBuffer>, img.w, img.h), 0, 0);
@@ -659,6 +663,51 @@ export class Renderer {
     }
   }
 
+  /**
+   * Onion skin of the piece being painted on, when it's drawn frame by frame: its drawings before
+   * and after the one on show, tinted, where the piece is now (on screen only).
+   */
+  private drawPieceOnion(ctx: Ctx2D, layer: RasterLayer, r: Rect): void {
+    const o = this.onion;
+    const p = this.onionPiece?.();
+    if (!o || !p || p.layerId !== layer.id || !p.drawings || p.drawings.length < 2) return;
+    const frame = this.doc.timeline.frame;
+    const at = celShownIndex(p.drawings, p.drawingLoop, frame);
+    const scene = sceneOf(this.doc, frame);
+    if (!scene.shows(p)) return;
+    for (let k = o.count; k >= 1; k--) {
+      for (const [j, tint] of [
+        [at - k, ONION_BEFORE],
+        [at + k, ONION_AFTER],
+      ] as const) {
+        if (j < 0 || j >= p.drawings.length) continue;
+        this.drawOne(ctx, p, scene, r, o.opacity * ((o.count - k + 1) / o.count), this.tinted(p.drawings[j].surface, tint));
+      }
+    }
+  }
+
+  /** A drawing in one colour (its shape kept), for onion skin. */
+  private tinted(s: Surface, tint: string): Surface {
+    let hit = this.tints.get(s);
+    if (!hit || hit.tiles.length !== s.tiles.length || hit.tiles.some((t, i) => t !== s.tiles[i])) {
+      hit = { tiles: [...s.tiles], copies: new Map() };
+      this.tints.set(s, hit);
+    }
+    let copy = hit.copies.get(tint);
+    if (!copy) {
+      const n = parseInt(tint.slice(1), 16);
+      const data = s.toRGBA();
+      for (let i = 0; i < data.length; i += 4) {
+        data[i] = (n >> 16) & 255;
+        data[i + 1] = (n >> 8) & 255;
+        data[i + 2] = n & 255;
+      }
+      copy = Surface.fromRGBA(s.width, s.height, data);
+      hit.copies.set(tint, copy);
+    }
+    return copy;
+  }
+
   invalidate(r: Rect | null): void {
     const docRect = { x: 0, y: 0, w: this.doc.width, h: this.doc.height };
     this.dirty = rectUnion(this.dirty, r ? rectIntersect(r, docRect) : docRect);
@@ -696,6 +745,7 @@ export class Renderer {
     for (const layer of layers) {
       if (layer.visible) {
         if (exportFrame === null && layer === active && layer.kind === 'raster') this.drawOnion(ctx, layer, r);
+        if (exportFrame === null && layer.kind === 'raster') this.drawPieceOnion(ctx, layer, r);
         let source: OffscreenCanvas;
         // Pieces drawn straight over the layer (same result when it's normal at full opacity).
         let over: Piece[] | null = null;

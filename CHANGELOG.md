@@ -2,6 +2,14 @@
 
 All notable changes to Pigmento. Versions follow [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Drawings on pieces
+- A piece can be drawn frame by frame, so it changes while it moves or stays put. With **Paint on piece** on, **New drawing**, **Copy drawing**, **Clear drawing**, **Delete drawing** and **Loop drawings** act on the piece, and painting paints the drawing showing.
+- Its drawings have a row of their own in the timeline, with onion skin of them as you paint.
+- **Animate selection** and **Piece from layer** on a layer drawn frame by frame keep every drawing, with its timing and loop.
+- Projects with drawings on pieces are saved as `.pigm` version 5; others are saved as before.
+
 ## [1.3.0] — 2026-11-22
 
 Paths, trails and loops: things that travel leave marks, and short cycles repeat by themselves.

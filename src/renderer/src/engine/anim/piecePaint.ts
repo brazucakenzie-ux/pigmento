@@ -2,7 +2,7 @@ import type { Point } from '../core/geometry';
 import { matApply, matInvert } from '../core/matrix';
 import type { Dab } from '../brush/dab';
 import type { Command } from '../history/History';
-import type { TileDelta } from '../raster/Surface';
+import type { Surface, TileDelta } from '../raster/Surface';
 import type { I18nKey } from '../../i18n';
 import { repeatAxes, type Piece } from './piece';
 import type { Scene } from './scene';
@@ -111,7 +111,7 @@ function edges(v: number, n: number, r: number): number[] {
 
 /** What a painted piece needs from the engine when its pixels change back or forth. */
 export interface PiecePixelsHost {
-  piecePixelsChanged(piece: Piece): void;
+  piecePixelsChanged(piece: Piece, surface: Surface): void;
 }
 
 /** One stroke (or fill) on a piece's own pixels: swapping its tiles undoes and redoes it. */
@@ -129,11 +129,11 @@ export class PiecePixelsCommand implements Command {
 
   undo(): void {
     this.delta.swap();
-    this.host.piecePixelsChanged(this.piece);
+    this.host.piecePixelsChanged(this.piece, this.delta.surface);
   }
 
   redo(): void {
     this.delta.swap();
-    this.host.piecePixelsChanged(this.piece);
+    this.host.piecePixelsChanged(this.piece, this.delta.surface);
   }
 }

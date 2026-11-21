@@ -21,6 +21,8 @@ import { cameraMoveAt, MAX_CAMERA_KEYS, moveCameraKey, removeCameraKey, setCamer
 import { MAX_PIXELS } from '../io/protocol';
 import {
   clonePiece,
+  pieceSurfaces,
+  showPieceFrame,
   makePiece,
   MAX_KEYFRAMES,
   MAX_PIECE_SIDE,
@@ -69,6 +71,10 @@ export interface PieceInfo {
   loop: PieceLoop;
   /** Where its spin's speed is keyed (none: it doesn't spin). */
   spinKeys: { frame: number; easing: Easing }[];
+  /** Where each of its drawings starts (null: one picture throughout). */
+  drawings: number[] | null;
+  /** How its drawings loop (null: they don't). */
+  drawingLoop: CelLoop | null;
 }
 
 export interface AnimationInfo {
@@ -247,7 +253,7 @@ export class AnimationCommand implements Command {
     private readonly after: AnimSnapshot,
   ) {
     // Source images are shared between snapshots; count one only when this step adds or removes it.
-    const ids = (s: AnimSnapshot) => new Set(s.pieces.map((p) => p.src));
+    const ids = (s: AnimSnapshot) => new Set(s.pieces.flatMap((p) => pieceSurfaces(p)));
     const a = ids(before);
     const b = ids(after);
     let src = 0;
@@ -366,6 +372,8 @@ export class AnimationController {
         hinged: !!p.link?.hinge,
         loop: p.loop,
         spinKeys: p.spin?.keys.map((k) => ({ frame: k.frame, easing: k.easing })) ?? [],
+        drawings: p.drawings && p.drawings.map((c) => c.start),
+        drawingLoop: p.drawingLoop && { ...p.drawingLoop },
       })),
       paintOnPiece: this.paintOn,
       camera: { ...this.doc.camera },
@@ -885,6 +893,57 @@ export class AnimationController {
 
 // ---- frame-by-frame drawings (cels) ---------------------------------------------------------
 
+  /**
+   * The piece whose drawings an id names: undefined when it names no piece (a layer, say); null
+   * (saying why) when it's a group or its layer is locked.
+   */
+  private drawnPiece(id: string): Piece | null | undefined {
+    const p = this.piece(id);
+    if (!p) return undefined;
+    if (p.kind === 'group') return null;
+    if (this.doc.layerById(p.layerId)?.locked) {
+      this.host.notify('info', 'notice.layerLocked');
+      return null;
+    }
+    return p;
+  }
+
+  /** Change a piece's drawings as one undo step, keeping them tidy (one drawing left: none; a loop ends after the last). */
+  private drawingChange(label: I18nKey, p: Piece, fn: () => unknown): boolean {
+    return this.change(label, () => {
+      fn();
+      if (p.drawings && p.drawings.length === 1) {
+        p.src = p.drawings[0].surface;
+        p.drawings = null;
+      }
+      if (!p.drawings) p.drawingLoop = null;
+      else if (p.drawingLoop && p.drawingLoop.end <= p.drawings[p.drawings.length - 1].start) p.drawingLoop = { ...p.drawingLoop, end: p.drawings[p.drawings.length - 1].start + 1 };
+      showPieceFrame(p, this.frame);
+      return true;
+    });
+  }
+
+  /** A new drawing on a piece at the current frame: blank, or a copy of the one shown there. */
+  private newPieceDrawing(p: Piece, copy: boolean): boolean {
+    const frame = this.frame;
+    const cels = p.drawings ?? [{ start: 0, surface: p.src }];
+    if (cels.length >= MAX_CELS) {
+      this.host.notify('error', 'notice.tooManyCels', { max: MAX_CELS });
+      return false;
+    }
+    if (cels.some((c) => c.start === frame)) {
+      this.host.notify('info', 'notice.drawingHere');
+      return false;
+    }
+    if (p.drawingLoop && frame >= p.drawingLoop.end) {
+      this.host.notify('info', 'notice.drawingInRepeat', { end: p.drawingLoop.end });
+      return false;
+    }
+    const surface = copy ? cels[celShownIndex(cels, p.drawingLoop, frame)].surface.clone() : new Surface(p.src.width, p.src.height);
+    const next = insertCel(cels, frame, surface);
+    return !!next && this.drawingChange(copy ? 'history.copyDrawing' : 'history.newDrawing', p, () => (p.drawings = next));
+  }
+
   /** The pixel layer to change drawings on: null (saying why) if it isn't one or is locked. */
   private rasterLayer(id: string): RasterLayer | null {
     const l = this.doc.layerById(id);
@@ -926,6 +985,8 @@ export class AnimationController {
    * there (copy-on-write, so copying costs almost nothing until it's drawn on).
    */
   newDrawing(layerId: string, copy: boolean): boolean {
+    const p = this.drawnPiece(layerId);
+    if (p !== undefined) return !!p && this.newPieceDrawing(p, copy);
     const layer = this.rasterLayer(layerId);
     if (!layer) return false;
     const frame = this.frame;
@@ -954,6 +1015,11 @@ export class AnimationController {
 
   /** Delete the drawing shown at the current frame (the one before shows on in its place). */
   deleteDrawing(layerId: string): boolean {
+    const p = this.drawnPiece(layerId);
+    if (p !== undefined) {
+      const next = p?.drawings ? removeCelAt(p.drawings, loopedFrame(p.drawings, p.drawingLoop, this.frame)) : null;
+      return !!p && !!next && this.drawingChange('history.deleteDrawing', p, () => (p.drawings = next));
+    }
     const layer = this.rasterLayer(layerId);
     const next = layer?.cels ? removeCelAt(layer.cels, loopedFrame(layer.cels, layer.celLoop, this.frame)) : null;
     if (!layer || !next) return false;
@@ -965,6 +1031,16 @@ export class AnimationController {
 
   /** Empty the drawing shown at the current frame. */
   clearDrawing(layerId: string): boolean {
+    const p = this.drawnPiece(layerId);
+    if (p !== undefined) {
+      if (!p || !p.src.contentBounds()) return false;
+      const blank = new Surface(p.src.width, p.src.height);
+      const i = p.drawings ? celShownIndex(p.drawings, p.drawingLoop, this.frame) : -1;
+      return this.drawingChange('history.clearDrawing', p, () => {
+        if (!p.drawings) p.src = blank;
+        else p.drawings = p.drawings.map((c, k) => (k === i ? { start: c.start, surface: blank } : { ...c }));
+      });
+    }
     const layer = this.rasterLayer(layerId);
     if (!layer || !layer.surface.contentBounds()) return false;
     const blank = new Surface(this.doc.width, this.doc.height);
@@ -981,6 +1057,12 @@ export class AnimationController {
 
   /** Move where drawing `index` starts: the drawing before it is held longer or shorter. */
   moveDrawing(layerId: string, index: number, start: number): boolean {
+    const p = this.drawnPiece(layerId);
+    if (p !== undefined) {
+      const next = p?.drawings ? moveCelStart(p.drawings, index, clampFrame(start, this.doc.timeline.length)) : null;
+      if (!p || !next || (p.drawingLoop && next[next.length - 1].start >= p.drawingLoop.end)) return false;
+      return this.drawingChange('history.holdDrawing', p, () => (p.drawings = next));
+    }
     const layer = this.rasterLayer(layerId);
     const next = layer?.cels ? moveCelStart(layer.cels, index, clampFrame(start, this.doc.timeline.length)) : null;
     if (!layer || !next) return false;
@@ -998,6 +1080,17 @@ export class AnimationController {
    * as the one before it. Says why not for a layer with one drawing.
    */
   setDrawingLoop(layerId: string, mode: CelLoopMode | null): boolean {
+    const p = this.drawnPiece(layerId);
+    if (p !== undefined) {
+      if (!p) return false;
+      if (mode && !p.drawings) {
+        this.host.notify('info', 'notice.loopNeedsDrawings');
+        return false;
+      }
+      if ((p.drawingLoop?.mode ?? null) === mode) return false;
+      const end = p.drawingLoop?.end ?? (p.drawings ? defaultLoopEnd(p.drawings) : 1);
+      return this.drawingChange('history.loopDrawings', p, () => (p.drawingLoop = mode && { mode, end }));
+    }
     const layer = this.rasterLayer(layerId);
     if (!layer) return false;
     if (mode && !layer.cels) {
@@ -1013,6 +1106,13 @@ export class AnimationController {
 
   /** Where a looping layer's cycle ends (the frame after its last drawing's last): one undo step. */
   setLoopEnd(layerId: string, end: number): boolean {
+    const p = this.drawnPiece(layerId);
+    if (p !== undefined) {
+      const loop = p?.drawingLoop;
+      if (!p?.drawings || !loop) return false;
+      const e = Math.min(MAX_FRAMES, Math.max(p.drawings[p.drawings.length - 1].start + 1, Math.round(end)));
+      return e !== loop.end && this.drawingChange('history.loopEnd', p, () => (p.drawingLoop = { ...loop, end: e }));
+    }
     const layer = this.rasterLayer(layerId);
     const loop = layer?.celLoop;
     if (!layer?.cels || !loop) return false;
@@ -1105,11 +1205,17 @@ export class AnimationController {
    * keyframe at the current frame. It goes on top of the layer's pieces, or under them with
    * `atBottom` (a whole layer's pixels made a piece keep their place under its other pieces).
    */
-  add(src: ImageBuf | Surface, home: Rect, layerId: string, label: I18nKey = 'history.animateSelection', atBottom = false): Piece | null {
+  add(src: ImageBuf | Surface, home: Rect, layerId: string, label: I18nKey = 'history.animateSelection', atBottom = false, drawn: { cels: readonly Cel[]; loop: CelLoop | null } | null = null): Piece | null {
     const size = src instanceof Surface ? { w: src.width, h: src.height } : src;
     if (!this.canAdd() || !this.fits(size.w, size.h)) return null;
     const n = this.doc.pieces.filter((p) => p.kind === 'piece').length + 1;
     const piece = makePiece(newPieceId(), this.namer(n, 'piece'), layerId, src, home, this.frame);
+    // Drawn frame by frame: its drawings (all the piece's size), timed and looping as given.
+    if (drawn && drawn.cels.length > 1) {
+      piece.drawings = drawn.cels.map((c) => ({ start: c.start, surface: c.surface }));
+      piece.drawingLoop = drawn.loop && { ...drawn.loop };
+      showPieceFrame(piece, this.frame);
+    }
     this.change(label, () => {
       const first = atBottom ? this.doc.pieces.findIndex((p) => p.layerId === layerId) : -1;
       if (first >= 0) this.doc.pieces.splice(first, 0, piece);
@@ -1484,7 +1590,7 @@ function sameAnim(a: AnimSnapshot, b: AnimSnapshot): boolean {
   if (a.camera.x !== b.camera.x || a.camera.y !== b.camera.y || a.camera.strength !== b.camera.strength) return false;
   if (a.light.angle !== b.light.angle || a.light.height !== b.light.height) return false;
   if (JSON.stringify(a.cameraKeys) !== JSON.stringify(b.cameraKeys)) return false;
-  if (a.pieces.some((p, i) => p.src !== b.pieces[i].src)) return false;
+  if (a.pieces.some((p, i) => p.src !== b.pieces[i].src || !sameSurfaces(p.drawings, b.pieces[i].drawings))) return false;
   return JSON.stringify(a.pieces.map(strip)) === JSON.stringify(b.pieces.map(strip));
 }
 
@@ -1493,10 +1599,16 @@ function spins3d(p: Piece): boolean {
   return !!p.spin?.keys.some((k) => k.tilt !== 0 || k.turn !== 0);
 }
 
+/** The same drawings' pixels, by identity (where they start is compared with the rest). */
+function sameSurfaces(a: readonly Cel[] | null, b: readonly Cel[] | null): boolean {
+  if (!a || !b) return a === b;
+  return a.length === b.length && a.every((c, i) => c.surface === b[i].surface);
+}
+
 /** A piece without its pixels, for comparing states. */
-function strip(p: Piece): Omit<Piece, 'src'> {
-  const { src: _src, ...rest } = p;
-  return rest;
+function strip(p: Piece): Omit<Piece, 'src' | 'drawings'> & { drawings: number[] | null } {
+  const { src: _src, drawings, ...rest } = p;
+  return { ...rest, drawings: drawings && drawings.map((c) => c.start) };
 }
 
 function clampScroll(v: number): number {

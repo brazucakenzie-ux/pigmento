@@ -52,13 +52,13 @@ import { Surface } from '../raster/Surface';
 import { MAX_DIMENSION, MAX_PIXELS } from './protocol';
 import { EASINGS, type Easing, type Keyframe } from '../anim/interpolate';
 import { cleanSpin, MAX_SPIN, MAX_SPIN_KEYS } from '../anim/spin';
-import { BACKS, MAX_KEYFRAMES, MAX_PIECES, MAX_SCROLL, newPieceId, REPEATS, type Back, type Piece, type Repeat } from '../anim/piece';
+import { BACKS, MAX_KEYFRAMES, MAX_PIECES, MAX_SCROLL, newPieceId, pieceSurfaceAt, REPEATS, type Back, type Piece, type Repeat } from '../anim/piece';
 import { EDGES, type Edge } from '../anim/frames';
 import { checkLinks } from '../anim/links';
 import { MAX_CAMERA_KEYS, MAX_CAMERA_MOVE, type CameraKey } from '../anim/cameraMove';
 import { defaultCamera, defaultLight, MAX_STRENGTH, MIN_STRENGTH } from '../anim/space';
 import { LOOP_MODES, MAX_FPS, MAX_FRAMES, MIN_FPS, clampFrame, type LoopMode } from '../anim/timeline';
-import { MAX_CELS, type Cel } from '../anim/cels';
+import { celSurfaces, MAX_CELS, type Cel, type CelLoop } from '../anim/cels';
 
 /**
  * The `.pigm` project format: a zip holding `document.json` (described by the schemas below)
@@ -67,11 +67,12 @@ import { MAX_CELS, type Cel } from '../anim/cels';
 export const PROJECT_MAGIC = 'pigmento-project';
 /**
  * Version 2 adds animation, version 3 what 1.2 adds to pieces (repeat, scroll, 3D, links),
- * version 4 what 1.3 adds (following paths, facing the way pieces go). A picture is written as the oldest version that
- * holds everything in it, so older Pigmentos open whatever they can show correctly: 1 without
- * animation, 2 with 1.1's animation only, 3 with nothing from 1.3.
+ * version 4 what 1.3 adds (following paths, facing the way pieces go, trails, loops, spin),
+ * version 5 pieces drawn frame by frame. A picture is written as the oldest version that holds
+ * everything in it, so older Pigmentos open whatever they can show correctly: 1 without
+ * animation, 2 with 1.1's animation only, 3 with nothing from 1.3, 4 without drawings on pieces.
  */
-export const PROJECT_VERSION = 4;
+export const PROJECT_VERSION = 5;
 
 /** Furthest a piece can be pushed behind the canvas, or pulled in front of it, in pixels. */
 export const MAX_PIECE_DEPTH = 1e6;
@@ -89,7 +90,8 @@ function lightMoved(doc: PaintDocument): boolean {
 }
 
 /** The oldest version that holds everything in `doc`. */
-export function versionFor(doc: PaintDocument): 1 | 2 | 3 | 4 {
+export function versionFor(doc: PaintDocument): 1 | 2 | 3 | 4 | 5 {
+  if (doc.pieces.some((p) => p.drawings !== null)) return 5;
   if (doc.pieces.some((p) => p.follow !== null || p.face.on || p.face.angle !== 0 || p.trails.length > 0 || p.loop !== 'off' || p.spin !== null || p.keyframes.some((k) => k.progress !== 0))) return 4;
   if (doc.vectorLayers().some((l) => [...walkShapes(l.objects)].some((s) => s.trim || s.trimKeys?.length || s.trimTie))) return 4;
   if (doc.rasterLayers().some((l) => l.cels && l.celLoop)) return 4;
@@ -395,7 +397,7 @@ const LayerJsonSchema: z.ZodType<LayerJson> = z.lazy(() =>
   ]),
 );
 
-const PIECE_FILE = /^pieces\/\d{1,6}\.png$/;
+const PIECE_FILE = /^pieces\/\d{1,6}(-\d{1,6})?\.png$/;
 /** Version 4: a trail (bounds as in anim/trail.ts). */
 const TrailJson = z.object({
   id: z.string().min(1).max(100),
@@ -494,6 +496,15 @@ const PieceJson = z.object({
   trails: z.array(TrailJson).max(MAX_TRAILS).default([]),
   /** Version 4: its moves repeating after its last keyframe. */
   loop: z.enum(['off', 'loop', 'pingpong']).default('off'),
+  /** Version 5: drawn frame by frame, each drawing (the piece's size) from its start frame; `image` is the first. */
+  drawings: z
+    .array(z.object({ start: int.min(0).max(MAX_FRAMES - 1), file: z.string().regex(PIECE_FILE) }))
+    .min(2)
+    .max(MAX_CELS)
+    .nullable()
+    .default(null),
+  /** Version 5: its drawings repeating for the whole timeline; `end` is the frame after the last drawing's last. */
+  drawingLoop: z.object({ mode: z.enum(['cycle', 'pingpong']), end: int.min(1).max(MAX_FRAMES) }).nullable().default(null),
   /** Version 4: spin forever, its speeds (turns a second) keyed on their own (see anim/spin.ts). */
   spin: z
     .object({
@@ -649,8 +660,18 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
   const v4 = versionFor(doc) >= 4;
   for (const p of doc.pieces) {
     if (!rasterIds.has(p.layerId)) continue;
-    const file = `pieces/${String(pieces.length + 1).padStart(4, '0')}.png`;
-    files[file] = [await codec.encode(p.src.toRGBA(), p.src.width, p.src.height), { level: 0 }];
+    const k = String(pieces.length + 1).padStart(4, '0');
+    const file = `pieces/${k}.png`;
+    // Drawn frame by frame: the first drawing is its picture, each other one a file of its own.
+    const first = p.drawings ? p.drawings[0].surface : p.src;
+    files[file] = [await codec.encode(first.toRGBA(), first.width, first.height), { level: 0 }];
+    const drawingFiles = new Map([[first, file]]);
+    for (const d of p.drawings ? celSurfaces(p.drawings) : []) {
+      if (drawingFiles.has(d)) continue;
+      const df = `pieces/${k}-${drawingFiles.size + 1}.png`;
+      files[df] = [await codec.encode(d.toRGBA(), d.width, d.height), { level: 0 }];
+      drawingFiles.set(d, df);
+    }
     pieces.push({
       id: p.id,
       name: p.name,
@@ -675,6 +696,7 @@ export async function saveProject(doc: PaintDocument, codec: PngCodec, thumbnail
           }
         : {}),
       ...(v4 ? { follow: p.follow && { ...p.follow }, face: { ...p.face }, trails: p.trails.map(trailToJson), loop: p.loop, spin: p.spin && { keys: p.spin.keys.map((k) => ({ ...k })) } } : {}),
+      ...(p.drawings ? { drawings: p.drawings.map((d) => ({ start: d.start, file: drawingFiles.get(d.surface)! })), drawingLoop: p.drawingLoop && { ...p.drawingLoop } } : {}),
     });
   }
   const t = doc.timeline;
@@ -869,6 +891,7 @@ async function readAnimation(doc: PaintDocument, a: NonNullable<DocumentJson['an
   const rasters = new Set(doc.rasterLayers().map((l) => l.id));
   const ids = new Set<string>();
   const pieces: Piece[] = [];
+  let drawingTotal = 0;
   for (const p of a.pieces) {
     if (!rasters.has(p.layerId)) continue;
     if (p.image.w * p.image.h > MAX_PIXELS) throw new ProjectError('error.projectInvalid', `${p.image.file} is too large`);
@@ -882,13 +905,43 @@ async function readAnimation(doc: PaintDocument, a: NonNullable<DocumentJson['an
       const frame = clampFrame(k.frame, a.length);
       byFrame.set(frame, { ...k, frame, in: k.in && { ...k.in }, out: k.out && { ...k.out } });
     }
+    const src = Surface.fromRGBA(img.w, img.h, img.data);
+    // Drawn frame by frame: one drawing per start frame, in order, the first from frame 0, all the piece's size.
+    let drawings: Cel[] | null = null;
+    let drawingLoop: CelLoop | null = null;
+    // Its one picture (the drawing left, if the drawings come down to one).
+    let still = src;
+    if (p.drawings) {
+      if ((drawingTotal += p.drawings.length) > MAX_TOTAL_CELS) throw new ProjectError('error.projectInvalid', 'Too many drawings');
+      const decoded = new Map([[p.image.file, src]]);
+      const byStart = new Map<number, Cel>();
+      for (const d of p.drawings) {
+        let ds = decoded.get(d.file);
+        if (!ds) {
+          const dpng = files[d.file];
+          if (!dpng) throw new ProjectError('error.projectInvalid', `${d.file} missing`);
+          const di = await codec.decode(dpng);
+          if (di.w !== p.image.w || di.h !== p.image.h) throw new ProjectError('error.projectInvalid', `${d.file} has the wrong size`);
+          ds = Surface.fromRGBA(di.w, di.h, di.data);
+          decoded.set(d.file, ds);
+        }
+        byStart.set(d.start, { start: d.start, surface: ds });
+      }
+      const cels = [...byStart.values()].sort((x, y) => x.start - y.start);
+      cels[0] = { ...cels[0], start: 0 };
+      if (cels.length > 1) {
+        drawings = cels;
+        // A loop ends after its last drawing starts.
+        if (p.drawingLoop) drawingLoop = { mode: p.drawingLoop.mode, end: Math.max(p.drawingLoop.end, cels[cels.length - 1].start + 1) };
+      } else still = cels[0].surface;
+    }
     const id = ids.has(p.id) ? newPieceId() : p.id;
     ids.add(id);
     pieces.push({
       id,
       name: p.name,
       layerId: p.layerId,
-      src: Surface.fromRGBA(img.w, img.h, img.data),
+      src: drawings ? pieceSurfaceAt({ src, drawings, drawingLoop }, doc.timeline.frame) : still,
       home: { ...p.home },
       pivot: { ...p.pivot },
       keyframes: [...byFrame.values()].sort((x, y) => x.frame - y.frame),
@@ -904,6 +957,8 @@ async function readAnimation(doc: PaintDocument, a: NonNullable<DocumentJson['an
       loop: p.loop,
       // Speed keys inside the timeline, one a frame.
       spin: p.spin && cleanSpin({ keys: p.spin.keys.map((k) => ({ ...k, frame: clampFrame(k.frame, a.length) })) }),
+      drawings,
+      drawingLoop,
     });
   }
   doc.pieces = checkLinks(pieces);
