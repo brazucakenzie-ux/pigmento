@@ -410,7 +410,7 @@ Decisions (agreed with the user):
   - **Keyboard:** the Animate and Perspective plane tools share one key handler, so the Animate tool now folds hinged faces too, and the arrow keys slide the camera while its row is selected.
   - **Performance:** flat repeating pieces now draw on the GPU (see 6.23).
 
-### Milestone 7 — Paths, trails and loops, version 1.3.0 (requested after 1.2.0; in progress)
+### Milestone 7 — Paths, trails and loops, version 1.3.0 (requested after 1.2.0)
 Things that travel leave marks. A piece can follow a path drawn on a shape layer and face the way it's going. A path can be drawn on, or eaten away right behind the piece travelling it, like a burning fuse or a route on a map. A piece can leave a trail: smoke, sparks, a comet tail, speed lines. Short cycles repeat by themselves: a layer's drawings (cloth waving in the wind, a flag, a flickering flame) and a piece's keyframes (a swinging sign, a bobbing boat) loop however long the timeline is, and things that never stop turning (wind turbines, waterwheels, fans, gears) spin forever at a steady speed. Started on 2026-11-20, when the user agreed the decisions below for Stop 7A as proposed; they agreed Stop 7B's, 7C's, 7D's and 7E's on 2026-11-21. Agree each later stop's decisions with them as it comes up. Split into five stops; each ends with a working app, `npm run check` green and a report, then waits for "continue". Each item is ticked in the same commit as its work.
 
 Words used in the UI:
@@ -526,3 +526,17 @@ Decisions (all agreed, the last for Stop 7E):
   - **Installers:** `npm run dist` built `Pigmento-Setup-1.3.0.exe`, the portable exe and the checksums, unsigned. The packaged app (dist/win-unpacked) was smoke-tested without installing, with a temporary profile. It reports 1.3.0 and draws pieces on the GPU. Smoke looks the same on screen, in the picture and in export frames (0 of 1,750 points apart), the looping layer shows the right drawing, GIF and MP4 export, and nothing is logged as an error.
   - **This PC:** at the user's request, Pigmento 1.2.0 was uninstalled, keeping `%APPDATA%Pigmento` (backed up first, and unchanged after). The installed-build smoke script then passed all 15 checks, including a real double-click on a project and a clean uninstall, and 1.3.0 was installed for the user.
   - **Release:** tagged `v1.3.0` on ad0731c after asking. The release build on GitHub (run 44933513444) passed lint, type-check and unit tests and built the installers unsigned, as chosen; their SHA-256 sums match the checksum file. The release (the three files and the 1.3.0 notes) was published on 2026-11-22 at the owner's go-ahead, and the files downloaded from it match the checksums.
+
+### Side step: drawings on pieces (requested after 1.3.0)
+A piece made with Animate selection can switch between drawings while it moves, like a rock flickering between two drawings as it drifts. Agreed with the user on 2026-11-22:
+- Animate selection (and Piece from layer) on a layer drawn frame by frame lifts the area out of every drawing, so the piece keeps all of them with the same timing and loop; the holes are cut from every drawing unless Leave the original.
+- While Paint on piece is on, the Animate tab's New drawing, Copy drawing, Clear drawing, Delete drawing and Loop drawings act on that piece instead of the layer, and painting paints the drawing showing at that frame.
+- The piece gets a drawings row of its own in the timeline, under it: blocks you drag, the repeats faded and the loop's end, like a layer's.
+- Onion skin shows the piece's neighbouring drawings where the piece is (on screen only). The drawings show in exports, flattening, the colour picker and echo trails.
+- Saved as `.pigm` version 5, only when a piece has drawings, so Pigmento 1.3 refuses such a file instead of losing its drawings. Released later, when the user says.
+
+- [x] D.1 Model: a piece's drawings (where each starts, and its pixels, all the piece's size) and their loop; the drawing shown at any frame; undo snapshots, copies and duplicates keep them (+ unit tests)
+- [ ] D.2 Drawing them: the screen (GPU), the CPU path, exports, flattening, the colour picker and echo trails show each piece's drawing at the frame; onion skin of a piece's drawings while painting on it (+ unit tests, e2e screen against picture)
+- [ ] D.3 Editing: with Paint on piece on, New, Copy, Clear and Delete drawing and Loop drawings act on the piece and painting paints the drawing shown; the piece's drawings row in the timeline; Animate selection and Piece from layer on a frame-by-frame layer lift every drawing. Undoable (+ unit tests, e2e)
+- [ ] D.4 Saved in `.pigm` version 5 only when a piece has drawings; user guide, project format and CHANGELOG (Unreleased) (+ unit tests)
+- [ ] D.5 E2e: a rock lifted from a layer drawn twice flickers Cycle while it drifts, saved, reopened and exported as a GIF that shows both drawings in turn; `npm run check` green

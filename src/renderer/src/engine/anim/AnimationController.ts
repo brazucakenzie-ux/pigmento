@@ -21,6 +21,7 @@ import { cameraMoveAt, MAX_CAMERA_KEYS, moveCameraKey, removeCameraKey, setCamer
 import { MAX_PIXELS } from '../io/protocol';
 import {
   clonePiece,
+  pieceSurfaces,
   makePiece,
   MAX_KEYFRAMES,
   MAX_PIECE_SIDE,
@@ -247,7 +248,7 @@ export class AnimationCommand implements Command {
     private readonly after: AnimSnapshot,
   ) {
     // Source images are shared between snapshots; count one only when this step adds or removes it.
-    const ids = (s: AnimSnapshot) => new Set(s.pieces.map((p) => p.src));
+    const ids = (s: AnimSnapshot) => new Set(s.pieces.flatMap((p) => pieceSurfaces(p)));
     const a = ids(before);
     const b = ids(after);
     let src = 0;
@@ -1484,7 +1485,7 @@ function sameAnim(a: AnimSnapshot, b: AnimSnapshot): boolean {
   if (a.camera.x !== b.camera.x || a.camera.y !== b.camera.y || a.camera.strength !== b.camera.strength) return false;
   if (a.light.angle !== b.light.angle || a.light.height !== b.light.height) return false;
   if (JSON.stringify(a.cameraKeys) !== JSON.stringify(b.cameraKeys)) return false;
-  if (a.pieces.some((p, i) => p.src !== b.pieces[i].src)) return false;
+  if (a.pieces.some((p, i) => p.src !== b.pieces[i].src || !sameSurfaces(p.drawings, b.pieces[i].drawings))) return false;
   return JSON.stringify(a.pieces.map(strip)) === JSON.stringify(b.pieces.map(strip));
 }
 
@@ -1493,10 +1494,16 @@ function spins3d(p: Piece): boolean {
   return !!p.spin?.keys.some((k) => k.tilt !== 0 || k.turn !== 0);
 }
 
+/** The same drawings' pixels, by identity (where they start is compared with the rest). */
+function sameSurfaces(a: readonly Cel[] | null, b: readonly Cel[] | null): boolean {
+  if (!a || !b) return a === b;
+  return a.length === b.length && a.every((c, i) => c.surface === b[i].surface);
+}
+
 /** A piece without its pixels, for comparing states. */
-function strip(p: Piece): Omit<Piece, 'src'> {
-  const { src: _src, ...rest } = p;
-  return rest;
+function strip(p: Piece): Omit<Piece, 'src' | 'drawings'> & { drawings: number[] | null } {
+  const { src: _src, drawings, ...rest } = p;
+  return { ...rest, drawings: drawings && drawings.map((c) => c.start) };
 }
 
 function clampScroll(v: number): number {

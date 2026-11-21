@@ -2,6 +2,7 @@ import type { Point, Rect } from '../core/geometry';
 import { Surface } from '../raster/Surface';
 import { cloneTrail, type Trail } from './trail';
 import { cloneSpin, type Spin } from './spin';
+import { celShownIndex, celSurfaces, type Cel, type CelLoop } from './cels';
 import type { ImageBuf } from '../raster/transform';
 import type { Hinge } from './frames';
 import { identityState, stateAt, STATE_KEYS, type Easing, type Keyframe, type PieceState } from './interpolate';
@@ -22,7 +23,11 @@ export interface Piece {
   /** User content ('' = unnamed; the UI shows a localised default). */
   name: string;
   layerId: string;
-  readonly src: Surface;
+  /**
+   * Its pixels: with drawings, the one showing at the frame shown (see showPieceFrame), swapped as
+   * the frame changes; drawing another frame takes pieceSurfaceAt.
+   */
+  src: Surface;
   /** Where the pixels were lifted from, in document pixels. */
   readonly home: Rect;
   /** The point it turns and scales around, in source pixels. */
@@ -60,6 +65,13 @@ export interface Piece {
    * turn so far added to its keyed angle, tilt and turn. Never changes its keyframes.
    */
   spin: Spin | null;
+  /**
+   * Drawn frame by frame (null: one picture, src, throughout): each drawing shows from its start
+   * until the next one's, like a layer's (sorted, the first at frame 0, all the piece's size).
+   */
+  drawings: Cel[] | null;
+  /** Its drawings repeat for the whole timeline (null: they don't; only with drawings). */
+  drawingLoop: CelLoop | null;
 }
 
 export type PieceLoop = 'off' | 'loop' | 'pingpong';
@@ -164,6 +176,8 @@ export function makePiece(id: string, name: string, layerId: string, src: ImageB
     trails: [],
     loop: 'off',
     spin: null,
+    drawings: null,
+    drawingLoop: null,
   };
 }
 
@@ -187,6 +201,8 @@ export function makeGroup(id: string, name: string, layerId: string, home: Rect,
     trails: [],
     loop: 'off',
     spin: null,
+    drawings: null,
+    drawingLoop: null,
   };
 }
 
@@ -196,7 +212,27 @@ export function cloneLink(l: Link | null): Link | null {
 
 /** The same piece (for undo snapshots: the pixels are shared, not copied). */
 export function clonePiece(p: Piece): Piece {
-  return { ...p, home: { ...p.home }, pivot: { ...p.pivot }, keyframes: p.keyframes.map(cloneKeyframe), link: cloneLink(p.link), follow: p.follow && { ...p.follow }, face: { ...p.face }, trails: p.trails.map(cloneTrail), spin: cloneSpin(p.spin) };
+  return { ...p, home: { ...p.home }, pivot: { ...p.pivot }, keyframes: p.keyframes.map(cloneKeyframe), link: cloneLink(p.link), follow: p.follow && { ...p.follow }, face: { ...p.face }, trails: p.trails.map(cloneTrail), spin: cloneSpin(p.spin), drawings: cloneDrawings(p.drawings), drawingLoop: p.drawingLoop && { ...p.drawingLoop } };
+}
+
+/** The same drawings (their pixels shared). */
+export function cloneDrawings(d: readonly Cel[] | null): Cel[] | null {
+  return d && d.map((c) => ({ start: c.start, surface: c.surface }));
+}
+
+/** The pixels a piece shows at `frame`: its drawing there, or its one picture. */
+export function pieceSurfaceAt(p: Pick<Piece, 'src' | 'drawings' | 'drawingLoop'>, frame: number): Surface {
+  return p.drawings ? p.drawings[celShownIndex(p.drawings, p.drawingLoop, frame)].surface : p.src;
+}
+
+/** Every picture a piece has (its drawings, or its one picture). */
+export function pieceSurfaces(p: Pick<Piece, 'src' | 'drawings'>): Surface[] {
+  return p.drawings ? celSurfaces(p.drawings) : [p.src];
+}
+
+/** Put a piece's drawing for `frame` on show (as its src). */
+export function showPieceFrame(p: Piece, frame: number): void {
+  if (p.drawings) p.src = pieceSurfaceAt(p, frame);
 }
 
 /**
@@ -204,7 +240,11 @@ export function clonePiece(p: Piece): Piece {
  * still names the old parent; copyPieces renames links within the copies.
  */
 export function copyPiece(p: Piece, id: string, layerId: string): Piece {
-  return { ...clonePiece(p), id, layerId, src: p.src.snapshot() };
+  if (!p.drawings) return { ...clonePiece(p), id, layerId, src: p.src.snapshot() };
+  // Each drawing copied once (repeats of one drawing stay one drawing).
+  const copies = new Map(celSurfaces(p.drawings).map((s) => [s, s.snapshot()]));
+  const drawings = p.drawings.map((c) => ({ start: c.start, surface: copies.get(c.surface)! }));
+  return { ...clonePiece(p), id, layerId, drawings, src: copies.get(p.src) ?? drawings[0].surface };
 }
 
 /**
@@ -274,5 +314,5 @@ export function moveKey(keys: readonly Keyframe[], from: number, to: number): Ke
 
 /** Bytes of history a list of pieces holds besides the shared source images. */
 export function piecesBytes(pieces: readonly Piece[]): number {
-  return pieces.reduce((n, p) => n + 200 + p.keyframes.length * 120 + (p.spin?.keys.length ?? 0) * 60, 0);
+  return pieces.reduce((n, p) => n + 200 + p.keyframes.length * 120 + (p.spin?.keys.length ?? 0) * 60 + (p.drawings?.length ?? 0) * 40, 0);
 }

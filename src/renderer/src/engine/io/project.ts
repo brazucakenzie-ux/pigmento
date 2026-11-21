@@ -904,6 +904,8 @@ async function readAnimation(doc: PaintDocument, a: NonNullable<DocumentJson['an
       loop: p.loop,
       // Speed keys inside the timeline, one a frame.
       spin: p.spin && cleanSpin({ keys: p.spin.keys.map((k) => ({ ...k, frame: clampFrame(k.frame, a.length) })) }),
+      drawings: null,
+      drawingLoop: null,
     });
   }
   doc.pieces = checkLinks(pieces);

@@ -1,7 +1,7 @@
 import type { RGBA } from '../core/color';
 import { Surface } from '../raster/Surface';
 import { defaultTimeline, type Timeline } from '../anim/timeline';
-import { clonePiece, type Piece } from '../anim/piece';
+import { clonePiece, showPieceFrame, type Piece } from '../anim/piece';
 import { celShownIndex, celSurfaces, type Cel, type CelLoop } from '../anim/cels';
 import { defaultCamera, defaultLight, spaceOf, type Camera, type Light, type Space } from '../anim/space';
 import { cameraMoveAt, type CameraKey } from '../anim/cameraMove';
@@ -317,10 +317,11 @@ export class PaintDocument {
     return [...walkLayers(this.layers)].filter((l): l is VectorLayer => l.kind === 'vector');
   }
 
-  /** Put each frame-by-frame layer's drawing for `frame` on show. */
+  /** Put each frame-by-frame layer's (and piece's) drawing for `frame` on show. */
   showFrame(frame: number): void {
     for (const l of this.rasterLayers()) l.showFrame(frame);
     for (const l of this.vectorLayers()) l.showFrame(frame);
+    for (const p of this.pieces) showPieceFrame(p, frame);
   }
 
   /** True if any shape's trim is keyed on the timeline. */
