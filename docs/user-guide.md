@@ -218,7 +218,7 @@ A piece can leave things behind as it moves: smoke from a rocket, a comet's tail
 - An **Echo** is fading copies of the piece itself: so many **Copies**, so many frames **Apart**.
 - **In front of the piece** draws the trail over it instead of behind. **Shuffle** gives a different scatter of puffs; the same one comes back every time it plays.
 - **Emission** keys how much it gives off at the frame shown: set it to 0 % at the start and 100 % at the frame the engine lights, and the smoke starts at ignition; key it back to 0 for burn-out. With no keys it's always on, and smoke is already there on the first frame, so a chimney on a piece that doesn't move just smokes.
-- The trail comes out of a small ring on the piece: drag the ring to the nozzle. It moves and turns with the piece.
+- The trail comes out of a small ring on the piece: drag the ring to the nozzle, or set **Emitter X** and **Emitter Y** in the popover (in the piece's own pixels from its top-left corner; the arrow keys step them). It moves and turns with the piece.
 
 Trails are worked out from the timeline, so a frame always looks the same whether you play to it, jump to it or export it.
 
@@ -291,7 +291,7 @@ On the frame where a new drawing should start, choose **New drawing** (a blank p
 - **Clear drawing** empties the drawing you're on, and **Delete drawing** removes it.
 - In the timeline, each drawing is a block on its layer's row. Drag the start of a block to hold the drawing before it for longer or shorter.
 - **Onion skin** shows the drawings before (orange) and after (blue) the one you're drawing, faintly, so you can line them up. Choose how many to show, and how strong, beside its button in the timeline. It's only on screen: it's never saved or exported.
-- **Loop drawings** (in the Animate tab, or right-click the layer's row in the timeline) repeats a layer's drawings for the whole timeline: **Cycle** plays them round and round (A B C A B C…), and **Back and forth** plays them there and back (A B C B A B C…). Draw cloth on a line twice, with the waves in different places, and it flaps for as long as the animation lasts. The repeats show faded in the timeline; the small loop handle after the last drawing sets how long that one lasts. The repeats are the same drawings, not copies: paint on any repeat and that drawing changes everywhere it shows. New drawings go in the first cycle.
+- **Loop drawings** (in the Animate tab, or right-click the layer's row in the timeline) repeats a layer's drawings for the whole timeline: **Cycle** plays them round and round (A B C A B C…), and **Back and forth** plays them there and back (A B C B A B C…). Draw cloth on a line twice, with the waves in different places, and it flaps for as long as the animation lasts. The repeats show faded in the timeline; the small loop handle after the last drawing sets how long that one lasts (drag it, or Tab to it and press Left or Right). The repeats are the same drawings, not copies: paint on any repeat and that drawing changes everywhere it shows. New drawings go in the first cycle.
 
 ### Saving and sharing
 

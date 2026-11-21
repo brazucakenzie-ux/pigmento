@@ -411,7 +411,7 @@ Decisions (agreed with the user):
   - **Performance:** flat repeating pieces now draw on the GPU (see 6.23).
 
 ### Milestone 7 — Paths, trails and loops, version 1.3.0 (requested after 1.2.0; in progress)
-Things that travel leave marks. A piece can follow a path drawn on a shape layer and face the way it's going. A path can be drawn on, or eaten away right behind the piece travelling it, like a burning fuse or a route on a map. A piece can leave a trail: smoke, sparks, a comet tail, speed lines. Short cycles repeat by themselves: a layer's drawings (cloth waving in the wind, a flag, a flickering flame) and a piece's keyframes (a swinging sign, a bobbing boat) loop however long the timeline is, and things that never stop turning (wind turbines, waterwheels, fans, gears) spin forever at a steady speed. Started on 2026-11-20, when the user agreed the decisions below for Stop 7A as proposed; they agreed Stop 7B's on 2026-11-21 Stop 7C's on 2026-11-22, and Stop 7D's on 2026-11-22. Agree each later stop's decisions with them as it comes up. Split into five stops; each ends with a working app, `npm run check` green and a report, then waits for "continue". Each item is ticked in the same commit as its work.
+Things that travel leave marks. A piece can follow a path drawn on a shape layer and face the way it's going. A path can be drawn on, or eaten away right behind the piece travelling it, like a burning fuse or a route on a map. A piece can leave a trail: smoke, sparks, a comet tail, speed lines. Short cycles repeat by themselves: a layer's drawings (cloth waving in the wind, a flag, a flickering flame) and a piece's keyframes (a swinging sign, a bobbing boat) loop however long the timeline is, and things that never stop turning (wind turbines, waterwheels, fans, gears) spin forever at a steady speed. Started on 2026-11-20, when the user agreed the decisions below for Stop 7A as proposed; they agreed Stop 7B's, 7C's, 7D's and 7E's on 2026-11-21. Agree each later stop's decisions with them as it comes up. Split into five stops; each ends with a working app, `npm run check` green and a report, then waits for "continue". Each item is ticked in the same commit as its work.
 
 Words used in the UI:
 - **Follow path:** a piece travels along a path from a shape layer, its **progress** (0–100 %) keyed on the timeline instead of its position.
@@ -422,7 +422,7 @@ Words used in the UI:
 - **Loop keyframes:** after its last keyframe, a piece starts its moves again from the first (**Loop**) or plays them backwards and forwards (**Back and forth**).
 - **Spin forever:** a piece turns about its pivot at a steady **speed** (turns a second, either way), on and on, without keyframes. **Tilt forever** and **Turn forever** do the same in 3D, so a coin can flip or a sign revolve.
 
-Decisions (agreed for Stops 7A to 7D; the rest proposed, to agree with the user at their stop):
+Decisions (all agreed, the last for Stop 7E):
 - **Trails** (agreed for 7C, with the points below): up to 4 trails a piece, each with its own emitter point and settings, listed in the Trail popover (add, remove, reorder). Puffs are emitted per second and one every so many pixels travelled (either can be 0), and each has a lifetime, size, growth, drift (a speed and direction, such as smoke rising), spread (random scatter), fade and a colour-over-life ramp of 2 to 4 colours, with an option to stretch along the motion (speed lines). An echo is fading copies of the piece a set number of frames apart. Emission (on, off and its rate) is keyed with the usual easings; the colour ramp and other settings are set once. At most 5,000 live puffs a trail. Pictures as puffs are left for later.
 - **Deterministic trails:** a trail is worked out from the timeline alone. Each puff's birth, place, size and colour come from the frame and a seed, so scrubbing, playback and exports always show the same smoke, and no simulation state is saved. Puffs are emitted by distance travelled as well as by time, so a fast piece still leaves an unbroken trail.
 - **Trail art:** puffs use any brush tip from the library (built-in or the user's own). An echo uses the piece's own pixels.
@@ -454,6 +454,11 @@ Decisions (agreed for Stops 7A to 7D; the rest proposed, to agree with the user 
   - It never changes the keyframes. Turning it off puts the piece back as its keys have it.
 - **Save format:** projects hold all of this in `.pigm` version 4, written only when a picture uses something new in 1.3.0, otherwise version 3, 2 or 1 as now.
 - **Left out of 1.3.0:** physics (gravity, bouncing, collisions), emitters that aren't on a piece, wind fields, motion blur, and trails on frame-by-frame drawings.
+- **Polish and release** (agreed for 7E):
+  - A trail's emitter point is set by keyboard with **Emitter X** and **Emitter Y** fields in the Trail popover (in the piece's own pixels; arrows step 1 px, Shift 10), beside dragging its ring on the canvas. The ring itself doesn't take keyboard focus.
+  - A looping layer's cycle end, the handle after its last drawing in the timeline, takes keyboard focus; Left and Right move it a frame.
+  - The performance budgets stand as written: where one isn't met, optimise until it is, or report the numbers.
+  - The README gets a new screenshot of a rocket leaving smoke along a path. The CHANGELOG's "Left out" list is the one above. Version 1.3.0, the installer rebuilt and smoke-tested, and the user is asked before tagging `v1.3.0` (unsigned, as before).
 
 **Stop 7A — Along a path**
 - [x] 7.1 Follow path: a piece follows a path from a shape layer on its own or another layer. Its progress (0–100 %) is keyed with the usual easings, distance along the path is even, and closed paths can go round more than once. The link survives editing the path; deleting the path bakes the motion into keyframes. Undoable (+ unit tests)
@@ -510,7 +515,7 @@ Decisions (agreed for Stops 7A to 7D; the rest proposed, to agree with the user 
   - **Save format:** `loop` on frame-by-frame layers and pieces, and `spin` on pieces, in `.pigm` version 4, bounded and fitted to the timeline; documented, and the version 4 round trip covers them.
 
 **Stop 7E — Polish and release**
-- [ ] 7.17 Accessibility: axe audit of the new options, popover and timeline rows in light, dark and high contrast. Everything is reachable by keyboard, including the emitter point (arrow keys nudge it), the loop settings, a looping layer's cycle end and the spin speed. Trails, loops and spinning don't animate by themselves while the timeline is stopped, so reduced motion needs nothing
+- [x] 7.17 Accessibility: axe audit of the new options, popover and timeline rows in light, dark and high contrast. Everything is reachable by keyboard, including the emitter point (Emitter X and Y fields in the Trail popover), the loop settings, a looping layer's cycle end and the spin speed. Trails, loops and spinning don't animate by themselves while the timeline is stopped, so reduced motion needs nothing
 - [ ] 7.18 Performance budgets: 24 fps playback at 1920 × 1080 with three smoke trails of 2,000 live puffs each, two looping layers and ten spinning pieces over the 1.2.0 box scene; scrubbing to any frame in under 16 ms; a 240-frame 1080p MP4 of it in under 30 s (+ perf e2e)
 - [ ] 7.19 User guide (following paths, face direction, trim, draw on and erase behind, trails and their presets, looping drawings and keyframes, spin forever), shortcuts, README feature and screenshot, CHANGELOG 1.3.0, version 1.3.0, welcome tour mention
 - [ ] 7.20 `npm run check` green, installer rebuilt and smoke-tested; final report listing every 1.3.0 feature with its status; then, after asking, tag `v1.3.0` and publish the release (steps in `docs/releasing.md`)

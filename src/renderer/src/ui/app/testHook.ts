@@ -318,6 +318,7 @@ export function installTestHook(): void {
     autosaveNow: () => autosaveNow(),
     layers: () => engine.layers.info(),
     addLayer: () => engine.layers.add(),
+    setActiveLayer: (id: string) => engine.layers.setActive(id),
     groupLayers: (ids: string[]) => engine.layers.group(ids),
     setLayerProps: (id: string, p: Record<string, unknown>) => engine.layers.setProps(id, p),
     /** The on-screen (GPU) composite at a pixel, for comparing against `pixel` (JS). */
