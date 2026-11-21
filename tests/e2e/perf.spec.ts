@@ -367,3 +367,49 @@ test('3D: a 240-frame 1080p MP4 of the spinning box over the background in under
   console.warn('240-frame 1920×1080 MP4 of the box scene (s):', (mp4.ms / 1000).toFixed(1), 'size (KB):', Math.round(mp4.bytes / 1024));
   expect(mp4.ms).toBeLessThan(30_000);
 });
+
+/** Stop 7D's load at 1080p: the 1.2.0 box scene and busy pieces, three smoke trails of 2,000 puffs, ten spinning pieces and two looping layers. */
+async function loopsScene(page: Page): Promise<void> {
+  await newImage(page, 1920, 1080);
+  await busyAnimation(page);
+  await page.evaluate(() => window.__pigmentoTest!.perfBoxScene());
+  expect(await page.evaluate(() => window.__pigmentoTest!.perfLoopsScene())).toEqual({ trails: 3, spinning: 10 });
+  const info = await page.evaluate(() => window.__pigmentoTest!.anim());
+  expect(Object.keys(info.celLoops)).toHaveLength(2);
+  expect(info.pieces.filter((p) => p.spinKeys.length)).toHaveLength(10);
+  // Each trail has about 2,000 puffs alive (the oldest few may have faded right out).
+  const live = await page.evaluate(() => window.__pigmentoTest!.livePuffs(30));
+  expect(live).toHaveLength(3);
+  for (const n of live) expect(n).toBeGreaterThan(1900);
+  expect(await page.evaluate(() => window.__pigmentoTest!.gpuPlanes())).toBe(true);
+}
+
+test('1.3: smoke trails, looping layers and spinning pieces over the box scene scrub in under 16 ms and play at 24 fps at 1080p', async () => {
+  test.setTimeout(180_000);
+  h = await launchApp();
+  const { page } = h;
+  await ready(page);
+  await loopsScene(page);
+  // Scrubbing: going to a frame and drawing it, frame by frame and jumping about.
+  const frames = [...Array(48).keys(), 40, 3, 27, 11, 46, 0];
+  await page.evaluate((f) => window.__pigmentoTest!.renderTimes(f), [1, 2, 3]);
+  const times = (await page.evaluate((f) => window.__pigmentoTest!.renderTimes(f), frames)).sort((a, b) => a - b);
+  const median = times[Math.floor(times.length / 2)];
+  const p95 = times[Math.floor(times.length * 0.95)];
+  console.warn('1080p box + 3 smoke trails (6,000 puffs) + 10 spinning + 2 looping layers, frame draw (ms): median', median.toFixed(1), 'p95', p95.toFixed(1));
+  expect(p95).toBeLessThan(16);
+  const seen = await playTwoSeconds(page);
+  console.warn('1080p box + trails + spin + loops, 24 fps playback: frames shown in 2 s', seen);
+  expect(seen).toBeGreaterThanOrEqual(44);
+});
+
+test('1.3: a 240-frame 1080p MP4 of the smoke, loops and spin over the box scene in under 30 s', async () => {
+  test.setTimeout(180_000);
+  h = await launchApp();
+  const { page } = h;
+  await ready(page);
+  await loopsScene(page);
+  const mp4 = await page.evaluate(() => window.__pigmentoTest!.encodeAnimation('mp4', 240));
+  console.warn('240-frame 1920×1080 MP4 of the box + trails + spin + loops (s):', (mp4.ms / 1000).toFixed(1), 'size (KB):', Math.round(mp4.bytes / 1024));
+  expect(mp4.ms).toBeLessThan(30_000);
+});

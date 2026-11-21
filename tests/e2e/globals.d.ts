@@ -77,6 +77,8 @@ export interface PigmentoTestHook {
   trailSheet(): Promise<{ ids: string[]; w: number; h: number; png: number[] }>;
   selectCamera(): void;
   perfBoxScene(background?: boolean): { group: string; background: string | null; width: number };
+  perfLoopsScene(parts?: string): { trails: number; spinning: number };
+  livePuffs(frame: number): number[];
   dragTimes(id: string, steps: number): number[];
   stillExportMs(): number;
   perfStart(): void;
@@ -84,6 +86,7 @@ export interface PigmentoTestHook {
   pieceFront(id: string): boolean;
   addTestBox(cx: number, cy: number, size: { w: number; h: number; d: number }, tilt: number, turn: number, hideBacks?: boolean, marks?: boolean, named?: boolean): Record<'front' | 'back' | 'top' | 'bottom' | 'left' | 'right' | 'group', string> | null;
   addLayer(): string;
+  setActiveLayer(id: string): void;
   groupLayers(ids: string[]): string | null;
   setLayerProps(id: string, p: Record<string, unknown>): void;
 }

@@ -760,12 +760,12 @@ function LayerRow({ layer, starts, loop, length, frame, active }: { layer: Layer
           type="button"
           className="tl-loop-end"
           data-frame={cycle.end}
-          aria-label={t('timeline.loopEnd')}
-          data-tip={t('timeline.loopEnd')}
+          aria-label={t('timeline.loopEndAt', { n: cycle.end })}
+          data-tip={t('timeline.loopEndAt', { n: cycle.end })}
           style={{ left: cycle.end * CELL }}
           onPointerDown={startEndDrag}
           onKeyDown={(e) => {
-            if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e.altKey && loop) {
+            if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && loop) {
               e.preventDefault();
               engine.anim.setLoopEnd(layer.id, loop.end + (e.key === 'ArrowLeft' ? -1 : 1));
             }

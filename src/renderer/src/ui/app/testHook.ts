@@ -15,6 +15,7 @@ import { Scene } from '@engine/anim/scene';
 import { defaultLight, project, spaceOf } from '@engine/anim/space';
 import { drawPiece, drawRuns, frameExtras, hingedIds, runSheets } from '@engine/anim/pieceRaster';
 import { applyPreset, makeTrail, type TrailPreset } from '@engine/anim/trail';
+import { pieceTrailsAt } from '@engine/anim/trailDraw';
 import { PaintDocument } from '@engine/doc/Document';
 import { BOX_FACES, faceSize, makeBox, type BoxFace, type BoxSize } from '@engine/anim/box';
 import { sampleProjectiveBatch } from '@engine/anim/pieceProject';
@@ -318,6 +319,7 @@ export function installTestHook(): void {
     autosaveNow: () => autosaveNow(),
     layers: () => engine.layers.info(),
     addLayer: () => engine.layers.add(),
+    setActiveLayer: (id: string) => engine.layers.setActive(id),
     groupLayers: (ids: string[]) => engine.layers.group(ids),
     setLayerProps: (id: string, p: Record<string, unknown>) => engine.layers.setProps(id, p),
     /** The on-screen (GPU) composite at a pixel, for comparing against `pixel` (JS). */
@@ -437,6 +439,39 @@ export function installTestHook(): void {
       a.loopScroll(bg.id);
       return { group: box(), background: bg.id, width: w };
     },
+    /**
+     * Stop 7D's performance load on top of what's there (the box scene over the busy pieces): smoke
+     * trails of 2,000 live puffs each (1,000 a second, living 2 s) on the first three pieces, the next
+     * ten spinning forever, and two layers drawn three times over the whole picture, looping Cycle and
+     * Back and forth (`parts` picks which of trails, spin and loops).
+     */
+    perfLoopsScene: (parts = 'trails spin loops') => {
+      const a = engine.anim;
+      const free = a.info().pieces.filter((p) => p.kind === 'piece' && !p.parent);
+      for (const p of parts.includes('trails') ? free.slice(0, 3) : []) {
+        const id = a.addTrail(p.id, 'rocketSmoke');
+        if (id) a.setTrail(p.id, id, { rate: 1000, spacing: 0, lifetime: 2 });
+      }
+      for (const p of parts.includes('spin') ? free.slice(3, 13) : []) a.setSpin(p.id, 0, { spin: 0.5 });
+      const { width: w, height: hh } = engine.doc;
+      for (const [i, mode] of (parts.includes('loops') ? (['cycle', 'pingpong'] as const) : []).entries()) {
+        const id = engine.layers.add();
+        for (let d = 0; d < 3; d++) {
+          a.setFrame(d * 2);
+          if (d > 0) a.newDrawing(id, false);
+          const layer = engine.doc.layerById(id);
+          if (layer?.kind !== 'raster') continue;
+          // Wide bands that move from drawing to drawing, see-through over the rest.
+          for (let b = 0; b < 6; b++) layer.surface.fillRect({ x: 0, y: ((b * 2 + d + i) * hh) / 14, w, h: hh / 28 }, { r: 250, g: 200 - 60 * i, b: 40 * d, a: 110 });
+          engine.layerChanged(layer, null);
+        }
+        a.setDrawingLoop(id, mode);
+      }
+      a.setFrame(0);
+      return { trails: 3, spinning: Math.min(10, Math.max(0, free.length - 3)) };
+    },
+    /** Live puffs of each trail at a frame (pieces in list order). */
+    livePuffs: (frame: number) => engine.doc.pieces.flatMap((p) => pieceTrailsAt(engine.doc, p, frame).map((d) => d.puffs.length)),
     /**
      * Times (ms) to redraw a drag of a piece, step by step (moving it and tilting it a little more each
      * time), each waiting for the GPU to finish (a 1-pixel read of the picture); the drag is then undone.

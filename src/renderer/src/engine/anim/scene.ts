@@ -171,11 +171,16 @@ export class Scene {
     const { width: w, height: h } = p.src;
     if (!parent) {
       const opacity = state.opacity;
+      const space = this.space;
+      let placement: Placement | null = null;
       return {
         piece: p,
         state,
-        frame: rootFrame(state, p.pivot, this.space),
-        placement: placementOf(state, p.pivot, w, h, this.space),
+        frame: rootFrame(state, p.pivot, space),
+        // Worked out when first asked for (a trail's emitter only needs the frame).
+        get placement() {
+          return (placement ??= placementOf(state, p.pivot, w, h, space));
+        },
         opacity,
         carried: p.kind === 'group' ? opacity : 1,
         linked: false,
@@ -188,11 +193,15 @@ export class Scene {
         : localFrame(state, p.pivot);
     const frame = frameChain(parent.frame, local);
     const opacity = state.opacity * parent.carried;
+    const space = this.space;
+    let placement: Placement | null = null;
     return {
       piece: p,
       state,
       frame,
-      placement: placementFromFrame(frame, w, h, this.space),
+      get placement() {
+        return (placement ??= placementFromFrame(frame, w, h, space));
+      },
       opacity,
       carried: p.kind === 'group' ? opacity : parent.carried,
       linked: true,

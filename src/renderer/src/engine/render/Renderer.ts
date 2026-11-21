@@ -108,6 +108,11 @@ export class Renderer {
   private onionScratch: GroupCanvas | null = null;
   /** Pieces per layer for the composite pass under way. */
   private passPieces: Map<string, Piece[]> | null = null;
+  /**
+   * Trails worked out during one drawing of the screen or an export frame (by frame and piece), so
+   * the composite's dirty areas and the pasteboard share them; null outside one.
+   */
+  private trailPass: Map<string, TrailDrawing[]> | null = null;
   private composite: OffscreenCanvas;
   private compositeCtx: Ctx2D;
   private dirty: Rect | null = null;
@@ -311,7 +316,7 @@ export class Renderer {
     // Trails reach far beyond their pieces: the pieces (and groups) on this layer that leave one.
     const layerId = pieces[0]?.layerId;
     const owners = layerId === undefined ? [] : this.doc.pieces.filter((q) => q.layerId === layerId && q.trails.length > 0);
-    const trails = new Map(owners.map((q) => [q.id, pieceTrailsAt(this.doc, q, frame)]));
+    const trails = new Map(owners.map((q) => [q.id, this.trailsAt(q, frame)]));
     const groups = owners.filter((q) => q.kind === 'group');
     const shown = (p: Piece) => scene.shows(p) && (!r || scene.touches(p, r));
     const order = scene.backToFront(pieces).filter((p) => shown(p) || trails.has(p.id));
@@ -325,6 +330,16 @@ export class Renderer {
       for (const p of run) this.drawTrails(ctx, p, trails.get(p.id), true, area, alpha);
     }
     for (const g of groups) this.drawTrails(ctx, g, trails.get(g.id)!, true, area, alpha);
+  }
+
+  /** A piece's trails at a frame, worked out once a drawing. */
+  private trailsAt(p: Piece, frame: number): TrailDrawing[] {
+    const key = `${frame} ${p.id}`;
+    const hit = this.trailPass?.get(key);
+    if (hit) return hit;
+    const d = pieceTrailsAt(this.doc, p, frame);
+    this.trailPass?.set(key, d);
+    return d;
   }
 
   /** One piece as `scene` has it, inside `area`, at `alpha` times its own opacity. */
@@ -490,7 +505,9 @@ export class Renderer {
       full.fillRect(0, 0, dw, dh);
     }
     this.passPieces = this.doc.pieces.length ? piecesByLayer(this.doc.pieces) : null;
+    this.trailPass = new Map();
     this.drawLayers(full, this.doc.layers, r, frame);
+    this.trailPass = null;
     this.passPieces = null;
     full.restore();
     // Shared canvases (groups, isolated layers) were drawn for this frame: redraw the screen later.
@@ -755,6 +772,15 @@ export class Renderer {
 
   /** Draw the workspace, document and pixel grid to the screen. */
   render(): void {
+    this.trailPass = new Map();
+    try {
+      this.renderPass();
+    } finally {
+      this.trailPass = null;
+    }
+  }
+
+  private renderPass(): void {
     this.flushComposite();
     const ctx = this.viewCtx;
     const { dpr, view } = this;

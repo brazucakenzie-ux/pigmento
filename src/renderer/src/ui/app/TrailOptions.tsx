@@ -49,23 +49,25 @@ function TrailPanel({ trails }: { trails: TrailFields[] }) {
   };
   return (
     <div className="trail-panel">
-      <div className="trail-list" role="list" aria-label={t('trail.list')}>
-        {trails.map((tr, i) => (
-          <div key={tr.id} role="listitem" className={`trail-row ${tr === current ? 'selected' : ''}`}>
-            <button type="button" className="btn small trail-pick" aria-pressed={tr === current} onClick={() => setPicked(tr.id)}>
-              {t('trail.item', { n: i + 1, kind: t(`trail.kind.${tr.kind}` as I18nKey) })}
-            </button>
-            <button type="button" className="icon-btn" aria-label={t('trail.up', { n: i + 1 })} data-tip={t('trail.up', { n: i + 1 })} disabled={i === 0} onClick={() => engine.anim.moveTrail(pieceId, tr.id, -1)}>
-              <Icon name="chevron-up" size={14} />
-            </button>
-            <button type="button" className="icon-btn" aria-label={t('trail.down', { n: i + 1 })} data-tip={t('trail.down', { n: i + 1 })} disabled={i === trails.length - 1} onClick={() => engine.anim.moveTrail(pieceId, tr.id, 1)}>
-              <Icon name="chevron-down" size={14} />
-            </button>
-            <button type="button" className="icon-btn" aria-label={t('trail.remove', { n: i + 1 })} data-tip={t('trail.remove', { n: i + 1 })} onClick={() => engine.anim.removeTrail(pieceId, tr.id)}>
-              <Icon name="delete" size={14} />
-            </button>
-          </div>
-        ))}
+      <div className="trail-list">
+        <div className="trail-list" role="list" aria-label={t('trail.list')}>
+          {trails.map((tr, i) => (
+            <div key={tr.id} role="listitem" className={`trail-row ${tr === current ? 'selected' : ''}`}>
+              <button type="button" className="btn small trail-pick" aria-pressed={tr === current} onClick={() => setPicked(tr.id)}>
+                {t('trail.item', { n: i + 1, kind: t(`trail.kind.${tr.kind}` as I18nKey) })}
+              </button>
+              <button type="button" className="icon-btn" aria-label={t('trail.up', { n: i + 1 })} data-tip={t('trail.up', { n: i + 1 })} disabled={i === 0} onClick={() => engine.anim.moveTrail(pieceId, tr.id, -1)}>
+                <Icon name="chevron-up" size={14} />
+              </button>
+              <button type="button" className="icon-btn" aria-label={t('trail.down', { n: i + 1 })} data-tip={t('trail.down', { n: i + 1 })} disabled={i === trails.length - 1} onClick={() => engine.anim.moveTrail(pieceId, tr.id, 1)}>
+                <Icon name="chevron-down" size={14} />
+              </button>
+              <button type="button" className="icon-btn" aria-label={t('trail.remove', { n: i + 1 })} data-tip={t('trail.remove', { n: i + 1 })} onClick={() => engine.anim.removeTrail(pieceId, tr.id)}>
+                <Icon name="delete" size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
         <button type="button" className="btn small" disabled={trails.length >= MAX_TRAILS} onClick={add}>
           {t('trail.add')}
         </button>
@@ -221,6 +223,10 @@ function TrailSettings({ pieceId, trail }: { pieceId: string; trail: TrailFields
           </label>
         ) : null}
         <span className="opt-hint">{trail.keys.length ? t('trail.keyedAt', { frames: trail.keys.map((k) => k.frame + 1).join(', ') }) : t('trail.notKeyed')}</span>
+      </div>
+      <div className="trail-line" role="group" aria-label={t('trail.emitter')}>
+        {num('trail.emitterX', trail.emitter.x, 'px', -1e6, 1e6, 0, (v) => set({ emitter: { x: v, y: trail.emitter.y } }), 'trail.emitterTip')}
+        {num('trail.emitterY', trail.emitter.y, 'px', -1e6, 1e6, 0, (v) => set({ emitter: { x: trail.emitter.x, y: v } }), 'trail.emitterTip')}
       </div>
       <p className="opt-hint">{t('trail.emitterHint')}</p>
     </div>

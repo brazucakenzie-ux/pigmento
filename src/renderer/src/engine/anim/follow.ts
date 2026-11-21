@@ -84,11 +84,9 @@ export function docMotion(doc: PaintDocument): Motion {
  */
 export function emitterPath(doc: PaintDocument, pieceId: string, point: Point): EmitterPath {
   const motion = docMotion(doc);
-  return (t) => {
-    const scene = new Scene(doc.pieces, t, doc.space, motion);
-    const p = scene.piece(pieceId);
-    return p ? scene.worldOf(p, point) : [0, 0, 0];
-  };
+  const p = doc.pieces.find((q) => q.id === pieceId);
+  if (!p) return () => [0, 0, 0];
+  return (t) => new Scene(doc.pieces, t, doc.space, motion).worldOf(p, point);
 }
 
 /** Every piece's pose at `frame`, as the picture's camera (at that frame) sees it, on the paths they follow. */

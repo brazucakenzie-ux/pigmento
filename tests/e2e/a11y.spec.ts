@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { expect, test, type Page } from '@playwright/test';
-import { launchApp, ready, type AppHandle } from './harness';
+import { clickDoc, drag, launchApp, ready, type AppHandle } from './harness';
 
 let h: AppHandle;
 
@@ -175,6 +175,147 @@ test('the 3D, hinge, box and camera controls meet WCAG 2.1 AA in light, dark and
       await options(`${label} · ${name} options (a hinged face)`, () => page.evaluate((id) => window.__pigmentoTest!.selectPiece(id), ids.Right), { role: 'textbox', name: 'Fold' });
       await options(`${label} · ${name} options (camera)`, () => page.evaluate(() => window.__pigmentoTest!.selectCamera()), { role: 'textbox', name: 'Pan X' });
     }
+    await page.getByRole('tab', { name: 'Home' }).click();
+  }
+  for (const f of findings) console.warn(`[a11y] ${f.where} — ${f.rule} (${f.impact}): ${f.help} :: ${f.targets.join(' | ')}`);
+  expect(findings.map((f) => `${f.where}: ${f.rule}`)).toEqual([]);
+});
+
+test('the path, trim, trail, loop and spin controls meet WCAG 2.1 AA in light, dark and high-contrast themes, and work by keyboard', async () => {
+  test.setTimeout(300_000);
+  h = await launchApp();
+  const { page } = h;
+  await ready(page);
+  const findings: Finding[] = [];
+  const ribbon = page.locator('.ribbon');
+  const bar = page.locator('.optionsbar');
+  // A piece, keyed, following a path on a shape layer whose outline draws on; a trail, a loop and a spin on the piece.
+  const layerId = await page.evaluate(() => window.__pigmentoTest!.layers().activeId);
+  await page.evaluate((id) => window.__pigmentoTest!.fillLayer(id, { r: 200, g: 40, b: 40, a: 255 }, { x: 100, y: 60, w: 80, h: 40 }), layerId);
+  await page.evaluate(() => window.__pigmentoTest!.selectRect(100, 60, 80, 40));
+  expect(await page.evaluate(() => window.__pigmentoTest!.animateSelection(false))).toBe(true);
+  const pieceId = await page.evaluate(() => window.__pigmentoTest!.anim().selectedId!);
+  await page.evaluate((id) => window.__pigmentoTest!.setPieceKey(id, 10, { x: 500 }), pieceId);
+  await page.getByRole('tab', { name: 'Shapes' }).click();
+  await page.getByRole('button', { name: 'Pen', exact: true }).click();
+  await page.getByRole('radio', { name: 'Shape layer (stays editable)' }).click();
+  await clickDoc(page, 200, 600);
+  await drag(page, [
+    [600, 400],
+    [700, 400],
+    [800, 400],
+  ]);
+  await clickDoc(page, 1000, 600);
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('a');
+  await bar.getByRole('combobox', { name: 'Path' }).selectOption({ index: 1 });
+  await bar.getByRole('checkbox', { name: 'Face its way' }).check();
+  await bar.getByRole('combobox', { name: 'Loop', exact: true }).selectOption({ label: 'Back and forth' });
+  await bar.locator('.opt-pop-btn', { hasText: 'Trail' }).click();
+  await page.getByRole('dialog', { name: 'Trail' }).getByRole('button', { name: 'Add a trail' }).click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: 'Trail' })).toBeHidden();
+  await bar.locator('.opt-pop-btn', { hasText: 'Spin' }).click();
+  const speed = page.getByRole('dialog', { name: 'Spin' }).getByRole('textbox', { name: 'Spin', exact: true });
+  await speed.fill('0.5');
+  await speed.press('Enter');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: 'Spin' })).toBeHidden();
+  // The path's outline drawn on (its trim keyed, so it gets a timeline row).
+  await page.locator('.canvas-host').focus();
+  await page.keyboard.press('v');
+  await page.evaluate(() => {
+    const t = window.__pigmentoTest!;
+    const shapes = t.layers().tree.find((l) => l.kind === 'vector')!.id;
+    t.setActiveLayer(shapes);
+    t.setVectorSelection([(t.vectorObjects(shapes) as { id: string }[])[0].id]);
+  });
+  await bar.getByRole('button', { name: 'Draw on…' }).click();
+  await page.getByRole('dialog', { name: 'Draw on' }).getByRole('button', { name: 'Key it' }).click();
+  // A layer drawn twice, looping Cycle.
+  await page.evaluate(() => window.__pigmentoTest!.addLayer());
+  const cloth = await page.evaluate(() => window.__pigmentoTest!.layers().activeId);
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  if (!(await page.locator('.tl-names').isVisible())) await ribbon.getByRole('button', { name: 'Timeline', exact: true }).click();
+  await page.evaluate(() => window.__pigmentoTest!.setFrame(0));
+  await page.evaluate((id) => window.__pigmentoTest!.fillLayer(id, { r: 30, g: 150, b: 60, a: 255 }, { x: 600, y: 100, w: 60, h: 60 }), cloth);
+  await page.evaluate(() => window.__pigmentoTest!.setFrame(2));
+  await ribbon.getByRole('button', { name: 'New drawing' }).click();
+  await page.evaluate((id) => window.__pigmentoTest!.fillLayer(id, { r: 30, g: 150, b: 60, a: 255 }, { x: 700, y: 100, w: 60, h: 60 }), cloth);
+  await ribbon.getByRole('combobox', { name: 'Loop drawings' }).selectOption({ label: 'Cycle' });
+  const timeline = page.getByRole('region', { name: 'Timeline' });
+  await expect(timeline.locator('.tl-spin-row')).toHaveCount(1);
+  await expect(timeline.locator('.tl-shape-row')).toHaveCount(1);
+  await expect(timeline.locator('.tl-cel.repeat').first()).toBeVisible();
+
+  // By keyboard: the cycle's end, the emitter point and the spin speed.
+  const loopEnd = timeline.locator('.tl-loop-end');
+  await loopEnd.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(async () => (await page.evaluate(() => window.__pigmentoTest!.anim().celLoops))[cloth].end).toBe(5);
+  await page.keyboard.press('ArrowLeft');
+  await expect.poll(async () => (await page.evaluate(() => window.__pigmentoTest!.anim().celLoops))[cloth].end).toBe(4);
+  await expect(loopEnd).toHaveAttribute('aria-label', /after frame 4/);
+  await page.evaluate((id) => window.__pigmentoTest!.selectPiece(id), pieceId);
+  await page.locator('.canvas-host').focus();
+  await page.keyboard.press('a');
+  await bar.locator('.opt-pop-btn', { hasText: 'Trail' }).click();
+  const emitterX = page.getByRole('dialog', { name: 'Trail' }).getByRole('textbox', { name: 'Emitter X', exact: true });
+  const x0 = (await page.evaluate(() => window.__pigmentoTest!.anim().current!.trails))[0].emitter.x;
+  await emitterX.focus();
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('Shift+ArrowUp');
+  await expect.poll(async () => (await page.evaluate(() => window.__pigmentoTest!.anim().current!.trails))[0].emitter.x).toBe(x0 + 11);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: 'Trail' })).toBeHidden();
+  await bar.locator('.opt-pop-btn', { hasText: 'Spin' }).click();
+  await speed.focus();
+  await page.keyboard.press('ArrowUp');
+  await expect.poll(async () => (await page.evaluate(() => window.__pigmentoTest!.anim().current!.spin))!.spin).toBeCloseTo(0.55, 9);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: 'Spin' })).toBeHidden();
+  // The loop settings are plain selects, in the tab order.
+  await bar.getByRole('combobox', { name: 'Loop', exact: true }).focus();
+  await expect(bar.getByRole('combobox', { name: 'Loop', exact: true })).toBeFocused();
+
+  const popover = async (where: string, button: 'Trail' | 'Spin') => {
+    await bar.locator('.opt-pop-btn', { hasText: button }).click();
+    await expect(page.getByRole('dialog', { name: button })).toBeVisible();
+    await page.waitForTimeout(100);
+    findings.push(...(await audit(page, where, `.${button.toLowerCase()}-popover`)));
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog', { name: button })).toBeHidden();
+  };
+  for (const [family, mode] of [
+    [null, 'Light'],
+    [null, 'Dark'],
+    ['High contrast', 'Dark'],
+  ] as const) {
+    await theme(page, family, mode);
+    const label = `${family ?? 'Pigmento'} ${mode}`;
+    await page.getByRole('tab', { name: 'Animate' }).click();
+    findings.push(...(await audit(page, `${label} · Animate tab (loop drawings)`, '.ribbon')), ...(await audit(page, `${label} · Timeline (loops, spin, trim)`, '.timeline')));
+    for (const tool of ['a', 'm'] as const) {
+      await page.evaluate((id) => window.__pigmentoTest!.selectPiece(id), pieceId);
+      await page.locator('.canvas-host').focus();
+      await page.keyboard.press(tool);
+      const name = tool === 'm' ? 'Perspective plane' : 'Animate';
+      await expect(bar.locator('.opt-pop-btn', { hasText: 'Spin' })).toBeVisible();
+      findings.push(...(await audit(page, `${label} · ${name} options (path, face, loop)`, '.optionsbar')));
+      await popover(`${label} · ${name} · Trail popover`, 'Trail');
+      await popover(`${label} · ${name} · Spin popover`, 'Spin');
+    }
+    await page.locator('.canvas-host').focus();
+    await page.keyboard.press('v');
+    await page.evaluate(() => {
+      const t = window.__pigmentoTest!;
+      const shapes = t.layers().tree.find((l) => l.kind === 'vector')!.id;
+      t.setActiveLayer(shapes);
+      t.setVectorSelection([(t.vectorObjects(shapes) as { id: string }[])[0].id]);
+    });
+    await expect(bar.getByRole('button', { name: 'Draw on…' })).toBeVisible();
+    findings.push(...(await audit(page, `${label} · Trim options`, '.optionsbar')));
+    findings.push(...(await auditDialog(page, `${label} · Draw on`, () => bar.getByRole('button', { name: 'Draw on…' }).click())));
     await page.getByRole('tab', { name: 'Home' }).click();
   }
   for (const f of findings) console.warn(`[a11y] ${f.where} — ${f.rule} (${f.impact}): ${f.help} :: ${f.targets.join(' | ')}`);

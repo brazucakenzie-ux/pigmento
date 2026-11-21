@@ -46,7 +46,7 @@ function SpinPanel({ spin, plane }: { spin: SpinFields | null; plane: boolean })
     return (
       <span className="opt tf-field" data-tip={t(tip)}>
         <span>{label}</span>
-        <NumberField className="num tf-num" value={round2(spin?.[axis] ?? 0)} decimals={2} min={-MAX_SPIN} max={MAX_SPIN} label={label} onChange={(v) => engine.anim.setSpin(pieceId, frame, { [axis]: v })} />
+        <NumberField className="num tf-num" value={round2(spin?.[axis] ?? 0)} decimals={2} step={0.05} shiftStep={0.5} min={-MAX_SPIN} max={MAX_SPIN} label={label} onChange={(v) => engine.anim.setSpin(pieceId, frame, { [axis]: v })} />
         <span className="unit">{t('spin.unit')}</span>
       </span>
     );
