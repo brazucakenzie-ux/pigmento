@@ -87,6 +87,17 @@ export interface AnimationInfo {
   cameraKeys: { frame: number; easing: Easing }[];
   /** The camera's move at the frame shown, while its row is selected. */
   cameraMove: CameraMoveFields | null;
+  /** Shapes whose trim is keyed, each with a row under its layer. */
+  shapes: ShapeKeysInfo[];
+}
+
+/** A shape whose trim is keyed: where it is, and its keys. */
+export interface ShapeKeysInfo {
+  layerId: string;
+  id: string;
+  /** Its place on its layer (1 = the bottom one). */
+  n: number;
+  keys: { frame: number; easing: Easing }[];
 }
 
 /** The camera's move at the frame shown, as the options bar shows it. */
@@ -263,7 +274,7 @@ export class AnimationController {
 
   /** True once the picture has anything that moves. */
   get animated(): boolean {
-    return this.doc.pieces.length > 0 || this.doc.hasCels;
+    return this.doc.pieces.length > 0 || this.doc.hasCels || this.doc.hasTrimKeys;
   }
 
   get paintOnPiece(): boolean {
@@ -321,7 +332,22 @@ export class AnimationController {
       cameraSelected: this.cameraOn,
       cameraKeys: this.doc.cameraKeys.map((k) => ({ frame: k.frame, easing: k.easing })),
       cameraMove: this.cameraOn ? this.cameraFields() : null,
+      shapes: this.keyedShapes(),
     };
+  }
+
+  /** Shapes whose trim is keyed, layer by layer, bottom to top. */
+  private keyedShapes(): ShapeKeysInfo[] {
+    const out: ShapeKeysInfo[] = [];
+    for (const layer of this.doc.vectorLayers()) {
+      if (!layer.keyed) continue;
+      let n = 0;
+      for (const s of walkShapes(layer.objects)) {
+        n++;
+        if (s.trimKeys?.length) out.push({ layerId: layer.id, id: s.id, n, keys: s.trimKeys.map((k) => ({ frame: k.frame, easing: k.easing })) });
+      }
+    }
+    return out;
   }
 
   /** The camera's move at the frame shown. */

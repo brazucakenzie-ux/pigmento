@@ -1,6 +1,7 @@
 import type { Point } from '../core/geometry';
 import type { PathCmd } from '../shapes/path';
 import { segmentsOf, type SubPath } from './pathData';
+import { ease, type Easing } from '../anim/interpolate';
 
 /**
  * Trim: how much of a shape's outline shows, from Start to End (shares of its whole length,
@@ -222,4 +223,71 @@ export function piecePoints(p: TrimPiece): Point[] | null {
   if (c.op === 'L') return [{ x: m.x, y: m.y }, { x: c.x, y: c.y }];
   if (c.op === 'C') return [{ x: m.x, y: m.y }, { x: c.x1, y: c.y1 }, { x: c.x2, y: c.y2 }, { x: c.x, y: c.y }];
   return null;
+}
+
+/** A trim keyed at one frame, with the easing on to the next key. */
+export interface TrimKey extends Trim {
+  readonly frame: number;
+  readonly easing: Easing;
+}
+
+/** Most keys one shape's trim can have. */
+export const MAX_TRIM_KEYS = 2000;
+
+/** What a shape's trim comes from: set once, or keyed on the timeline (the keys win). */
+export interface Trimmed {
+  readonly trim?: Trim;
+  readonly trimKeys?: readonly TrimKey[];
+}
+
+const lerpN = (a: number, b: number, e: number) => a + (b - a) * e;
+
+/** A shape's trim at `frame`: from its keys (held before the first and after the last), else as set (undefined: none). */
+export function trimAt(s: Trimmed, frame: number): Trim | undefined {
+  const keys = s.trimKeys;
+  if (!keys?.length) return s.trim;
+  const pick = (k: TrimKey): Trim => ({ start: k.start, end: k.end, offset: k.offset });
+  if (frame <= keys[0].frame) return pick(keys[0]);
+  const last = keys[keys.length - 1];
+  if (frame >= last.frame) return pick(last);
+  let i = 0;
+  while (keys[i + 1].frame <= frame) i++;
+  const a = keys[i];
+  const b = keys[i + 1];
+  const e = ease(a.easing, (frame - a.frame) / (b.frame - a.frame));
+  return { start: lerpN(a.start, b.start, e), end: lerpN(a.end, b.end, e), offset: lerpN(a.offset, b.offset, e) };
+}
+
+/** Keys with one set at `frame` (added from `base`, the trim there, if there's none), in frame order. */
+export function setTrimKey(keys: readonly TrimKey[], frame: number, change: Partial<Trim> & { easing?: Easing }, base: Trim): TrimKey[] {
+  const at = keys.find((k) => k.frame === frame);
+  const before = [...keys].reverse().find((k) => k.frame < frame);
+  const next: TrimKey = { ...(at ?? { ...base, frame, easing: before?.easing ?? 'linear' }), ...change, frame };
+  return [...keys.filter((k) => k.frame !== frame), next].sort((a, b) => a.frame - b.frame);
+}
+
+/** Keys without the one at `frame` (null: there isn't one). */
+export function removeTrimKey(keys: readonly TrimKey[], frame: number): TrimKey[] | null {
+  return keys.some((k) => k.frame === frame) ? keys.filter((k) => k.frame !== frame) : null;
+}
+
+/** Keys with the one at `from` moved to `to` (null: no key there, or another key is at `to`). */
+export function moveTrimKey(keys: readonly TrimKey[], from: number, to: number): TrimKey[] | null {
+  if (from === to || !keys.some((k) => k.frame === from) || keys.some((k) => k.frame === to)) return null;
+  return keys.map((k) => (k.frame === from ? { ...k, frame: to } : k)).sort((a, b) => a.frame - b.frame);
+}
+
+/**
+ * Draw on (End from 0 to 100 %) or Erase behind (Start from 0 to 100 %) from frame `from` to
+ * frame `to`, easing as given, the offset kept as it is at `from`: keys at both ends, and none
+ * left in between.
+ */
+export function drawOnKeys(s: Trimmed, mode: 'drawOn' | 'eraseBehind', from: number, to: number, easing: Easing): TrimKey[] {
+  const a = Math.min(from, to);
+  const b = Math.max(from, to);
+  const offset = trimAt(s, a)?.offset ?? 0;
+  const kept = (s.trimKeys ?? []).filter((k) => k.frame < a || k.frame > b);
+  const first: TrimKey = mode === 'drawOn' ? { start: 0, end: 0, offset, frame: a, easing } : { start: 0, end: 1, offset, frame: a, easing };
+  const last: TrimKey = mode === 'drawOn' ? { start: 0, end: 1, offset, frame: b, easing } : { start: 1, end: 1, offset, frame: b, easing };
+  return [...kept, first, ...(b > a ? [last] : [])].sort((x, y) => x.frame - y.frame);
 }

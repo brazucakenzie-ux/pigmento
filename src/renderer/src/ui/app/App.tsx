@@ -8,6 +8,7 @@ import { CanvasSizeDialog, NewImageDialog, PropertiesDialog, ResizeDialog, Rotat
 import { ExportDialog } from '../dialogs/ExportDialog';
 import { AnimExportDialog } from '../dialogs/AnimExportDialog';
 import { BoxDialog } from '../dialogs/BoxDialog';
+import { DrawOnDialog } from '../dialogs/DrawOnDialog';
 import { GradientDialog } from '../dialogs/GradientDialog';
 import { FilterDialog } from '../dialogs/FilterDialog';
 import { SettingsDialog } from '../dialogs/SettingsDialog';
@@ -117,6 +118,8 @@ function DialogHost() {
       return <RotateDialog />;
     case 'box':
       return <BoxDialog />;
+    case 'drawOn':
+      return <DrawOnDialog mode={d.mode} />;
     case 'properties':
       return <PropertiesDialog />;
     case 'editColors':

@@ -10,7 +10,7 @@ import { t, type I18nKey } from '../../i18n';
 import { Icon } from '../icons/Icon';
 import { NumberField, Segmented, Slider } from '../components/Controls';
 import { engine } from '../state/engine';
-import { useUi } from '../state/store';
+import { openDialog, useUi } from '../state/store';
 import { actions, runAction } from '../actions/actions';
 import { GradientButton, PatternPicker } from './PaintOptions';
 import { SelectedShapeParams, ShapeOption, ShapeToolParams } from './ShapeGallery';
@@ -306,8 +306,11 @@ function VectorBar() {
 
 /** How much of the selected shapes' outlines shows: Start, End and Offset, in percent of their length. */
 function TrimFields() {
-  const trim = useUi((s) => s.vectorSelection.trim);
+  const sel = useUi((s) => s.vectorSelection);
+  const length = useUi((s) => s.animation.length);
+  const trim = sel.trim;
   if (!trim) return null;
+  const keyed = sel.trimKey !== null;
   const blur = () => (document.activeElement as HTMLElement | null)?.blur();
   const field = (key: 'start' | 'end' | 'offset', labelKey: I18nKey, min: number, max: number) => {
     const label = t(labelKey);
@@ -322,9 +325,41 @@ function TrimFields() {
   return (
     <span className="opt trim-bar" role="group" aria-label={t('trim.group')} data-tip={t('trim.tip')}>
       <span>{t('trim.group')}</span>
+      {length > 1 ? (
+        <>
+          <button type="button" className="icon-btn" aria-pressed={keyed} aria-label={t(keyed ? 'trim.keyed' : 'trim.addKey')} data-tip={t(keyed ? 'trim.keyed' : 'trim.addKey')} onClick={() => !keyed && engine.keyTrim()}>
+            <Icon name={keyed ? 'keyframe' : 'keyframe-add'} size={16} />
+          </button>
+          <button type="button" className="icon-btn" aria-label={t('trim.deleteKey')} data-tip={t('trim.deleteKey')} disabled={!keyed} onClick={() => engine.unkeyTrim()}>
+            <Icon name="keyframe-delete" size={16} />
+          </button>
+        </>
+      ) : null}
       {field('start', 'trim.start', 0, 100)}
       {field('end', 'trim.end', 0, 100)}
       {field('offset', 'trim.offset', -100000, 100000)}
+      {sel.trimKey ? (
+        <label className="opt">
+          <span>{t('trim.easing')}</span>
+          <select className="select" aria-label={t('trim.easing')} value={sel.trimKey.easing} onChange={(e) => engine.setTrimEasing(e.target.value as Easing)}>
+            {EASINGS.map((e) => (
+              <option key={e} value={e}>
+                {t(`easing.${e}` as I18nKey)}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+      {length > 1 ? (
+        <>
+          <button type="button" className="btn" data-tip={t('trim.drawOnTip')} onClick={() => openDialog({ kind: 'drawOn', mode: 'drawOn' })}>
+            {t('trim.drawOn')}
+          </button>
+          <button type="button" className="btn" data-tip={t('trim.eraseBehindTip')} onClick={() => openDialog({ kind: 'drawOn', mode: 'eraseBehind' })}>
+            {t('trim.eraseBehind')}
+          </button>
+        </>
+      ) : null}
     </span>
   );
 }

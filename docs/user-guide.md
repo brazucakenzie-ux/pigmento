@@ -193,6 +193,12 @@ Dragging the piece slides it along its path (Shift: in steps of 10 %), and the a
 
 Edit the path at any time (move its points, reshape it) and the piece follows the new one. Set **Path** to **None**, or delete the path, and the piece keeps moving exactly as it did, as ordinary keyframes (one on each frame). A piece that follows another piece can't follow a path too, but the top of its tree can: hinge pieces onto one that follows a path, and the whole tree goes along it.
 
+### Drawing a line on, or erasing it behind
+
+A shape's **Trim** (see Shapes) can change over the timeline, so a route draws itself across a map or a fuse burns down. With the shape selected (Move tool), press the key button beside Trim to key it at the frame shown; after that, changing Start, End or Offset keys it at whatever frame you're on, with the usual easings. The shape gets a row under its layer in the timeline, where its diamonds are dragged, retimed and deleted like a piece's.
+
+**Draw on…** keys the outline growing from nothing to all of it between two frames (from the frame shown to the end, unless you change them), and **Erase behind…** keys it being taken away from its start. Keyframes of the trim in between are replaced; one undo step either way.
+
 Already animated a piece with keyframes? **Motion path to shape** (the pen button in the options bar, or on the Animate tab) turns its motion path, bends and all, into a path on a new shape layer just under the piece's layer, and the piece then follows it with the same timing. Style the path like any shape, or reshape it with the Pen tool, and the motion changes with it. A piece's stops become single points it waits at, and a motion path that ends where it started becomes a closed loop. It's one undo step.
 
 ### Facing the way it goes

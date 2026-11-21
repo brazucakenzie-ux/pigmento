@@ -467,7 +467,7 @@ Decisions (agreed for Stops 7A and 7B; the rest proposed, to agree with the user
 
 **Stop 7B — Draw on and erase behind**
 - [x] 7.5 Trim: Start, End and Offset on any path or shape outline on a shape layer, dashes and arrowheads included (an arrowhead stays at the visible end), drawn the same on screen and in exports (+ unit tests, golden sheet)
-- [ ] 7.6 Keyed shape objects: a shape object's trim is keyed on the timeline, with its row under its layer, and Draw on and Erase behind fill in the keys over a chosen span (+ unit tests)
+- [x] 7.6 Keyed shape objects: a shape object's trim is keyed on the timeline, with its row under its layer, and Draw on and Erase behind fill in the keys over a chosen span (+ unit tests)
 - [ ] 7.7 Tied to a piece: a followed path's Start (Erase behind) or End (Draw on) can track the piece's progress, so the line vanishes right behind it or is drawn just ahead of it, with a gap you set (+ e2e: a rocket on a dotted path that disappears behind it)
 - [ ] 7.8 `.pigm` version 4 for following, face direction and trim; limits on every new number; documented in `docs/project-format.md` (+ round-trip unit test, grown with 7C and 7D)
 

@@ -8,6 +8,7 @@ import type { VectorNode, VectorShape } from '../vector/model';
 import { toCmds } from '../vector/pathData';
 import { arrowParts, isStrokeOnly, lineStyleOf, shapeFillRule, shapeFrame, trimmedLine, trimmedOutline } from '../vector/render';
 import { dashArray, gradientStops, linearEnds, MITER_LIMIT, type ShapeGradient } from '../vector/style';
+import { trimAt } from '../vector/trim';
 
 /**
  * SVG export: shape layers become real paths (with their gradients, patterns, pictures, dashes
@@ -44,7 +45,11 @@ class Writer {
   defs: string[] = [];
   private n = 0;
 
-  constructor(private readonly deps: SvgExportDeps) {}
+  constructor(
+    private readonly deps: SvgExportDeps,
+    /** The frame shown: keyed trims are written as they are there. */
+    private readonly frame = 0,
+  ) {}
 
   id(prefix: string): string {
     return `${prefix}${++this.n}`;
@@ -82,7 +87,8 @@ class Writer {
     return `url(#${id})`;
   }
 
-  async shape(s: VectorShape): Promise<string> {
+  async shape(shape: VectorShape): Promise<string> {
+    const s = shape.trimKeys?.length ? { ...shape, trim: trimAt(shape, this.frame) } : shape;
     const st = s.style;
     const line = isStrokeOnly(s);
     const fills = !line && (st.mode === 'fill' || st.mode === 'both');
@@ -181,7 +187,7 @@ class Writer {
 }
 
 export async function documentToSvg(doc: PaintDocument, deps: SvgExportDeps): Promise<string> {
-  const w = new Writer(deps);
+  const w = new Writer(deps, doc.timeline.frame);
   const body: string[] = [];
   if (doc.paper) body.push(`<rect width="${doc.width}" height="${doc.height}" ${paintAttr('fill', doc.paper)}/>`);
   for (const l of doc.layers) body.push(await w.layer(l));

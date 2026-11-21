@@ -15,6 +15,9 @@ import { arrowHead, dashArray, gradientStops, hasArrows, lineDefaults, linearEnd
 import { shapeOutline } from './convert';
 import { measureOutline, piecePoints, trimPieces, type Trim, type TrimPiece } from './trim';
 
+/** A shape's trim at the frame being drawn (for shapes whose trim is keyed). */
+export type TrimResolver = (s: VectorShape) => Trim | undefined;
+
 /** What's needed to draw a shape (a live ShapeObject or a vector object). */
 export interface ShapeGeom {
   readonly shape: ShapeKind;
@@ -427,16 +430,16 @@ export function drawVectorShape(ctx: Ctx, s: VectorShape, docW: number, docH: nu
   ctx.drawImage(scratch, 0, 0, area.w, area.h, area.x, area.y, area.w, area.h);
 }
 
-export function drawNodes(ctx: Ctx, nodes: readonly VectorNode[], docW: number, docH: number): void {
-  for (const s of walkShapes(nodes)) drawVectorShape(ctx, s, docW, docH);
+export function drawNodes(ctx: Ctx, nodes: readonly VectorNode[], docW: number, docH: number, trimAt: TrimResolver | null = null): void {
+  for (const s of walkShapes(nodes)) drawVectorShape(ctx, trimAt ? { ...s, trim: trimAt(s) } : s, docW, docH);
 }
 
 /** The objects as pixels (for blending, export, flattening and the colour picker). */
-export function rasterizeNodes(nodes: readonly VectorNode[], w: number, h: number): Surface {
+export function rasterizeNodes(nodes: readonly VectorNode[], w: number, h: number, trimAt: TrimResolver | null = null): Surface {
   if (nodes.length === 0) return new Surface(w, h);
   const c = new OffscreenCanvas(w, h);
   const ctx = c.getContext('2d', { willReadFrequently: true })!;
-  drawNodes(ctx, nodes, w, h);
+  drawNodes(ctx, nodes, w, h, trimAt);
   const s = Surface.fromRGBA(w, h, ctx.getImageData(0, 0, w, h).data);
   s.compact();
   return s;

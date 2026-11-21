@@ -7,7 +7,7 @@ import { defaultCamera, defaultLight, spaceOf, type Camera, type Light, type Spa
 import { cameraMoveAt, type CameraKey } from '../anim/cameraMove';
 import type { Selection } from './Selection';
 import type { Guide } from './guides';
-import type { VectorNode } from '../vector/model';
+import { hasTrimKeys, type VectorNode } from '../vector/model';
 
 /** Canvas 2D composite operation names; also implemented in JS (raster/blend.ts). */
 export type BlendMode =
@@ -152,12 +152,31 @@ export class VectorLayer extends LayerBase {
   private cache: Surface | null = null;
   /** Turns objects into pixels; installed by the engine (it needs a canvas). */
   static rasterizer: ((l: VectorLayer) => Surface) | null = null;
+  /** Some shape on it has its trim keyed, so it looks different from frame to frame. */
+  private keyedTrim = false;
+  /** The frame its pixels show (see showFrame). */
+  frame = 0;
 
   constructor(name: string, width: number, height: number, objects: VectorNode[] = [], id?: string) {
     super(name, id, 'shapes');
     this.width = width;
     this.height = height;
     this.list = objects;
+    this.keyedTrim = hasTrimKeys(objects);
+  }
+
+  /** Some shape on it has its trim keyed (it's drawn for the frame shown). */
+  get keyed(): boolean {
+    return this.keyedTrim;
+  }
+
+  /** Show the objects as they are at `frame` (only keyed ones change). */
+  showFrame(frame: number): void {
+    if (frame === this.frame) return;
+    this.frame = frame;
+    if (!this.keyedTrim) return;
+    this.version++;
+    this.cache = null;
   }
 
   get objects(): readonly VectorNode[] {
@@ -166,6 +185,7 @@ export class VectorLayer extends LayerBase {
 
   setObjects(objects: readonly VectorNode[]): void {
     this.list = [...objects];
+    this.keyedTrim = hasTrimKeys(this.list);
     this.version++;
     this.cache = null;
   }
@@ -289,6 +309,12 @@ export class PaintDocument {
   /** Put each frame-by-frame layer's drawing for `frame` on show. */
   showFrame(frame: number): void {
     for (const l of this.rasterLayers()) l.showFrame(frame);
+    for (const l of this.vectorLayers()) l.showFrame(frame);
+  }
+
+  /** True if any shape's trim is keyed on the timeline. */
+  get hasTrimKeys(): boolean {
+    return this.vectorLayers().some((l) => l.keyed);
   }
 
   /** True if any pixel layer has frame-by-frame drawings. */
