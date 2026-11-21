@@ -271,6 +271,7 @@ export const animEn = {
   'trail.emission': 'Emission',
   'trail.emissionTip': 'How much it gives off at this frame (0: off); keyed here, so smoke can start at ignition and stop at burn-out',
   'trail.addKey': 'Key the emission at this frame',
+  'trail.easing': 'Easing',
   'trail.keyed': 'The emission has a key at this frame',
   'trail.deleteKey': 'Delete the emission key at this frame',
   'trail.keyedAt': 'Keyed at frames {frames}',

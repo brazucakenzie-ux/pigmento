@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import type { TrailFields } from '@engine/anim/AnimationController';
+import { EASINGS, type Easing } from '@engine/anim/interpolate';
 import { MAX_TRAILS, TRAIL_PRESETS, type Trail, type TrailPreset, type TrailStop } from '@engine/anim/trail';
 import { brushRegistry } from '@engine/brush/BrushRegistry';
 import type { RGBA } from '@engine/core/color';
@@ -202,6 +203,23 @@ function TrailSettings({ pieceId, trail }: { pieceId: string; trail: TrailFields
           <Icon name="keyframe-delete" size={16} />
         </button>
         {num('trail.emission', trail.emission * 100, '%', 0, 100, 0, (v) => engine.anim.keyEmission(pieceId, trail.id, frame, v / 100), 'trail.emissionTip')}
+        {trail.keyed ? (
+          <label className="opt">
+            <span>{t('trail.easing')}</span>
+            <select
+              className="select"
+              aria-label={t('trail.easing')}
+              value={trail.keys.find((k) => k.frame === frame)?.easing ?? 'linear'}
+              onChange={(e) => engine.anim.keyEmission(pieceId, trail.id, frame, trail.emission, e.target.value as Easing)}
+            >
+              {EASINGS.map((e) => (
+                <option key={e} value={e}>
+                  {t(`easing.${e}` as I18nKey)}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <span className="opt-hint">{trail.keys.length ? t('trail.keyedAt', { frames: trail.keys.map((k) => k.frame + 1).join(', ') }) : t('trail.notKeyed')}</span>
       </div>
       <p className="opt-hint">{t('trail.emitterHint')}</p>
