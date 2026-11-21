@@ -207,12 +207,15 @@ interface Birth {
   /** Frame (fractions included) it's born at. */
   readonly born: number;
   /** Where it's born. */
-  readonly p: Vec3;
-  /** Which way, and how fast (pixels a frame), the emitter was going. */
-  readonly heading: number;
-  readonly speed: number;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  /** The slice it's born in (which way, and how fast, the emitter was going then). */
+  readonly slice: number;
   /** Seeded numbers for it (0 … 1): scatter direction, scatter amount, turn. */
-  readonly r: readonly [number, number, number];
+  readonly r0: number;
+  readonly r1: number;
+  readonly r2: number;
 }
 
 /** Seed stream for births by time (apart from births by distance). */
@@ -233,22 +236,14 @@ export function trailPuffs(t: Trail, at: EmitterPath, frame: number, fps: number
   const last = Math.floor(frame * per);
   const pos: Vec3[] = [];
   for (let i = first; i <= last + 1; i++) pos.push(at(i * dt));
-  const slice = (time: number): { i: number; f: number } => {
-    const x = time * per;
-    const i = Math.min(last, Math.max(first, Math.floor(x)));
-    return { i, f: x - i };
-  };
-  const motion = (i: number): { heading: number; speed: number } => {
+  // Born f of the way through slice i: where.
+  const birth = (born: number, i: number, f: number, r0: number, r1: number, r2: number): Birth => {
     const a = pos[i - first];
     const b = pos[i - first + 1];
-    return { heading: Math.atan2(b[1] - a[1], b[0] - a[0]), speed: Math.hypot(b[0] - a[0], b[1] - a[1]) * per };
-  };
-  const place = (i: number, f: number): Vec3 => {
-    const a = pos[i - first];
-    const b = pos[i - first + 1];
-    return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+    return { born, x: a[0] + (b[0] - a[0]) * f, y: a[1] + (b[1] - a[1]) * f, z: a[2] + (b[2] - a[2]) * f, slice: i, r0, r1, r2 };
   };
   const births: Birth[] = [];
+  const seedT = t.seed ^ TIME_STREAM;
   // By time: one every 1/rate seconds.
   if (t.rate > 0) {
     const step = fps / Math.min(MAX_RATE, t.rate);
@@ -258,9 +253,10 @@ export function trailPuffs(t: Trail, at: EmitterPath, frame: number, fps: number
       const born = k * step;
       if (frame - born >= life || born > frame) continue;
       const amount = emissionAt(t, emissionFrame(born));
-      if (amount <= 0 || (amount < 1 && trailRandom(t.seed ^ TIME_STREAM, k, -1) >= amount)) continue;
-      const { i, f } = slice(born);
-      births.push({ born, p: place(i, f), ...motion(i), r: [trailRandom(t.seed ^ TIME_STREAM, k, 1), trailRandom(t.seed ^ TIME_STREAM, k, 2), trailRandom(t.seed ^ TIME_STREAM, k, 3)] });
+      if (amount <= 0 || (amount < 1 && trailRandom(seedT, k, -1) >= amount)) continue;
+      const x = born * per;
+      const i = Math.min(last, Math.max(first, Math.floor(x)));
+      births.push(birth(born, i, x - i, trailRandom(seedT, k, 1), trailRandom(seedT, k, 2), trailRandom(seedT, k, 3)));
     }
   }
   // By distance: in each slice, the distance moved over the spacing.
@@ -272,31 +268,49 @@ export function trailPuffs(t: Trail, at: EmitterPath, frame: number, fps: number
       if (amount <= 0) continue;
       const due = (amount * Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2])) / t.spacing;
       const n = Math.min(MAX_LIVE_PUFFS, Math.floor(due) + (trailRandom(t.seed, i, -1) < due - Math.floor(due) ? 1 : 0));
-      const m = motion(i);
       for (let j = 0; j < n; j++) {
         const f = (j + trailRandom(t.seed, i, j * 4)) / n;
         const born = (i + f) * dt;
         if (frame - born >= life || born > frame) continue;
-        births.push({ born, p: place(i, f), ...m, r: [trailRandom(t.seed, i, j * 4 + 1), trailRandom(t.seed, i, j * 4 + 2), trailRandom(t.seed, i, j * 4 + 3)] });
+        births.push(birth(born, i, f, trailRandom(t.seed, i, j * 4 + 1), trailRandom(t.seed, i, j * 4 + 2), trailRandom(t.seed, i, j * 4 + 3)));
       }
     }
   }
-  births.sort((x, y) => x.born - y.born);
+  // Each stream is in order already; only both together need sorting.
+  if (t.rate > 0 && t.spacing > 0) births.sort((x, y) => x.born - y.born);
   const kept = births.length > MAX_LIVE_PUFFS ? births.slice(births.length - MAX_LIVE_PUFFS) : births;
+  // Which way, and how fast, the emitter went in each slice (only stretched puffs need it), worked out once a slice.
+  const heading = new Float64Array(last - first + 1).fill(Number.NaN);
+  const speed = new Float64Array(last - first + 1);
+  const driftX = Math.cos(t.driftAngle) * t.drift;
+  const driftY = Math.sin(t.driftAngle) * t.drift;
   return kept.map((b) => {
     const age = frame - b.born;
     const u = age / life;
     const secs = age / fps;
     // Drifting, and scattered its own way.
-    const dir = b.r[0] * Math.PI * 2;
-    const scatter = t.spread * b.r[1];
-    const vx = Math.cos(t.driftAngle) * t.drift + Math.cos(dir) * scatter;
-    const vy = Math.sin(t.driftAngle) * t.drift + Math.sin(dir) * scatter;
+    const dir = b.r0 * Math.PI * 2;
+    const scatter = t.spread * b.r1;
+    const vx = driftX + Math.cos(dir) * scatter;
+    const vy = driftY + Math.sin(dir) * scatter;
+    let angle = b.r2 * Math.PI * 2;
+    let stretch = 1;
+    if (t.stretch) {
+      const k = b.slice - first;
+      if (Number.isNaN(heading[k])) {
+        const p = pos[k];
+        const q = pos[k + 1];
+        heading[k] = Math.atan2(q[1] - p[1], q[0] - p[0]);
+        speed[k] = Math.hypot(q[0] - p[0], q[1] - p[1]) * per;
+      }
+      angle = heading[k];
+      stretch = 1 + Math.min(20, (speed[k] * fps * 0.08) / Math.max(1, t.size));
+    }
     return {
-      at: [b.p[0] + vx * secs, b.p[1] + vy * secs, b.p[2]],
+      at: [b.x + vx * secs, b.y + vy * secs, b.z],
       size: t.size * (1 + (t.growth - 1) * u),
-      stretch: t.stretch ? 1 + Math.min(20, (b.speed * fps * 0.08) / Math.max(1, t.size)) : 1,
-      angle: t.stretch ? b.heading : b.r[2] * Math.PI * 2,
+      stretch,
+      angle,
       opacity: Math.max(0, t.opacity * (1 - t.fade * u)),
       color: colorAt(t.colors, u),
     };

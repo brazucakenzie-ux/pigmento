@@ -77,6 +77,8 @@ export interface PigmentoTestHook {
   trailSheet(): Promise<{ ids: string[]; w: number; h: number; png: number[] }>;
   selectCamera(): void;
   perfBoxScene(background?: boolean): { group: string; background: string | null; width: number };
+  perfLoopsScene(parts?: string): { trails: number; spinning: number };
+  livePuffs(frame: number): number[];
   dragTimes(id: string, steps: number): number[];
   stillExportMs(): number;
   perfStart(): void;
