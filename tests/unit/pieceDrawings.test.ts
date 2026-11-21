@@ -120,3 +120,94 @@ describe('drawing a piece’s drawings', () => {
     expect(paintedAt(p, 10)).toEqual([30, 30, 220, 255]);
   });
 });
+
+describe('a piece’s drawings in the animation controller', () => {
+  /** A red 10 × 10 piece on the first layer, added like Animate selection does. */
+  function redPiece() {
+    const ctx = setup();
+    const red = new Surface(10, 10);
+    red.fillRect({ x: 0, y: 0, w: 10, h: 10 }, RED);
+    const p = ctx.anim.add(red, { x: 20, y: 20, w: 10, h: 10 }, ctx.doc.layers[0].id)!;
+    return { ...ctx, p, red };
+  }
+
+  it('starts drawings on a still piece, blank or copied, as undo steps that never key its moves', () => {
+    const { anim, history, p, red } = redPiece();
+    anim.setFrame(3);
+    expect(anim.newDrawing(p.id, true)).toBe(true);
+    const live = anim.piece(p.id)!;
+    expect(live.drawings!.map((c) => c.start)).toEqual([0, 3]);
+    const copy = live.drawings![1].surface;
+    expect(copy).not.toBe(red);
+    expect(copy.getPixel(4, 4)).toEqual(RED);
+    expect(live.src).toBe(copy);
+    expect(live.keyframes).toHaveLength(1);
+    // A blank one later, the piece's size.
+    anim.setFrame(6);
+    expect(anim.newDrawing(p.id, false)).toBe(true);
+    const blank = anim.piece(p.id)!.drawings![2].surface;
+    expect([blank.width, blank.height]).toEqual([10, 10]);
+    expect(blank.contentBounds()).toBeNull();
+    expect(anim.info().pieces[0].drawings).toEqual([0, 3, 6]);
+    history.undo();
+    history.undo();
+    expect(anim.piece(p.id)!.drawings).toBeNull();
+    expect(anim.piece(p.id)!.src).toBe(red);
+  });
+
+  it('refuses a drawing where one starts, on a repeat, on a group or a locked layer', () => {
+    const { anim, doc, p } = redPiece();
+    expect(anim.newDrawing(p.id, false)).toBe(false);
+    anim.setFrame(2);
+    anim.newDrawing(p.id, true);
+    anim.setDrawingLoop(p.id, 'cycle');
+    expect(anim.piece(p.id)!.drawingLoop).toEqual({ mode: 'cycle', end: 4 });
+    anim.setFrame(9);
+    expect(anim.newDrawing(p.id, true)).toBe(false);
+    doc.layers[0].locked = true;
+    expect(anim.clearDrawing(p.id)).toBe(false);
+    expect(anim.newDrawing(p.id, false)).toBe(false);
+  });
+
+  it('loop, move, clear and delete, tidying up when one drawing is left', () => {
+    const { anim, p, red } = redPiece();
+    anim.setFrame(3);
+    anim.newDrawing(p.id, true);
+    expect(anim.setDrawingLoop(p.id, 'pingpong')).toBe(true);
+    expect(anim.piece(p.id)!.drawingLoop).toEqual({ mode: 'pingpong', end: 6 });
+    expect(anim.setLoopEnd(p.id, 8)).toBe(true);
+    expect(anim.info().pieces[0].drawingLoop).toEqual({ mode: 'pingpong', end: 8 });
+    // The second drawing starts at frame 5 instead: the loop still ends after it.
+    expect(anim.moveDrawing(p.id, 1, 5)).toBe(true);
+    expect(anim.piece(p.id)!.drawings!.map((c) => c.start)).toEqual([0, 5]);
+    anim.setFrame(5);
+    expect(anim.clearDrawing(p.id)).toBe(true);
+    expect(anim.piece(p.id)!.src.contentBounds()).toBeNull();
+    expect(anim.piece(p.id)!.drawings![0].surface).toBe(red);
+    // Deleting it leaves one drawing: a still piece again, with nothing to loop.
+    expect(anim.deleteDrawing(p.id)).toBe(true);
+    const live = anim.piece(p.id)!;
+    expect(live.drawings).toBeNull();
+    expect(live.drawingLoop).toBeNull();
+    expect(live.src).toBe(red);
+  });
+
+  it('come with a piece added with its drawings, its loop and the one on show', () => {
+    const ctx = setup();
+    const a = new Surface(10, 10);
+    const b = new Surface(10, 10);
+    ctx.anim.setFrame(2);
+    const p = ctx.anim.add(a, { x: 0, y: 0, w: 10, h: 10 }, ctx.doc.layers[0].id, 'history.animateSelection', false, {
+      cels: [
+        { start: 0, surface: a },
+        { start: 2, surface: b },
+      ],
+      loop: { mode: 'cycle', end: 4 },
+    })!;
+    expect(p.drawings!.map((c) => c.surface)).toEqual([a, b]);
+    expect(p.drawingLoop).toEqual({ mode: 'cycle', end: 4 });
+    expect(p.src).toBe(b);
+    ctx.history.undo();
+    expect(ctx.doc.pieces).toHaveLength(0);
+  });
+});

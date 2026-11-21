@@ -13,7 +13,7 @@ import { NumberField } from '../components/Controls';
 import { Menu, MenuItem, MenuSeparator, SubMenu } from '../components/Menu';
 import { engine } from '../state/engine';
 import { updateSettings, useUi } from '../state/store';
-import { action, addDrawing, runAction, setOnion } from '../actions/actions';
+import { action, addDrawing, ownerDrawings, runAction, setOnion } from '../actions/actions';
 import { useShortcut } from '../actions/keymap';
 
 /** Width of one frame on the timeline, in CSS px. */
@@ -385,6 +385,17 @@ function ShapeRow({ shape, name, frame }: { shape: ShapeKeysInfo; name: string; 
   );
 }
 
+/** Make a layer the active one (picking its row). */
+function selectLayer(id: string): void {
+  if (useUi.getState().layers.activeId !== id) engine.layers.setActive(id);
+}
+
+/** Pick a piece's drawings row: the piece, painted on, so the drawing commands and painting act on its drawings. */
+function selectPieceDrawings(id: string): void {
+  engine.anim.select(id);
+  engine.anim.setPaintOnPiece(true);
+}
+
 /** A spinning piece's row under its own: the keys of its spin's speeds (not its keyframes). */
 function SpinRow({ piece, name, selected, frame }: { piece: PieceInfo; name: string; selected: boolean; frame: number }) {
   return (
@@ -606,10 +617,10 @@ function pixelLayers(tree: LayerNode[], keyed: ReadonlySet<string> = new Set()):
   return out;
 }
 
-/** The frame commands for one layer at the frame shown. */
+/** The frame commands for one layer's (or piece's) drawings at the frame shown. */
 function DrawingMenu({ layerId, anchor, onClose }: { layerId: string; anchor: RefObject<HTMLElement | null>; onClose: () => void }) {
-  const cels = useUi((s) => s.animation.cels[layerId]);
-  const loop = useUi((s) => s.animation.celLoops[layerId]?.mode ?? null);
+  const cels = useUi((s) => ownerDrawings(s, layerId).starts);
+  const loop = useUi((s) => ownerDrawings(s, layerId).loop?.mode ?? null);
   return (
     <Menu anchor={anchor} open onClose={onClose} label={t('timeline.celMenu')}>
       <MenuItem label={t('action.newDrawing')} icon="new" close={onClose} onSelect={() => void addDrawing(layerId, false)} />
@@ -629,8 +640,11 @@ function DrawingMenu({ layerId, anchor, onClose }: { layerId: string; anchor: Re
   );
 }
 
-/** A pixel layer's row: one bar for a still layer, a block per drawing for a frame-by-frame one. */
-function LayerRow({ layer, starts, loop, length, frame, active }: { layer: LayerNode; starts: number[] | undefined; loop: CelLoop | undefined; length: number; frame: number; active: boolean }) {
+/**
+ * A pixel layer's row: one bar for a still layer, a block per drawing for a frame-by-frame one.
+ * A piece drawn frame by frame has one too, under it (`kind` adds its class; `select` picks it).
+ */
+function LayerRow({ layer, select, kind = '', starts, loop, length, frame, active }: { layer: { id: string; name: string }; select(): void; kind?: string; starts: number[] | undefined; loop: CelLoop | undefined; length: number; frame: number; active: boolean }) {
   const [drag, setDrag] = useState<{ index: number; to: number } | null>(null);
   const [endDrag, setEndDrag] = useState<number | null>(null);
   const [menu, setMenu] = useState(false);
@@ -644,7 +658,7 @@ function LayerRow({ layer, starts, loop, length, frame, active }: { layer: Layer
     row.current?.querySelector<HTMLElement>(`.tl-cel-start[data-frame="${f}"]`)?.focus();
   }, [starts]);
   const pick = (f: number) => {
-    if (useUi.getState().layers.activeId !== layer.id) engine.layers.setActive(layer.id);
+    select();
     engine.anim.setFrame(f);
   };
   const frameAt = (clientX: number, el: HTMLElement) => {
@@ -701,7 +715,7 @@ function LayerRow({ layer, starts, loop, length, frame, active }: { layer: Layer
   return (
     <div
       ref={row}
-      className={`tl-row tl-layer-row ${active ? 'selected' : ''}`}
+      className={`tl-row tl-layer-row ${kind} ${active ? 'selected' : ''}`}
       role="group"
       aria-label={layer.name}
       onPointerDown={(e) => e.button === 0 && pick(frameAt(e.clientX, e.currentTarget))}
@@ -801,11 +815,12 @@ export function Timeline() {
   // The camera, then each layer and the pieces on it (top first, as the Layers panel stacks them),
   // the pieces linked under one indented beneath it.
   const pieceIndex = new Map(anim.pieces.map((p, i) => [p.id, i]));
-  const rows: ({ kind: 'camera' } | { kind: 'layer'; layer: LayerNode } | { kind: 'piece' | 'spin'; piece: PieceInfo; index: number; level: number } | { kind: 'shape'; shape: ShapeKeysInfo; name: string })[] = [];
+  const rows: ({ kind: 'camera' } | { kind: 'layer'; layer: LayerNode } | { kind: 'piece' | 'spin' | 'drawings'; piece: PieceInfo; index: number; level: number } | { kind: 'shape'; shape: ShapeKeysInfo; name: string })[] = [];
   // A spinning piece's speeds get a row of their own beneath it.
   const pushPiece = (piece: PieceInfo, level: number) => {
     const index = pieceIndex.get(piece.id)!;
     rows.push({ kind: 'piece', piece, index, level });
+    if (piece.drawings) rows.push({ kind: 'drawings', piece, index, level });
     if (piece.spinKeys.length) rows.push({ kind: 'spin', piece, index, level });
   };
   if (anim.pieces.length) rows.push({ kind: 'camera' });
@@ -963,6 +978,13 @@ export function Timeline() {
                     <span className="tl-name-text">{r.name}</span>
                   </button>
                 </div>
+              ) : r.kind === 'drawings' ? (
+                <div key={`drawings-${r.piece.id}`} role="listitem" className="tl-name-row tl-piece-name" data-level={r.level + 1} style={{ paddingInlineStart: (r.level + 1) * 12 }}>
+                  <button type="button" className={`tl-name ${r.piece.id === anim.selectedId && anim.paintOnPiece ? 'selected' : ''}`} data-tip={t('timeline.pieceDrawingsTip')} onClick={() => selectPieceDrawings(r.piece.id)}>
+                    <Icon name="layers" size={13} />
+                    <span className="tl-name-text">{t('timeline.pieceDrawings', { piece: pieceLabel(r.piece, r.index) })}</span>
+                  </button>
+                </div>
               ) : r.kind === 'spin' ? (
                 <div key={`spin-${r.piece.id}`} role="listitem" className="tl-name-row tl-piece-name" data-level={r.level + 1} style={{ paddingInlineStart: (r.level + 1) * 12 }}>
                   <button
@@ -1010,7 +1032,19 @@ export function Timeline() {
               ) : r.kind === 'layer' && r.layer.kind === 'vector' ? (
                 <ShapeLayerRow key={r.layer.id} layer={r.layer} length={anim.length} active={r.layer.id === activeId} />
               ) : r.kind === 'layer' ? (
-                <LayerRow key={r.layer.id} layer={r.layer} starts={anim.cels[r.layer.id]} loop={anim.celLoops[r.layer.id]} length={anim.length} frame={anim.frame} active={r.layer.id === activeId} />
+                <LayerRow key={r.layer.id} layer={r.layer} select={() => selectLayer(r.layer.id)} starts={anim.cels[r.layer.id]} loop={anim.celLoops[r.layer.id]} length={anim.length} frame={anim.frame} active={r.layer.id === activeId} />
+              ) : r.kind === 'drawings' ? (
+                <LayerRow
+                  key={`drawings-${r.piece.id}`}
+                  layer={{ id: r.piece.id, name: t('timeline.pieceDrawings', { piece: pieceLabel(r.piece, r.index) }) }}
+                  select={() => selectPieceDrawings(r.piece.id)}
+                  kind="tl-drawings-row"
+                  starts={r.piece.drawings ?? undefined}
+                  loop={r.piece.drawingLoop ?? undefined}
+                  length={anim.length}
+                  frame={anim.frame}
+                  active={r.piece.id === anim.selectedId && anim.paintOnPiece}
+                />
               ) : r.kind === 'spin' ? (
                 <SpinRow key={`spin-${r.piece.id}`} piece={r.piece} name={t('spin.row', { piece: pieceLabel(r.piece, r.index) })} selected={r.piece.id === anim.selectedId} frame={anim.frame} />
               ) : (

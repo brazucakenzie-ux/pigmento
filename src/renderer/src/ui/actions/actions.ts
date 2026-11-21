@@ -2,6 +2,7 @@ import { exportSvgFile, importSvgFile } from '../services/svg';
 import { exportShapePack, hasCustomShapes, importShapePack } from '../services/shapes';
 import { brushTarget, duplicateBrush, exportBrushPack, hasCustomBrushes, importBrushPack, isCustomBrush } from '../services/brushes';
 import type { Settings, ThemeMode } from '@shared/settings';
+import type { CelLoop } from '@engine/anim/cels';
 import { toolRegistry } from '@engine/tools/ToolRegistry';
 import { reportEngineError } from '@engine/input/InputController';
 import type { I18nKey } from '../../i18n';
@@ -60,6 +61,23 @@ function findLayerKind(tree: UiState['layers']['tree'], id: string): string | nu
   }
   return null;
 }
+
+/** What the drawing commands act on: the piece being painted on (Paint on piece), or else the active layer. */
+export function drawingOwner(s: UiState = useUi.getState()): string {
+  const a = s.animation;
+  return a.paintOnPiece && a.selectedId ? a.selectedId : s.layers.activeId;
+}
+
+/** Where an owner's drawings start and how they loop (a layer's or a piece's; none when it's still). */
+export function ownerDrawings(s: UiState, id: string): { starts: number[] | undefined; loop: CelLoop | undefined } {
+  const a = s.animation;
+  const p = a.pieces.find((q) => q.id === id);
+  if (p) return { starts: p.drawings ?? undefined, loop: p.drawingLoop ?? undefined };
+  return { starts: a.cels[id], loop: a.celLoops[id] };
+}
+
+/** The drawing commands have something to act on: a pixel layer, or a piece being painted on. */
+const canDraw = (s: UiState) => (s.animation.paintOnPiece && s.animation.selectedId !== null) || rasterActive(s);
 
 /**
  * A new drawing (blank or a copy) at the current frame, once there's memory for one: a drawing
@@ -282,11 +300,11 @@ const base: Action[] = [
     },
     enabled: (s) => s.animation.pieces.length > 0 || Object.keys(s.animation.cels).length > 0,
   },
-  // Frame-by-frame drawings on the active pixel layer, at the frame shown.
-  { id: 'newDrawing', labelKey: 'action.newDrawing', icon: 'new', group: 'animation', run: () => void addDrawing(engine.doc.activeId, false), enabled: rasterActive },
-  { id: 'copyDrawing', labelKey: 'action.copyDrawing', icon: 'copy', group: 'animation', run: () => void addDrawing(engine.doc.activeId, true), enabled: rasterActive },
-  { id: 'clearDrawing', labelKey: 'action.clearDrawing', icon: 'eraser', group: 'animation', run: () => void engine.anim.clearDrawing(engine.doc.activeId), enabled: rasterActive },
-  { id: 'deleteDrawing', labelKey: 'action.deleteDrawing', icon: 'delete', group: 'animation', run: () => void engine.anim.deleteDrawing(engine.doc.activeId), enabled: (s) => s.animation.cels[s.layers.activeId] !== undefined },
+  // Frame-by-frame drawings on the active pixel layer (or the piece being painted on), at the frame shown.
+  { id: 'newDrawing', labelKey: 'action.newDrawing', icon: 'new', group: 'animation', run: () => void addDrawing(drawingOwner(), false), enabled: canDraw },
+  { id: 'copyDrawing', labelKey: 'action.copyDrawing', icon: 'copy', group: 'animation', run: () => void addDrawing(drawingOwner(), true), enabled: canDraw },
+  { id: 'clearDrawing', labelKey: 'action.clearDrawing', icon: 'eraser', group: 'animation', run: () => void engine.anim.clearDrawing(drawingOwner()), enabled: canDraw },
+  { id: 'deleteDrawing', labelKey: 'action.deleteDrawing', icon: 'delete', group: 'animation', run: () => void engine.anim.deleteDrawing(drawingOwner()), enabled: (s) => ownerDrawings(s, drawingOwner(s)).starts !== undefined },
   { id: 'onionSkin', labelKey: 'action.onionSkin', icon: 'layers', group: 'animation', run: () => setOnion({ onion: !useUi.getState().settings.anim.onion }), checked: (s) => s.settings.anim.onion },
   { id: 'animPlay', labelKey: 'action.animPlay', icon: 'play', group: 'animation', shortcut: ['Ctrl+Space'], run: () => engine.anim.togglePlay(), checked: (s) => s.animation.playing },
   { id: 'animFirstFrame', labelKey: 'action.animFirstFrame', icon: 'frame-first', group: 'animation', run: () => engine.anim.setFrame(0) },

@@ -10,11 +10,11 @@ import { AnimationController, type AnimHost, type AnimationInfo } from './anim/A
 import { compositeLayers } from './raster/blend';
 import { frameExtras } from './anim/pieceRaster';
 import { motionToPath, tiedTrimAt } from './anim/follow';
-import type { Piece } from './anim/piece';
+import { pieceSurface, type Piece } from './anim/piece';
 import { docToPixel } from './anim/pieceEdit';
 import { PiecePixelsCommand } from './anim/piecePaint';
 import { keepsDepth, transformCamera, transformCameraKeys, transformPieces } from './anim/pieceTransform';
-import { celShownIndex } from './anim/cels';
+import { celShownIndex, celSurfaces } from './anim/cels';
 import { clampFrame } from './anim/timeline';
 import type { Easing } from './anim/interpolate';
 import { Selection, type SelectionMode, type SelectionModify } from './doc/Selection';
@@ -1472,10 +1472,9 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   // ---- selection & clipboard ------------------------------------------------------------
 
   /** Pixels inside the selection (alpha masked), relative to its bounds. */
-  private selectionPixels(sel: Selection): ImageBuf {
+  private selectionPixels(sel: Selection, from: Surface | null = this.doc.activeRaster?.surface ?? null): ImageBuf {
     const b = sel.bounds;
-    const layer = this.doc.activeRaster;
-    const data = layer ? layer.surface.readRect(b) : new Uint8ClampedArray(b.w * b.h * 4);
+    const data = from ? from.readRect(b) : new Uint8ClampedArray(b.w * b.h * 4);
     for (let p = 0; p < sel.mask.length; p++) {
       const m = sel.mask[p];
       if (m !== 255) data[p * 4 + 3] = (data[p * 4 + 3] * m) / 255;
@@ -1500,23 +1499,25 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       this.notify('error', 'notice.animateLocked');
       return false;
     }
-    const src = this.selectionPixels(sel);
-    let visible = false;
-    for (let i = 3; i < src.data.length && !visible; i += 4) visible = src.data[i] > 0;
-    if (!visible) {
+    // A layer drawn frame by frame: the area out of every drawing, so the piece has them all.
+    const surfaces = layer.cels ? celSurfaces(layer.cels) : [layer.surface];
+    const lifted = new Map(surfaces.map((s) => [s, pieceSurface(this.selectionPixels(sel, s))]));
+    if (![...lifted.values()].some((s) => s.contentBounds())) {
       this.notify('info', 'notice.nothingToAnimate');
       return false;
     }
     if (!this.anim.canAdd()) return false;
+    const drawn = layer.cels && { cels: layer.cels.map((c) => ({ start: c.start, surface: lifted.get(c.surface)! })), loop: layer.celLoop };
     const added = this.history.group('history.animateSelection', () => {
       if (!keepOriginal) {
-        const s = layer.surface;
-        s.beginEdit();
-        s.clearRect(sel.bounds, sel.maskView());
-        this.pushPixels('history.animateSelection', layer, s.endEdit(), sel, sel);
+        for (const s of surfaces) {
+          s.beginEdit();
+          s.clearRect(sel.bounds, sel.maskView());
+          this.pushPixels('history.animateSelection', layer, s.endEdit(), sel, sel);
+        }
         this.layerChanged(layer, sel.bounds);
       }
-      const piece = this.anim.add(src, sel.bounds, layer.id);
+      const piece = this.anim.add(lifted.get(layer.surface)!, sel.bounds, layer.id, 'history.animateSelection', false, drawn);
       if (piece) {
         this.history.push(new SelectionCommand('history.animateSelection', this, sel, null));
         this.setSelection(null);
@@ -1541,27 +1542,28 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       this.notify('error', 'notice.animateLocked');
       return false;
     }
-    // A frame-by-frame layer has a drawing per frame, and a piece holds one picture.
-    if (layer.cels) {
-      this.notify('info', 'notice.pieceFromCels');
-      return false;
-    }
-    const b = layer.surface.contentBounds();
+    // A layer drawn frame by frame: every drawing, over the area any of them covers.
+    const surfaces = layer.cels ? celSurfaces(layer.cels) : [layer.surface];
+    let b: Rect | null = null;
+    for (const s of surfaces) b = rectUnion(b, s.contentBounds());
     if (!b) {
       this.notify('info', 'notice.pieceLayerEmpty');
       return false;
     }
-    if (!this.anim.canAdd() || !this.anim.fits(b.w, b.h)) return false;
-    const src: ImageBuf = { w: b.w, h: b.h, data: layer.surface.readRect(b) };
+    const area = b;
+    if (!this.anim.canAdd() || !this.anim.fits(area.w, area.h)) return false;
+    const lifted = new Map(surfaces.map((s) => [s, Surface.fromRGBA(area.w, area.h, s.readRect(area))]));
+    const drawn = layer.cels && { cels: layer.cels.map((c) => ({ start: c.start, surface: lifted.get(c.surface)! })), loop: layer.celLoop };
     return this.history.group('history.pieceFromLayer', () => {
       if (!keepOriginal) {
-        const s = layer.surface;
-        s.beginEdit();
-        s.clearRect(b);
-        this.pushPixels('history.pieceFromLayer', layer, s.endEdit());
-        this.layerChanged(layer, b);
+        for (const s of surfaces) {
+          s.beginEdit();
+          s.clearRect(area);
+          this.pushPixels('history.pieceFromLayer', layer, s.endEdit());
+        }
+        this.layerChanged(layer, area);
       }
-      return this.anim.add(src, b, layer.id, 'history.pieceFromLayer', true) !== null;
+      return this.anim.add(lifted.get(layer.surface)!, area, layer.id, 'history.pieceFromLayer', true, drawn) !== null;
     });
   }
 

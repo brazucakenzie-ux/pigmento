@@ -7,7 +7,7 @@ import { Menu, MenuHeading, MenuItem, MenuSeparator, SubMenu } from '../componen
 import { useUi, type RibbonTab } from '../state/store';
 import * as files from '../services/files';
 import { ActionMenuItem } from './ActionMenuItem';
-import { runAction } from '../actions/actions';
+import { drawingOwner, ownerDrawings, runAction } from '../actions/actions';
 import { ActionButton, MenuButton, RibbonGroup, SplitButton } from './RibbonButton';
 import { ColorsGroup } from './ColorsGroup';
 import { ThemePicker } from './ThemePicker';
@@ -650,9 +650,9 @@ export function Ribbon() {
 
 /** The active layer's Loop (its drawings repeating for the whole timeline), when it's frame-by-frame. */
 function LoopDrawingsField() {
-  const layerId = useUi((st) => st.layers.activeId);
-  const framed = useUi((st) => st.animation.cels[layerId] !== undefined);
-  const mode = useUi((st) => st.animation.celLoops[layerId]?.mode ?? 'off');
+  const layerId = useUi((st) => drawingOwner(st));
+  const framed = useUi((st) => ownerDrawings(st, layerId).starts !== undefined);
+  const mode = useUi((st) => ownerDrawings(st, layerId).loop?.mode ?? 'off');
   return (
     <label className="opt" data-tip={t('loop.drawingsTip')}>
       <span>{t('loop.drawings')}</span>
