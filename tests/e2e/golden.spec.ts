@@ -113,6 +113,37 @@ test('the shaded box matches its golden image at every angle', async () => {
   expect(changed).toEqual([]);
 });
 
+const TRIM = 120;
+
+/**
+ * Trimmed outlines (wrapping, dashes in place, arrowheads at the ends that show, the fill whole),
+ * drawn as shape layers draw them. After an intended change, run with PIGMENTO_UPDATE_GOLDEN=1 and
+ * review tests/golden/trim.png.
+ */
+test('trimmed outlines match their golden image', async () => {
+  h = await launchApp();
+  const { page } = h;
+  await ready(page);
+  const sheet = await page.evaluate(() => window.__pigmentoTest!.trimSheet());
+  const png = path.join(GOLDEN, 'trim.png');
+  const meta = path.join(GOLDEN, 'trim.json');
+  if (process.env.PIGMENTO_UPDATE_GOLDEN) {
+    mkdirSync(GOLDEN, { recursive: true });
+    writeFileSync(png, Buffer.from(sheet.png));
+    writeFileSync(meta, `${JSON.stringify({ cell: TRIM, ids: sheet.ids }, null, 1)}\n`);
+    test.info().annotations.push({ type: 'golden', description: `wrote ${sheet.ids.length} shapes to ${png}` });
+    return;
+  }
+  expect(existsSync(png), 'Golden image missing: run with PIGMENTO_UPDATE_GOLDEN=1').toBe(true);
+  const saved = JSON.parse(readFileSync(meta, 'utf8')) as { ids: string[] };
+  expect(sheet.ids).toEqual(saved.ids);
+  const counts = await page.evaluate(([a, b, c, k]) => window.__pigmentoTest!.compareSheets([...a], [...b], c, k), [sheet.png, [...readFileSync(png)], TRIM, sheet.ids.length] as const);
+  expect(counts[0], 'The trim sheet changed size').not.toBe(-1);
+  const changed = counts.map((n, i) => ({ id: sheet.ids[i], pixels: n })).filter((c) => c.id && c.pixels > TRIM * TRIM * 0.005);
+  if (changed.length) writeFileSync(test.info().outputPath('trim-actual.png'), Buffer.from(sheet.png));
+  expect(changed).toEqual([]);
+});
+
 const objects = async (page: Page) => (await page.evaluate(() => window.__pigmentoTest!.vectorObjects())) ?? [];
 
 async function click(page: Page, x: number, y: number): Promise<void> {

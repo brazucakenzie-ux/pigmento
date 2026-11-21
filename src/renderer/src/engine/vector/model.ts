@@ -3,6 +3,7 @@ import { matChain, matScale, matTranslate, type Mat } from '../core/matrix';
 import { boxBounds, type BoxGeom } from '../live/BoxGeom';
 import type { ShapeKind, ShapeStyle } from '../live/ShapeObject';
 import { subpathBounds, transformSubpaths, type SubPaths } from './pathData';
+import { FULL_TRIM, type Trim } from './trim';
 
 /**
  * Objects on a shape (vector) layer. Immutable: edits make new objects, so history steps can
@@ -26,6 +27,8 @@ export interface VectorShape {
   readonly unitPath?: SubPaths;
   /** How overlapping parts fill (paths and personal shapes). */
   readonly fillRule?: 'evenodd' | 'nonzero';
+  /** How much of the outline shows (see trim.ts; none: all of it). */
+  readonly trim?: Trim;
 }
 
 export interface VectorGroup {
@@ -216,6 +219,19 @@ export function reparamNode(n: VectorNode, params: Readonly<Record<string, numbe
 }
 
 /** New style on every shape in a node. */
+/** What a shape's trim adds, kept when the shape is made again (converted to a path, or edited in place). */
+export function trimPart(n: VectorShape): Pick<VectorShape, 'trim'> {
+  return n.trim ? { trim: n.trim } : {};
+}
+
+/** A shape with a new trim (a group: every shape in it); the whole outline drops the trim. */
+export function retrimNode(n: VectorNode, change: Partial<Trim>): VectorNode {
+  if (n.type === 'group') return { ...n, children: n.children.map((c) => retrimNode(c, change)) };
+  const t = { ...FULL_TRIM, ...n.trim, ...change };
+  const { trim: _old, ...rest } = n;
+  return t.start === 0 && t.end === 1 && t.offset === 0 ? rest : { ...rest, trim: t };
+}
+
 export function restyleNode(n: VectorNode, change: (s: ShapeStyle) => ShapeStyle): VectorNode {
   if (n.type === 'group') return { ...n, children: n.children.map((c) => restyleNode(c, change)) };
   return { ...n, style: change(n.style) };

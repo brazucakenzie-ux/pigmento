@@ -411,7 +411,7 @@ Decisions (agreed with the user):
   - **Performance:** flat repeating pieces now draw on the GPU (see 6.23).
 
 ### Milestone 7 — Paths, trails and loops, version 1.3.0 (requested after 1.2.0; in progress)
-Things that travel leave marks. A piece can follow a path drawn on a shape layer and face the way it's going. A path can be drawn on, or eaten away right behind the piece travelling it, like a burning fuse or a route on a map. A piece can leave a trail: smoke, sparks, a comet tail, speed lines. Short cycles repeat by themselves: a layer's drawings (cloth waving in the wind, a flag, a flickering flame) and a piece's keyframes (a swinging sign, a bobbing boat) loop however long the timeline is, and things that never stop turning (wind turbines, waterwheels, fans, gears) spin forever at a steady speed. Started on 2026-11-20, when the user agreed the decisions below for Stop 7A as proposed; agree each later stop's decisions with them as it comes up. Split into five stops; each ends with a working app, `npm run check` green and a report, then waits for "continue". Each item is ticked in the same commit as its work.
+Things that travel leave marks. A piece can follow a path drawn on a shape layer and face the way it's going. A path can be drawn on, or eaten away right behind the piece travelling it, like a burning fuse or a route on a map. A piece can leave a trail: smoke, sparks, a comet tail, speed lines. Short cycles repeat by themselves: a layer's drawings (cloth waving in the wind, a flag, a flickering flame) and a piece's keyframes (a swinging sign, a bobbing boat) loop however long the timeline is, and things that never stop turning (wind turbines, waterwheels, fans, gears) spin forever at a steady speed. Started on 2026-11-20, when the user agreed the decisions below for Stop 7A as proposed; they agreed Stop 7B's on 2026-11-21. Agree each later stop's decisions with them as it comes up. Split into five stops; each ends with a working app, `npm run check` green and a report, then waits for "continue". Each item is ticked in the same commit as its work.
 
 Words used in the UI:
 - **Follow path:** a piece travels along a path from a shape layer, its **progress** (0–100 %) keyed on the timeline instead of its position.
@@ -422,12 +422,19 @@ Words used in the UI:
 - **Loop keyframes:** after its last keyframe, a piece starts its moves again from the first (**Loop**) or plays them backwards and forwards (**Back and forth**).
 - **Spin forever:** a piece turns about its pivot at a steady **speed** (turns a second, either way), on and on, without keyframes. **Tilt forever** and **Turn forever** do the same in 3D, so a coin can flip or a sign revolve.
 
-Decisions (agreed for Stop 7A; the rest proposed, to agree with the user at their stop):
+Decisions (agreed for Stops 7A and 7B; the rest proposed, to agree with the user at their stop):
 - **Deterministic trails:** a trail is worked out from the timeline alone. Each puff's birth, place, size and colour come from the frame and a seed, so scrubbing, playback and exports always show the same smoke, and no simulation state is saved. Puffs are emitted by distance travelled as well as by time, so a fast piece still leaves an unbroken trail.
 - **Trail art:** puffs use any brush tip from the library (built-in or the user's own), or a small picture. An echo uses the piece's own pixels.
 - **Where trails draw:** on the piece's layer, behind the piece (or in front, as an option). In 3D, puffs face the camera at the emitter's depth, so they shrink with distance.
 - **Keyed emission:** emission is keyed on and off, with its rate and the colours over life, so smoke can start at ignition and stop at burn-out. A trail on a piece that doesn't move, given drift, makes a chimney or a candle.
 - **Keyed shape paths:** a path on a shape layer can follow, or be followed by, a piece on the timeline. In 1.3.0 a shape object gains keyframes for its trim only (Start, End, Offset), so its row shows in the timeline. Animating a shape's points, style or size is left for later.
+- **Trim** (agreed for 7B):
+  - It cuts the outline only; the fill stays whole (turn the fill off to draw a whole shape on).
+  - A shape with several outlines is trimmed across all of them in turn, as one long line. Offset wraps round a shape whose outlines are all closed, and stops at the ends of an open one.
+  - Dashes stay put on the path as the ends move, so a dotted line vanishes dot by dot instead of crawling. Arrowheads sit at the ends that show, pointing along the path there.
+  - A shape gets a timeline row under its layer once its trim is keyed (untrimmed shapes get none). **Draw on** (End 0 → 100 %) and **Erase behind** (Start 0 → 100 %) key it from the frame shown over a span you choose (to the timeline's end unless you say otherwise), with an easing.
+  - A path a piece follows can tie its Start (erase behind the piece) or End (draw up to it) to that piece, with a gap in pixels along the path; while tied, that end follows the piece instead of its keys.
+  - SVG export writes a trimmed shape as it shows at the frame on screen.
 - **Following a path:** the piece keeps a link to the path, so editing the path changes the motion. If the path is deleted, the piece keeps the motion it had, baked into keyframes. Following ignores the piece's own x and y keys: a keyed **progress** places it instead, by distance along the path. Any shape's outline can be followed. Only a piece that follows no other piece can follow a path (the top of a tree can, carrying the tree); a curved motion path can also be turned into a shape path (**Motion path to shape**) to style or trim it.
 - **Face direction** uses the direction on the canvas, smoothed so a stop or a sharp corner doesn't flick the piece round. It adds to the piece's spin.
 - **Loops:**
@@ -459,7 +466,7 @@ Decisions (agreed for Stop 7A; the rest proposed, to agree with the user at thei
   - **Save format:** `.pigm` version 4 (`follow`, `face` and each keyframe's `progress`), written only when a picture uses them; documented in `docs/project-format.md`.
 
 **Stop 7B — Draw on and erase behind**
-- [ ] 7.5 Trim: Start, End and Offset on any path or shape outline on a shape layer, dashes and arrowheads included (an arrowhead stays at the visible end), drawn the same on screen and in exports (+ unit tests, golden sheet)
+- [x] 7.5 Trim: Start, End and Offset on any path or shape outline on a shape layer, dashes and arrowheads included (an arrowhead stays at the visible end), drawn the same on screen and in exports (+ unit tests, golden sheet)
 - [ ] 7.6 Keyed shape objects: a shape object's trim is keyed on the timeline, with its row under its layer, and Draw on and Erase behind fill in the keys over a chosen span (+ unit tests)
 - [ ] 7.7 Tied to a piece: a followed path's Start (Erase behind) or End (Draw on) can track the piece's progress, so the line vanishes right behind it or is drawn just ahead of it, with a gap you set (+ e2e: a rocket on a dotted path that disappears behind it)
 - [ ] 7.8 `.pigm` version 4 for following, face direction and trim; limits on every new number; documented in `docs/project-format.md` (+ round-trip unit test, grown with 7C and 7D)

@@ -59,8 +59,10 @@ import {
   removeNodes,
   reparamNode,
   restyleNode,
+  retrimNode,
   transformNode,
   translateNode,
+  trimPart,
   ungroupNodes,
   vectorId,
   walkShapes,
@@ -69,6 +71,7 @@ import {
   type VectorNode,
   type VectorShape,
 } from './vector/model';
+import { FULL_TRIM, type Trim } from './vector/trim';
 import { hitTestNodes, lineStyleOf, rasterizeNodes, setSavedPatternSource, shapePad } from './vector/render';
 import { optionsOfStyle, shapeStyle } from './tools/shapeTools';
 import { maskToSubpaths } from './vector/trace';
@@ -145,6 +148,21 @@ export interface VectorSelectionInfo {
   bounds: Rect | null;
   /** One library shape selected: which, and its slider values (for the options bar). */
   shape: { shapeId: string; params: Record<string, number> } | null;
+  /** The first selected shape's trim (null: no shapes selected). */
+  trim: Trim | null;
+}
+
+/** Most a trim's offset can be, either way, in whole outlines (far more than any loop needs). */
+export const MAX_TRIM_OFFSET = 1e6;
+
+function clampShare(v: number): number {
+  return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0;
+}
+
+/** The trim of the shape with this id in a list of objects (what a shape edited in place had). */
+function trimOfEdited(list: readonly VectorNode[], id: string): Pick<VectorShape, 'trim'> {
+  const n = list.find((m) => m.id === id);
+  return n?.type === 'shape' ? trimPart(n) : {};
 }
 
 /** Saved per-shape slider values: a small table of finite numbers. */
@@ -1579,11 +1597,13 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   vectorSelectionInfo(): VectorSelectionInfo {
     const nodes = this.selectedVectorNodes();
     const one = nodes.length === 1 && nodes[0].type === 'shape' && nodes[0].shape === 'parametric' && nodes[0].shapeId ? nodes[0] : null;
+    const first = walkShapes(nodes).next().value ?? null;
     return {
       count: nodes.length,
       groups: nodes.filter((n) => n.type === 'group').length,
       bounds: boundsOf(nodes),
       shape: one ? { shapeId: one.shapeId!, params: { ...one.params } } : null,
+      trim: first ? { ...FULL_TRIM, ...first.trim } : null,
     };
   }
 
@@ -1710,6 +1730,17 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     );
   }
 
+  /** Trim the selected shapes' outlines (Start, End and Offset as shares of their length; one step). */
+  trimVector(change: Partial<Trim>): void {
+    if (!this.vectorSel.length) return;
+    const clean: { start?: number; end?: number; offset?: number } = {};
+    if (change.start !== undefined) clean.start = clampShare(change.start);
+    if (change.end !== undefined) clean.end = clampShare(change.end);
+    if (change.offset !== undefined) clean.offset = Number.isFinite(change.offset) ? Math.max(-MAX_TRIM_OFFSET, Math.min(MAX_TRIM_OFFSET, change.offset)) : 0;
+    const changed = this.editVector('history.trimOutline', (list, sel) => list.map((n) => (sel.has(n.id) ? retrimNode(n, clean) : n)));
+    if (changed) this.emit('vectorSelection', this.vectorSelectionInfo());
+  }
+
   /** New slider values for the selected library shape (a drag merges into one step). */
   setVectorShapeParams(params: Readonly<Record<string, number>>): void {
     if (!this.vectorSel.length) return;
@@ -1763,7 +1794,7 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
         const o = shapeOutline(n);
         if (!o) return n;
         changed = true;
-        const node: VectorShape = { type: 'shape', id: n.id, shape: 'path', box: null, points: [], style: { ...n.style }, subpaths: o.subpaths, fillRule: o.fillRule };
+        const node: VectorShape = { type: 'shape', id: n.id, shape: 'path', box: null, points: [], style: { ...n.style }, subpaths: o.subpaths, fillRule: o.fillRule, ...trimPart(n) };
         return node;
       }),
     );
@@ -2033,6 +2064,8 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
       ...(s.shape === 'path' ? { subpaths: s.subpaths } : {}),
       ...(s.unitPath ? { unitPath: s.unitPath } : {}),
       ...(s.fillRule ? { fillRule: s.fillRule } : {}),
+      // Editing its corners keeps its trim.
+      ...(edit ? trimOfEdited(edit.before, edit.id) : {}),
     };
     let layer: VectorLayer | null = target === 'new' ? null : target;
     this.history.group(label, () => {

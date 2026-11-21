@@ -304,6 +304,31 @@ function VectorBar() {
   );
 }
 
+/** How much of the selected shapes' outlines shows: Start, End and Offset, in percent of their length. */
+function TrimFields() {
+  const trim = useUi((s) => s.vectorSelection.trim);
+  if (!trim) return null;
+  const blur = () => (document.activeElement as HTMLElement | null)?.blur();
+  const field = (key: 'start' | 'end' | 'offset', labelKey: I18nKey, min: number, max: number) => {
+    const label = t(labelKey);
+    return (
+      <span className="opt tf-field">
+        <span>{label}</span>
+        <NumberField className="num tf-num" value={Math.round(trim[key] * 1000) / 10} decimals={1} min={min} max={max} shiftStep={10} label={label} onChange={(v) => engine.trimVector({ [key]: v / 100 })} onEnter={blur} />
+        <span className="unit">%</span>
+      </span>
+    );
+  };
+  return (
+    <span className="opt trim-bar" role="group" aria-label={t('trim.group')} data-tip={t('trim.tip')}>
+      <span>{t('trim.group')}</span>
+      {field('start', 'trim.start', 0, 100)}
+      {field('end', 'trim.end', 0, 100)}
+      {field('offset', 'trim.offset', -100000, 100000)}
+    </span>
+  );
+}
+
 /** A path being drawn or edited: finish, close or open it, and change or remove its points. */
 function PathBar() {
   const info = useUi((s) => s.path);
@@ -816,6 +841,7 @@ export function OptionsBar() {
         {tool.symmetry && !simple ? <SymmetryControl /> : null}
         <PathBar />
         {toolId === 'move' && shapeLayer ? <SelectedShapeParams /> : null}
+        {toolId === 'move' && shapeLayer ? <TrimFields /> : null}
         {toolId === 'move' ? <VectorBar /> : null}
       </OptionScroller>
       {live ? (

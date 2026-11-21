@@ -1,13 +1,15 @@
 import { brushRegistry } from '@engine/brush/BrushRegistry';
 import { brushPreview } from '@engine/brush/preview';
 import { Selection } from '@engine/doc/Selection';
-import type { VectorNode } from '@engine/vector/model';
+import type { VectorNode, VectorShape } from '@engine/vector/model';
 import { engine } from '../state/engine';
 import { useUi } from '../state/store';
 import { openPath } from '../services/files';
 import { autosaveNow } from '../services/autosave';
 import { defaultParams, shapeRegistry } from '@engine/shapes/ShapeRegistry';
-import { paintShape } from '@engine/vector/render';
+import { drawVectorShape, paintShape } from '@engine/vector/render';
+import { corner } from '@engine/vector/pathData';
+import type { ShapeStyle } from '@engine/live/ShapeObject';
 import { makePiece, newPieceId, pieceStateAt, setKey, type Piece } from '@engine/anim/piece';
 import { Scene } from '@engine/anim/scene';
 import { defaultLight, project, spaceOf } from '@engine/anim/space';
@@ -123,6 +125,39 @@ async function cubeSheet(): Promise<{ ids: string[]; w: number; h: number; png: 
   });
   const png = await engine.codecs.encode('png', W, CELL, data, 100, 96);
   return { ids: views.map((v) => v[0]), w: W, h: CELL, png: Array.from(png) };
+}
+
+/**
+ * The trim sheet (golden-image test): shapes with part of their outline showing, one a cell, drawn
+ * as shape layers draw them: wrapping round, dashes and dots kept in place, arrowheads at the ends
+ * that show, the fill whole, a gradient outline on a turned box, and a path of two parts.
+ */
+async function trimSheet(): Promise<{ ids: string[]; w: number; h: number; png: number[] }> {
+  const CELL = 120;
+  const ink = { r: 20, g: 20, b: 40, a: 255 };
+  const st = (extra: Partial<ShapeStyle> = {}): ShapeStyle => ({ mode: 'outline', width: 6, outline: ink, fill: { r: 120, g: 160, b: 230, a: 255 }, radius: 0, antialias: true, ...extra });
+  const box = (i: number, w = 84, h = 70, angle = 0) => ({ cx: i * CELL + CELL / 2, cy: CELL / 2, w, h, angle });
+  const x = (i: number, v: number) => i * CELL + v;
+  const cases: [string, (i: number) => VectorShape][] = [
+    ['rect-half', (i) => ({ type: 'shape', id: 'a', shape: 'rect', box: box(i), points: [], style: st({ join: 'miter' }), trim: { start: 0, end: 0.5, offset: 0 } })],
+    ['ellipse-wraps', (i) => ({ type: 'shape', id: 'b', shape: 'ellipse', box: box(i), points: [], style: st(), trim: { start: 0, end: 0.3, offset: 0.85 } })],
+    ['dashes-in-place', (i) => ({ type: 'shape', id: 'c', shape: 'rect', box: box(i), points: [], style: st({ dash: 'dash', width: 4 }), trim: { start: 0.3, end: 0.9, offset: 0 } })],
+    ['dots-on-a-curve', (i) => ({ type: 'shape', id: 'd', shape: 'curve', box: null, points: [{ x: x(i, 12), y: 100 }, { x: x(i, 30), y: 0 }, { x: x(i, 90), y: 120 }, { x: x(i, 108), y: 20 }], style: st({ dash: 'dot', cap: 'round' }), trim: { start: 0.4, end: 1, offset: 0 } })],
+    ['arrow-line', (i) => ({ type: 'shape', id: 'e', shape: 'line', box: null, points: [{ x: x(i, 10), y: 100 }, { x: x(i, 110), y: 20 }], style: st({ width: 4, arrowStart: 'circle', arrowEnd: 'triangle' }), trim: { start: 0.2, end: 0.7, offset: 0 } })],
+    ['arrow-curve', (i) => ({ type: 'shape', id: 'f', shape: 'curve', box: null, points: [{ x: x(i, 10), y: 60 }, { x: x(i, 40), y: -10 }, { x: x(i, 80), y: 130 }, { x: x(i, 110), y: 60 }], style: st({ width: 4, arrowEnd: 'open' }), trim: { start: 0, end: 0.6, offset: 0 } })],
+    ['fill-whole', (i) => ({ type: 'shape', id: 'g', shape: 'roundRect', box: box(i), points: [], style: st({ mode: 'both', radius: 16 }), trim: { start: 0, end: 0.4, offset: 0.1 } })],
+    ['gradient-turned', (i) => ({ type: 'shape', id: 'h', shape: 'rect', box: box(i, 80, 50, 0.5), points: [], style: st({ width: 8, outlineKind: 'gradient', outlineGradient: { type: 'linear', angle: 0, stops: null } }), trim: { start: 0.1, end: 0.6, offset: 0 } })],
+    ['two-parts', (i) => ({ type: 'shape', id: 'k', shape: 'path', box: null, points: [], style: st({ cap: 'round' }), subpaths: [{ closed: false, anchors: [corner(x(i, 15), 30), corner(x(i, 105), 30)] }, { closed: true, anchors: [corner(x(i, 25), 55), corner(x(i, 95), 55), corner(x(i, 95), 100), corner(x(i, 25), 100)] }], trim: { start: 0, end: 0.7, offset: 0 } })],
+    ['polygon-offset', (i) => ({ type: 'shape', id: 'm', shape: 'polygon', box: null, points: [{ x: x(i, 60), y: 10 }, { x: x(i, 110), y: 100 }, { x: x(i, 10), y: 100 }], style: st({ join: 'round' }), trim: { start: 0.25, end: 0.75, offset: -0.6 } })],
+  ];
+  const W = CELL * cases.length;
+  const ctx = new OffscreenCanvas(W, CELL).getContext('2d', { willReadFrequently: true })!;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, CELL);
+  cases.forEach(([, make], i) => drawVectorShape(ctx, make(i), W, CELL));
+  const data = ctx.getImageData(0, 0, W, CELL).data;
+  const png = await engine.codecs.encode('png', W, CELL, new Uint8ClampedArray(data), 100, 96);
+  return { ids: cases.map((c) => c[0]), w: W, h: CELL, png: Array.from(png) };
 }
 
 /** Pixels per cell that differ (any channel by more than 24) between two sheets. */
@@ -318,6 +353,7 @@ export function installTestHook(): void {
     },
     /** Where a point of a piece (its own pixels) shows in the document at the frame shown. */
     cubeSheet,
+    trimSheet,
     /**
      * The 3D performance scene on top of what's there: a 6000 px striped background repeating across
      * the bottom layer and scrolling round, and a shaded box of 1024 px faces spinning once round

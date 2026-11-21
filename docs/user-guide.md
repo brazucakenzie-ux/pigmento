@@ -91,6 +91,7 @@ Home → Shapes has Line, Curve, Rectangle, Rounded rectangle, Ellipse and Polyg
 - The options bar chooses outline, fill or both, and the line width, dashes, caps, joins and arrowheads. Fills can be solid, a gradient, a pattern or an image.
 - **Draw as: Shape layer** keeps shapes editable: use the Move tool (V) to select, move, resize, rotate or recolour them later. **Pixels** paints them straight into the layer.
 - The **Pen** (N) draws your own paths: click for corners, drag for curves.
+- **Trim** (in the Move tool's options, with shapes selected) shows only part of a shape's outline: from **Start** to **End**, as percentages of its length, slid along by **Offset**. Offset goes round and round a closed shape. Only the outline is trimmed: the fill stays whole. Dashes and dots stay where they are as the ends move, and arrowheads sit at the ends that show.
 - **Save as my shape** keeps a shape in My shapes, which you can rename, duplicate or delete.
 - **Shape packs** (`.pigmshapes`) share My shapes, or a single shape, between PCs, and **Import SVG** brings in a drawing's shapes as editable paths.
 
