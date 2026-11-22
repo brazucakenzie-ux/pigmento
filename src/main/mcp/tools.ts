@@ -1,6 +1,6 @@
 import { BrowserWindow } from 'electron';
 import { z } from 'zod';
-import { LAYER_TOOLS } from './edit';
+import { LAYER_TOOLS, PAINT_TOOLS } from './edit';
 import { PICTURE_TOOLS } from './pictures';
 import type { ToolDef } from './types';
 
@@ -64,6 +64,7 @@ export const TOOLS: readonly ToolDef[] = [
   },
   ...PICTURE_TOOLS,
   ...LAYER_TOOLS,
+  ...PAINT_TOOLS,
 ];
 
 

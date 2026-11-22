@@ -583,7 +583,7 @@ Decisions (agreed with the user on 2026-11-22, Stop 8A's the same day; the rest 
 **Stop 8B — Drawing and editing**
 - [x] 8.7 Pictures: new, open, save, save as, export to the still formats, close and switch, as the file permissions allow (+ e2e)
 - [x] 8.8 Layers and selections: add, delete, reorder, group and set layers' properties; select by rectangle, ellipse, polygon, magic wand and colour range, all, none and invert; move and transform pixels (+ unit tests, e2e)
-- [ ] 8.9 Painting: colours, fill, brush strokes from points (with pressure) with any brush, the eraser, shapes from the library with their settings and style, pen paths, lines and text, drawn at the watch speed (+ e2e)
+- [x] 8.9 Painting: colours, fill, brush strokes from points (with pressure) with any brush, the eraser, shapes from the library with their settings and style, pen paths, lines and text, drawn at the watch speed (+ e2e)
 - [ ] 8.10 The image and effects: resize, crop, canvas size, rotate and flip; adjustments and filters with their settings; any action in the app by its name (+ e2e)
 - [ ] 8.11 E2e: an MCP client paints a small scene (a sky, a sun, a hill, a word, a blur), saves it and opens it again; undo takes back its steps one by one; `npm run check` green; report
 

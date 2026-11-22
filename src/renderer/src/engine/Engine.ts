@@ -1296,6 +1296,22 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     return { r: d[0], g: d[1], b: d[2], a: d[3] };
   }
 
+  /** Fill the selection (or, with none, the whole layer) on the active pixel layer with a colour, as one step. */
+  fillSelection(paint: RGBA): boolean {
+    this.commitLive(true);
+    if (!this.canPaint()) return false;
+    const layer = this.doc.activeRaster;
+    const sel = this.doc.selection;
+    const area = sel ? rectIntersect(sel.bounds, this.doc.bounds) : this.doc.bounds;
+    if (!layer || !area) return false;
+    const s = layer.surface;
+    s.beginEdit();
+    s.compositeColor(area, paint, sel ? sel.maskView() : null, 'over', 1);
+    this.pushPixels('history.fill', layer, s.endEdit());
+    this.layerChanged(layer, area);
+    return true;
+  }
+
   async floodFill(x: number, y: number, paint: RGBA | FillPattern, tolerance: number, contiguous: boolean): Promise<void> {
     const piece = this.anim.paintTarget;
     if (piece) return this.fillPiece(piece, x, y, paint, tolerance, contiguous);

@@ -7,4 +7,11 @@ export const assistantsEn = {
   'assistant.step.set_layer': 'Assistant: Set layer',
   'assistant.step.select': 'Assistant: Select',
   'assistant.step.transform_pixels': 'Assistant: Move pixels',
+  'assistant.step.set_colors': 'Assistant: Colours',
+  'assistant.step.fill': 'Assistant: Fill',
+  'assistant.step.brush_stroke': 'Assistant: Brush stroke',
+  'assistant.step.draw_line': 'Assistant: Line',
+  'assistant.step.draw_shape': 'Assistant: Shape',
+  'assistant.step.draw_path': 'Assistant: Path',
+  'assistant.step.add_text': 'Assistant: Text',
 } as const;

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ARROW_HEADS, BLEND_MODES, DASH_STYLES } from '@shared/styles';
 import type { ToolDef } from './types';
 
 /**
@@ -6,8 +7,6 @@ import type { ToolDef } from './types';
  * "Assistant: …" undo step. Naming a layer makes it the active one, as clicking it would.
  */
 
-/** Pigmento's blend modes (the same as the Layers panel's; a unit test keeps them in step). */
-export const BLEND_MODES = ['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'color-dodge', 'color-burn', 'difference', 'soft-light', 'hard-light', 'hue', 'saturation', 'color', 'luminosity'] as const;
 
 const LAYER = z.string().describe('The layer (an id from get_picture_info).');
 const ON_LAYER = z.string().optional().describe('The layer to work on (an id from get_picture_info); it becomes the active layer. The active layer if left out.');
@@ -96,6 +95,121 @@ export const LAYER_TOOLS: readonly ToolDef[] = [
       scaleY: z.number().positive().max(100).optional().describe('Height times this (1 keeps it).'),
       rotate: z.number().min(-360).max(360).optional().describe('Degrees, clockwise, around its centre.'),
       flip: z.enum(['horizontal', 'vertical']).optional(),
+      layer: ON_LAYER,
+    },
+  }),
+];
+
+const COLOR = (what: string) => z.string().optional().describe(`${what}, #rrggbb or #rrggbbaa (the primary colour if left out).`);
+const SHAPE_PAINT = {
+  fill: z.string().optional().describe('Fill colour, #rrggbb or #rrggbbaa, or none. Left out with outline also left out: an outline in the primary colour.'),
+  outline: z.string().optional().describe('Outline colour, #rrggbb or #rrggbbaa, or none.'),
+  outlineWidth: z.number().min(0.5).max(500).optional().describe('Outline width in pixels (3 if left out).'),
+};
+const ON_SHAPES = 'On a pixels layer it becomes pixels; on a shapes layer it stays an object you can edit.';
+
+/** Painting (8.9). Your tool, its options and your colours aren't changed (set_colors changes the colours). */
+export const PAINT_TOOLS: readonly ToolDef[] = [
+  edit({
+    name: 'set_colors',
+    title: 'Set colours',
+    description: 'Set Pigmento’s primary and secondary colours (what the user paints with next, and the default for your painting).',
+    input: { primary: z.string().optional().describe('#rrggbb or #rrggbbaa.'), secondary: z.string().optional().describe('#rrggbb or #rrggbbaa.') },
+  }),
+  edit({
+    name: 'fill',
+    title: 'Fill',
+    description: 'Fill with a colour on a pixels layer: the area of similar colour around a point (like the paint bucket), or, with no point, the selection (or the whole layer if nothing is selected).',
+    input: {
+      x: z.number().optional(),
+      y: z.number().optional(),
+      color: COLOR('The colour'),
+      tolerance: z.number().min(0).max(100).optional().describe('How different a colour may be and still fill, 0 to 100 (15 if left out).'),
+      contiguous: z.boolean().optional().describe('Only the connected area (true if left out); false fills that colour everywhere.'),
+      layer: ON_LAYER,
+    },
+  }),
+  edit({
+    name: 'brush_stroke',
+    title: 'Brush stroke',
+    description:
+      'Paint a stroke through points on a pixels layer, with any brush (ids from list_available with what: brushes), as a person would drag it: pressure changes the width and opacity where the brush uses it. Stays inside the selection. With erase, or an eraser brush, it takes paint away.',
+    input: {
+      points: z
+        .array(z.object({ x: z.number(), y: z.number(), pressure: z.number().min(0).max(1).optional().describe('Pen pressure, 0 to 1 (1 if left out).') }))
+        .min(1)
+        .max(20000)
+        .describe('The stroke’s path; one point makes a dot. Points far apart are joined by straight lines.'),
+      brush: z.string().optional().describe('The brush (round if left out).'),
+      size: z.number().min(1).max(400).optional().describe('Brush size in pixels (8 if left out).'),
+      opacity: z.number().min(0).max(1).optional().describe('0 to 1 (1 if left out).'),
+      color: COLOR('The colour'),
+      erase: z.boolean().optional().describe('Take paint away instead.'),
+      layer: ON_LAYER,
+    },
+  }),
+  edit({
+    name: 'draw_line',
+    title: 'Line',
+    description: `Draw a straight line, with arrow heads and dashes if wanted. ${ON_SHAPES}`,
+    input: {
+      from: POINT,
+      to: POINT,
+      width: z.number().min(0.5).max(500).optional().describe('Width in pixels (3 if left out).'),
+      color: COLOR('The colour'),
+      arrowStart: z.enum(ARROW_HEADS).optional(),
+      arrowEnd: z.enum(ARROW_HEADS).optional(),
+      dash: z.enum(DASH_STYLES).optional(),
+      layer: ON_LAYER,
+    },
+  }),
+  edit({
+    name: 'draw_shape',
+    title: 'Shape',
+    description: `Draw a shape from Pigmento’s library (ids from list_available with what: shapes: rectangle, circle, star-5, heart, arrows, speech bubbles and many more) in a box, turned if wanted, with its own settings. ${ON_SHAPES}`,
+    input: {
+      shape: z.string().describe('The shape’s id.'),
+      x: z.number().describe('The box’s left edge.'),
+      y: z.number().describe('The box’s top edge.'),
+      width: z.number().positive(),
+      height: z.number().positive(),
+      rotate: z.number().min(-360).max(360).optional().describe('Degrees, clockwise, around the box’s centre.'),
+      settings: z.record(z.string(), z.number()).optional().describe('The shape’s own settings by key (list_available with what: shapes gives them); the defaults are used for any left out.'),
+      ...SHAPE_PAINT,
+      layer: ON_LAYER,
+    },
+  }),
+  edit({
+    name: 'draw_path',
+    title: 'Path',
+    description: `Draw a path through points (like the Pen): straight between points, or curved by each point’s in and out handles (Bézier control points). Closed paths can be filled. ${ON_SHAPES}`,
+    input: {
+      points: z
+        .array(z.object({ x: z.number(), y: z.number(), in: POINT.optional().describe('Handle towards the point before.'), out: POINT.optional().describe('Handle towards the point after.') }))
+        .min(2)
+        .max(5000),
+      closed: z.boolean().optional().describe('Join the last point back to the first (false if left out).'),
+      ...SHAPE_PAINT,
+      layer: ON_LAYER,
+    },
+  }),
+  edit({
+    name: 'add_text',
+    title: 'Text',
+    description: 'Write text on a pixels layer, its top-left corner at x, y. New lines (\\n) start new lines; with a width, long lines wrap.',
+    input: {
+      text: z.string().min(1).max(10000),
+      x: z.number(),
+      y: z.number(),
+      width: z.number().positive().optional().describe('Wrap lines at this width in pixels.'),
+      font: z.string().optional().describe('A font on this PC, like Segoe UI (if left out), Arial, Georgia, Times New Roman, Consolas or Comic Sans MS.'),
+      size: z.number().min(1).max(1000).optional().describe('Size in points (24 if left out).'),
+      bold: z.boolean().optional(),
+      italic: z.boolean().optional(),
+      underline: z.boolean().optional(),
+      align: z.enum(['left', 'center', 'right']).optional(),
+      color: COLOR('The colour'),
+      background: z.string().optional().describe('A colour behind the text, #rrggbb (none if left out).'),
       layer: ON_LAYER,
     },
   }),
