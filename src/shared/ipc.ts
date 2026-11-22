@@ -58,7 +58,28 @@ export const IPC = {
   evThemeChanged: 'ev:theme-changed',
   evFullscreen: 'ev:fullscreen',
   evRecentChanged: 'ev:recent-changed',
+  assistantReply: 'assistant:reply',
+  evAssistantCall: 'ev:assistant-call',
 } as const;
+
+/** A tool call from an AI assistant, for a window to carry out. */
+export interface AssistantCall {
+  id: number;
+  tool: string;
+  args: Record<string, unknown>;
+  /** The assistant's name, as its client gives it. */
+  client: string;
+}
+
+/** What an assistant gets back: words, data and pictures (PNG, base64). */
+export interface AssistantResult {
+  text?: string;
+  data?: unknown;
+  images?: { mimeType: 'image/png'; base64: string }[];
+}
+
+/** A window's answer to a tool call: what it did, or why it couldn't (in plain words). */
+export type AssistantReply = { ok: true; result: AssistantResult } | { ok: false; error: string };
 
 export interface OpenedFile {
   path: string;
@@ -160,6 +181,11 @@ export interface PigmentoApi {
     remove(path: string): Promise<void>;
     clear(): Promise<void>;
     onChanged(cb: (list: RecentFile[]) => void): Unsubscribe;
+  };
+  /** AI assistants' tool calls (see main/mcp): carried out by the window, which answers each one. */
+  assistant: {
+    onCall(cb: (call: AssistantCall) => void): Unsubscribe;
+    reply(id: number, reply: AssistantReply): void;
   };
   settings: {
     get(): Promise<Settings>;

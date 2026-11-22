@@ -14,6 +14,12 @@ The components below are bundled into the app. Their full licence texts are in `
 | Inter (via @fontsource-variable/inter) | 5.3.0 | SIL Open Font License 1.1 | The Inter Project Authors | Interface font |
 | gifenc | 1.0.3 | MIT | Matt DesLauriers | GIF encoding |
 | fflate | 0.8.3 | MIT | Arjun Barrett | ZIP container for `.pigm` projects |
+| MCP TypeScript SDK (@modelcontextprotocol/sdk) | 1.32.2 | MIT | Anthropic, PBC | Letting AI assistants use Pigmento (Model Context Protocol) |
+| Ajv, ajv-formats, fast-deep-equal, json-schema-traverse | 8.20.0, 3.0.1, 3.1.3, 1.0.0 | MIT | Evgeny Poberezkin | Checking AI assistants' messages (used by the MCP SDK) |
+| fast-uri | 3.1.9 | BSD-3-Clause | Vincent Le Goff and contributors | Addresses in those checks (used by Ajv) |
+| zod-to-json-schema | 3.25.2 | ISC | Stefan Terdell | Describing Pigmento's tools to AI assistants (used by the MCP SDK) |
+| Hono, @hono/node-server | 4.13.19, 2.1.11 | MIT | Yusuke Wada | The local HTTP address for AI assistants (used by the MCP SDK) |
+| content-type | 1.0.5 | MIT | Douglas Christopher Wilson | Reading those HTTP requests (used by the MCP SDK) |
 
 ## The installer
 

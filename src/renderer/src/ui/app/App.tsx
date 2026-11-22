@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect } from 'react';
 import { t } from '../../i18n';
+import { startAssistants } from '../services/assistant';
 import { handleGlobalKey, handleGlobalPointer } from '../actions/keymap';
 import { TooltipLayer } from '../components/Tooltips';
 import { EditColorsDialog, PasteLargerDialog, QualityDialog, RecoverDialog, ShortcutsDialog } from '../dialogs/OtherDialogs';
@@ -220,6 +221,7 @@ export function App() {
       api.recent.onChanged((recent) => useUi.setState({ recent })),
       api.window.onFullscreenChanged((fullscreen) => useUi.setState({ fullscreen })),
       api.window.onOpenFile((path) => void openPath(path)),
+      startAssistants(),
       api.window.onCloseRequested(() => {
         void (async () => {
           engine.commitLive();

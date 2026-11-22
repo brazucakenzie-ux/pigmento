@@ -23,10 +23,18 @@ export function getSettings(): Settings {
   return current;
 }
 
+const listeners = new Set<(s: Settings) => void>();
+
+/** Call fn with the settings each time they change. */
+export function onSettingsChanged(fn: (s: Settings) => void): void {
+  listeners.add(fn);
+}
+
 export function updateSettings(patch: Partial<Settings>): Settings {
   const merged = parseSettings({ ...getSettings(), ...patch });
   current = merged;
   scheduleWrite();
+  for (const fn of listeners) fn(merged);
   return merged;
 }
 

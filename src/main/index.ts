@@ -6,7 +6,8 @@ import { registerIpc } from './ipc';
 import { handleAppProtocol, registerSchemes } from './protocol';
 import { loadRecent, onRecentChanged, pruneRecent } from './recent';
 import { applySecurityPolicy } from './security';
-import { flushSettings, loadSettings } from './settings';
+import { flushSettings, getSettings, loadSettings, onSettingsChanged } from './settings';
+import { AssistantHost } from './mcp/server';
 import { IPC } from '@shared/ipc';
 import { broadcastTheme, createWindow, openFileInApp } from './windows';
 import { installErrorHandlers } from './errors';
@@ -64,6 +65,17 @@ if (bridging) {
     applySecurityPolicy(app.isPackaged ? undefined : process.env.ELECTRON_RENDERER_URL);
     handleAppProtocol(path.join(__dirname, '../renderer'));
     await loadSettings();
+    // AI assistants (MCP): listening as the settings say, and again whenever they change.
+    const assistants = new AssistantHost(mcpPipeName(app.getPath('userData')), app.getVersion());
+    assistants.apply(getSettings().assistants);
+    let last = JSON.stringify(getSettings().assistants);
+    onSettingsChanged((s) => {
+      const now = JSON.stringify(s.assistants);
+      if (now === last) return;
+      last = now;
+      assistants.apply(s.assistants);
+    });
+    app.on('will-quit', () => assistants.close());
     await loadRecent();
     void pruneRecent();
     registerIpc();
