@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webFrame, webUtils, type IpcRendererEvent } from 'electron';
-import { IPC, type AssistantCall, type PigmentoApi, type RecentFile, type SystemTheme } from '@shared/ipc';
+import { IPC, type AssistantCall, type AssistantsState, type PigmentoApi, type RecentFile, type SystemTheme } from '@shared/ipc';
 
 function subscribe<T extends unknown[]>(channel: string, cb: (...args: T) => void): () => void {
   const listener = (_e: IpcRendererEvent, ...args: unknown[]) => cb(...(args as T));
@@ -37,6 +37,9 @@ const api: PigmentoApi = {
   assistant: {
     onCall: (cb) => subscribe<[AssistantCall]>(IPC.evAssistantCall, cb),
     reply: (id, reply) => ipcRenderer.send(IPC.assistantReply, id, reply),
+    state: () => ipcRenderer.invoke(IPC.assistantsState),
+    onState: (cb) => subscribe<[AssistantsState]>(IPC.evAssistantsState, cb),
+    pause: (paused) => ipcRenderer.send(IPC.assistantsPause, paused),
   },
   settings: {
     get: () => ipcRenderer.invoke(IPC.settingsGet),

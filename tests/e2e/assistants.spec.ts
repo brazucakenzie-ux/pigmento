@@ -110,3 +110,48 @@ test('the local HTTP address works once turned on, with its token, and never for
   await setAssistants({ http: false });
   await expect.poll(async () => (await post(url).catch(() => null))?.status ?? 'closed').toBe('closed');
 });
+
+test('you see who is connected and what they do, and can stop them, or have them ask first', async () => {
+  const { page } = h;
+  const client = await connectStdio();
+  // The badge names the assistant; its calls show in Assistant activity.
+  const badge = page.locator('.assistant-badge');
+  await expect(badge).toHaveText('e2e-client');
+  await client.callTool({ name: 'get_picture_info', arguments: {} });
+  const activity = page.locator('.panel-section-assistants');
+  await expect(activity.locator('.assistant-log li').first()).toContainText('Picture info');
+  await expect(activity.locator('.assistant-log li').first()).toContainText('by e2e-client');
+
+  // Stopped from the badge: calls are refused, and say so in the activity.
+  await badge.click();
+  await page.getByRole('dialog', { name: 'AI assistants' }).getByRole('button', { name: 'Stop assistants' }).click();
+  await expect(badge).toHaveText('Assistants stopped');
+  const stopped = await client.callTool({ name: 'get_picture_info', arguments: {} });
+  expect(stopped.isError).toBe(true);
+  expect(firstText(stopped)).toMatch(/stopped AI assistants/);
+  await expect(activity.locator('.assistant-log li.failed').first()).toContainText('stopped');
+  // The shortcut lets them go on.
+  await page.keyboard.press('Escape');
+  await page.locator('.canvas-host').focus();
+  await page.keyboard.press('Control+Shift+Q');
+  await expect(badge).toHaveText('e2e-client');
+  expect((await client.callTool({ name: 'get_picture_info', arguments: {} })).isError).toBeFalsy();
+
+  // Ask each time: Pigmento's own dialog, naming the assistant and what it wants.
+  await setAssistants({ look: 'ask' });
+  const ask = page.getByRole('dialog', { name: 'e2e-client wants to go ahead' });
+  const denied = client.callTool({ name: 'get_picture_info', arguments: {} });
+  await expect(ask).toContainText('e2e-client wants to look at pictures: Picture info.');
+  await ask.getByRole('button', { name: 'Don’t allow' }).click();
+  const d = await denied;
+  expect(d.isError).toBe(true);
+  expect(firstText(d)).toMatch(/didn’t allow/);
+  const allowed = client.callTool({ name: 'get_picture_info', arguments: {} });
+  await ask.getByRole('button', { name: 'Allow', exact: true }).click();
+  expect((await allowed).structuredContent).toMatchObject({ width: 1280 });
+
+  // When it goes, the badge does too.
+  await client.close();
+  clients.splice(clients.indexOf(client), 1);
+  await expect(badge).toHaveCount(0);
+});

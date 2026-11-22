@@ -20,6 +20,7 @@ import {
   ChevronRight,
   Circle,
   CircleAlert,
+  Bot,
   CircleHelp,
   ClipboardPaste,
   Compass,
@@ -325,6 +326,7 @@ const LUCIDE: Record<string, LucideIcon> = {
   'frame-next': StepForward,
   play: Play,
   pause: Pause,
+  bot: Bot,
   loop: Repeat,
   'keep-original': CopyCheck,
 };

@@ -60,8 +60,34 @@ export const IPC = {
   evFullscreen: 'ev:fullscreen',
   evRecentChanged: 'ev:recent-changed',
   assistantReply: 'assistant:reply',
+  assistantsState: 'assistant:state',
+  assistantsPause: 'assistant:pause',
   evAssistantCall: 'ev:assistant-call',
+  evAssistantsState: 'ev:assistants-state',
 } as const;
+
+/** One thing an assistant did (or tried to): what, by whom, when, and how it went. */
+export interface AssistantActivity {
+  id: number;
+  /** When (ms since 1970). */
+  time: number;
+  client: string;
+  /** The tool's title, e.g. Picture info. */
+  title: string;
+  ok: boolean;
+  /** Why it didn't happen. */
+  message?: string;
+}
+
+/** AI assistants as every window shows them: who's connected, whether they're stopped, what they've done. */
+export interface AssistantsState {
+  connected: { id: number; name: string }[];
+  paused: boolean;
+  activity: AssistantActivity[];
+}
+
+/** The call a window answers by asking the user whether an assistant may go ahead (its ask says what for). */
+export const ASSISTANT_ASK = 'pigmento.ask';
 
 /** A tool call from an AI assistant, for a window to carry out. */
 export interface AssistantCall {
@@ -70,6 +96,10 @@ export interface AssistantCall {
   args: Record<string, unknown>;
   /** The assistant's name, as its client gives it. */
   client: string;
+  /** The tool's title, e.g. Picture info. */
+  title: string;
+  /** Set when the user is to be asked first: what it wants to do, in words (e.g. look at pictures). */
+  ask?: string;
 }
 
 /** What an assistant gets back: words, data and pictures (PNG, base64). */
@@ -191,6 +221,11 @@ export interface PigmentoApi {
   assistant: {
     onCall(cb: (call: AssistantCall) => void): Unsubscribe;
     reply(id: number, reply: AssistantReply): void;
+    /** Who's connected, whether they're stopped, and what they've done. */
+    state(): Promise<AssistantsState>;
+    onState(cb: (state: AssistantsState) => void): Unsubscribe;
+    /** Stop every assistant (true) or let them go on. */
+    pause(paused: boolean): void;
   };
   settings: {
     get(): Promise<Settings>;

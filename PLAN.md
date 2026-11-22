@@ -569,7 +569,7 @@ Decisions (agreed with the user on 2026-11-22, Stop 8A's the same day; the rest 
 - [x] 8.1 The bridge: `Pigmento.exe --mcp` speaks MCP over stdio without a window, connects to the running Pigmento over a per-user named pipe (starting it if needed), and serves several clients at once (+ unit tests)
 - [x] 8.2 The server in the app: MCP (the official TypeScript SDK) over the pipe, and over Streamable HTTP on 127.0.0.1 when turned on (token, Origin check); calls reach the window you're working in or one the assistant names; errors come back as plain-language tool errors (+ e2e with an SDK client)
 - [x] 8.3 Settings → AI assistants: on or off, the permissions and their defaults, the folder limit, the watch speed, Streamable HTTP, and ready-to-copy setup for Claude Desktop, Claude Code, VS Code, Cursor and any other client (+ unit tests of the settings)
-- [ ] 8.4 Watching: the connection badge, the Assistant activity panel, Stop assistants (badge, panel and shortcut), "Ask each time" dialogs, one named undo step per change (+ e2e)
+- [x] 8.4 Watching: the connection badge, the Assistant activity panel, Stop assistants (badge, panel and shortcut), "Ask each time" dialogs, one named undo step per change (+ e2e)
 - [ ] 8.5 Looking: picture info (size, layers, pieces, timeline, selection, frame), pictures and windows open, the picture, a layer, a region or a frame as a PNG, and the tools, brushes, shapes, effects and actions there are; the same as MCP resources (+ e2e)
 - [ ] 8.6 E2e: an MCP client connects through `--mcp`, reads a picture, gets it as a PNG matching the screen, is refused once a permission is turned off and paused by Stop assistants; `npm run check` green; report
 

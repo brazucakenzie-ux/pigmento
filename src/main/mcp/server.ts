@@ -6,9 +6,10 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { IPC, type AssistantCall, type AssistantReply, type AssistantResult } from '@shared/ipc';
+import { ASSISTANT_ASK as ASK, IPC, type AssistantCall, type AssistantReply, type AssistantResult, type AssistantsState } from '@shared/ipc';
 import type { Settings } from '@shared/settings';
 import { getSettings, updateSettings } from '../settings';
+import { AssistantsBook } from './book';
 import { TOOLS, WINDOW_ARG, windowFor, type ToolDef } from './tools';
 
 /**
@@ -43,6 +44,7 @@ function toResult(r: AssistantResult): CallToolResult {
 
 const failure = (message: string): CallToolResult => ({ isError: true, content: [{ type: 'text', text: message }] });
 
+
 /** Words for what a kind of permission covers (for refusals). */
 const KIND_WORDS: Record<ToolDef['kind'], string> = {
   look: 'look at pictures',
@@ -59,12 +61,18 @@ export class AssistantHost {
   private readonly pending = new Map<number, { resolve: (r: AssistantReply) => void; win: BrowserWindow }>();
   private nextId = 1;
   private lastFocused: BrowserWindow | null = null;
+  /** Who's connected, whether they're stopped, and what they've done (every window shows it). */
+  private readonly book = new AssistantsBook((s: AssistantsState) => {
+    for (const w of BrowserWindow.getAllWindows()) w.webContents.send(IPC.evAssistantsState, s);
+  });
 
   constructor(
     private readonly pipe: string,
     private readonly version: string,
   ) {
     app.on('browser-window-focus', (_e, w) => (this.lastFocused = w));
+    ipcMain.handle(IPC.assistantsState, () => this.book.state());
+    ipcMain.on(IPC.assistantsPause, (_e, paused: unknown) => this.book.setPaused(paused === true));
     ipcMain.on(IPC.assistantReply, (e, id: unknown, reply: unknown) => {
       const p = typeof id === 'number' ? this.pending.get(id) : undefined;
       if (!p || p.win.webContents !== e.sender) return;
@@ -109,9 +117,13 @@ export class AssistantHost {
   }
 
   private async serveSocket(socket: net.Socket): Promise<void> {
-    const mcp = this.makeServer();
+    const session = this.book.open();
+    const mcp = this.makeServer(session);
     const transport = new StdioServerTransport(socket, socket);
-    socket.on('close', () => void transport.close());
+    socket.on('close', () => {
+      this.book.close(session);
+      void transport.close();
+    });
     socket.on('error', () => socket.destroy());
     await mcp.connect(transport);
   }
@@ -129,6 +141,7 @@ export class AssistantHost {
         const id = req.headers['mcp-session-id'];
         let transport = typeof id === 'string' ? sessions.get(id) : undefined;
         if (!transport) {
+          const session = this.book.open();
           const t = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => randomUUID(),
             onsessioninitialized: (sid) => void sessions.set(sid, t),
@@ -136,9 +149,10 @@ export class AssistantHost {
             allowedHosts: [`127.0.0.1:${port}`, `localhost:${port}`],
           });
           t.onclose = () => {
+            this.book.close(session);
             if (t.sessionId) sessions.delete(t.sessionId);
           };
-          await this.makeServer().connect(t);
+          await this.makeServer(session).connect(t);
           transport = t;
         }
         await transport.handleRequest(req, res);
@@ -152,10 +166,12 @@ export class AssistantHost {
     this.httpServer = server;
   }
 
-  /** An MCP server for one conversation, with every tool. */
-  private makeServer(): McpServer {
+  /** An MCP server for one conversation (session: its place in the book), with every tool. */
+  private makeServer(session: number): McpServer {
     const mcp = new McpServer({ name: 'pigmento', title: 'Pigmento', version: this.version }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });
-    const client = () => mcp.server.getClientVersion()?.name ?? 'An AI assistant';
+    const client = () => mcp.server.getClientVersion()?.title ?? mcp.server.getClientVersion()?.name ?? 'An AI assistant';
+    // It shows as connected once it says who it is.
+    mcp.server.oninitialized = () => this.book.named(session, client());
     for (const tool of TOOLS) {
       mcp.registerTool(
         tool.name,
@@ -166,16 +182,30 @@ export class AssistantHost {
     return mcp;
   }
 
-  /** Carry out one call: if its kind is allowed, here or in its window. */
+  /** Carry out one call, noting it in the book. */
   private async call(tool: ToolDef, args: Record<string, unknown>, client: string): Promise<CallToolResult> {
+    const result = await this.carryOut(tool, args, client);
+    const message = result.isError ? result.content.find((c) => c.type === 'text')?.text : undefined;
+    this.book.record(client, tool.title, !result.isError, message);
+    return result;
+  }
+
+  /** One call: unless assistants are stopped or its kind isn't allowed (asking you first, if that's the setting), here or in its window. */
+  private async carryOut(tool: ToolDef, args: Record<string, unknown>, client: string): Promise<CallToolResult> {
     const s = getSettings().assistants;
     if (!s.enabled) return failure('AI assistants are turned off in Pigmento (Settings → AI assistants).');
+    if (this.book.paused) return failure('The user has stopped AI assistants in Pigmento for now. Try again once they let you go on.');
     if (s[tool.kind] === 'deny') return failure(`Pigmento doesn’t let AI assistants ${KIND_WORDS[tool.kind]} (Settings → AI assistants).`);
     try {
-      if (tool.main) return toResult(tool.main({ windows: () => this.windows() }, args));
       const { window: id, ...rest } = args as { window?: number } & Record<string, unknown>;
-      const win = windowFor(id, this.lastFocused);
-      const reply = await this.callWindow(win, { id: 0, tool: tool.name, args: rest, client });
+      const win = windowFor(tool.main ? undefined : id, this.lastFocused);
+      const call = { id: 0, tool: tool.name, args: rest, client, title: tool.title };
+      if (s[tool.kind] === 'ask') {
+        const answer = await this.callWindow(win, { ...call, tool: ASK, ask: KIND_WORDS[tool.kind] });
+        if (!answer.ok) return failure(answer.error);
+      }
+      if (tool.main) return toResult(tool.main({ windows: () => this.windows() }, args));
+      const reply = await this.callWindow(win, call);
       return reply.ok ? toResult(reply.result) : failure(reply.error);
     } catch (err) {
       return failure(err instanceof Error ? err.message : String(err));
