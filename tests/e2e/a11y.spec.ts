@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { expect, test, type Page } from '@playwright/test';
+import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { connectStdio, setAssistants } from './assistantClient';
 import { clickDoc, drag, launchApp, ready, type AppHandle } from './harness';
 
 let h: AppHandle;
@@ -317,6 +319,82 @@ test('the path, trim, trail, loop and spin controls meet WCAG 2.1 AA in light, d
     findings.push(...(await audit(page, `${label} · Trim options`, '.optionsbar')));
     findings.push(...(await auditDialog(page, `${label} · Draw on`, () => bar.getByRole('button', { name: 'Draw on…' }).click())));
     await page.getByRole('tab', { name: 'Home' }).click();
+  }
+  for (const f of findings) console.warn(`[a11y] ${f.where} — ${f.rule} (${f.impact}): ${f.help} :: ${f.targets.join(' | ')}`);
+  expect(findings.map((f) => `${f.where}: ${f.rule}`)).toEqual([]);
+});
+
+test('the AI assistants settings, badge, activity panel and Ask each time dialog meet WCAG 2.1 AA in light, dark and high-contrast themes, and work by keyboard', async () => {
+  test.setTimeout(300_000);
+  h = await launchApp();
+  const { page } = h;
+  await ready(page);
+  const clients: Client[] = [];
+  const findings: Finding[] = [];
+  try {
+    const client = await connectStdio(h, clients);
+    const set = (change: Record<string, unknown>) => setAssistants(h, change);
+    // Something in Assistant activity: a look, and a refusal (with its reason).
+    await client.callTool({ name: 'get_picture_info', arguments: {} });
+    await set({ files: 'deny' });
+    await client.callTool({ name: 'export_image', arguments: { path: 'C:\\nope.png' } });
+    // The settings page with everything showing: a folder limit, the HTTP address, asking first.
+    await set({ files: 'ask', folder: h.userData, http: true, httpPort: 39700 + Math.floor(Math.random() * 200), edit: 'ask' });
+    const badge = page.locator('.assistant-badge');
+    await expect(badge).toBeVisible();
+    const activity = page.locator('.panel-section-assistants');
+    await expect(activity.locator('.assistant-log li')).toHaveCount(2);
+
+    // By keyboard: the badge opens its popover, whose buttons are in the tab order; Esc closes it
+    // and gives focus back; Ctrl+Shift+Q stops assistants and lets them go on.
+    await badge.focus();
+    await page.keyboard.press('Enter');
+    const popover = page.getByRole('dialog', { name: 'AI assistants' });
+    await expect(popover).toBeVisible();
+    await expect(popover.getByRole('button', { name: 'Stop assistants' })).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(popover.getByRole('button', { name: 'Show activity' })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(popover).toBeHidden();
+    await expect(badge).toBeFocused();
+    await page.keyboard.press('Control+Shift+Q');
+    await expect(badge).toHaveText('Assistants stopped');
+    await page.keyboard.press('Control+Shift+Q');
+    await expect(badge).toHaveText('e2e-client');
+
+    for (const [family, mode] of [
+      [null, 'Light'],
+      [null, 'Dark'],
+      ['High contrast', 'Dark'],
+    ] as const) {
+      await theme(page, family, mode);
+      const label = `${family ?? 'Pigmento'} ${mode}`;
+      findings.push(...(await audit(page, `${label} · Title bar with the badge`, '.topbar')), ...(await audit(page, `${label} · Assistant activity`, '.panel-section-assistants')));
+      await badge.click();
+      await expect(popover).toBeVisible();
+      await page.waitForTimeout(100);
+      findings.push(...(await audit(page, `${label} · Badge popover`, '.assistant-popover')));
+      await page.keyboard.press('Escape');
+      await expect(popover).toBeHidden();
+      findings.push(
+        ...(await auditDialog(page, `${label} · Settings → AI assistants`, async () => {
+          await page.keyboard.press('Control+Alt+s');
+          await page.getByRole('tab', { name: 'AI assistants' }).click();
+        })),
+      );
+      // Ask each time: the user's own dialog, Allow by Enter (it's the default), Don't allow by Esc.
+      const asked = client.callTool({ name: 'add_layer', arguments: { name: label } });
+      const ask = page.locator('dialog[open]');
+      await expect(ask).toContainText('e2e-client wants to go ahead');
+      await page.waitForTimeout(150);
+      findings.push(...(await audit(page, `${label} · Ask each time`, 'dialog[open]')));
+      await page.keyboard.press(family ? 'Escape' : 'Enter');
+      const answer = await asked;
+      expect(Boolean(answer.isError)).toBe(family !== null);
+      await page.getByRole('tab', { name: 'Home' }).click();
+    }
+  } finally {
+    await Promise.all(clients.map((c) => c.close().catch(() => undefined)));
   }
   for (const f of findings) console.warn(`[a11y] ${f.where} — ${f.rule} (${f.impact}): ${f.help} :: ${f.targets.join(' | ')}`);
   expect(findings.map((f) => `${f.where}: ${f.rule}`)).toEqual([]);
