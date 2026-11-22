@@ -2,7 +2,9 @@
 
 All notable changes to Pigmento. Versions follow [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
+## [1.3.1] — 2026-11-22
+
+Drawings on pieces: a piece can change from drawing to drawing while it moves or stays put.
 
 ### Drawings on pieces
 - A piece can be drawn frame by frame, so it changes while it moves or stays put. With **Paint on piece** on, **New drawing**, **Copy drawing**, **Clear drawing**, **Delete drawing** and **Loop drawings** act on the piece, and painting paints the drawing showing.
