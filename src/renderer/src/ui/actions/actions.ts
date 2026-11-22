@@ -570,6 +570,8 @@ export function action(id: string): Action {
 export function runAction(id: string): void {
   const a = action(id);
   if (a.enabled && !a.enabled(useUi.getState())) return;
+  // An AI assistant's step is being made: shortcuts and buttons wait for it (Stop assistants doesn't).
+  if (engine.history.held && id !== 'stopAssistants') return;
   void Promise.resolve(a.run()).catch((err: unknown) => reportEngineError(engine, err));
 }
 

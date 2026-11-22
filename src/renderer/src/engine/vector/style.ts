@@ -1,3 +1,4 @@
+import { ARROW_HEADS, DASH_STYLES } from '@shared/styles';
 import type { RGBA } from '../core/color';
 import type { Point } from '../core/geometry';
 
@@ -12,13 +13,12 @@ export const OUTLINE_KINDS = ['solid', 'gradient'] as const;
 export type OutlineKind = (typeof OUTLINE_KINDS)[number];
 export const SHAPE_GRADIENT_TYPES = ['linear', 'radial', 'angular'] as const;
 export type ShapeGradientType = (typeof SHAPE_GRADIENT_TYPES)[number];
-export const DASH_STYLES = ['solid', 'dash', 'dot', 'dashDot'] as const;
+export { ARROW_HEADS, DASH_STYLES };
 export type DashStyle = (typeof DASH_STYLES)[number];
 export const CAP_STYLES = ['butt', 'round', 'square'] as const;
 export type CapStyle = (typeof CAP_STYLES)[number];
 export const JOIN_STYLES = ['miter', 'round', 'bevel'] as const;
 export type JoinStyle = (typeof JOIN_STYLES)[number];
-export const ARROW_HEADS = ['none', 'triangle', 'open', 'circle', 'diamond'] as const;
 export type ArrowHead = (typeof ARROW_HEADS)[number];
 
 export interface PaintStop {

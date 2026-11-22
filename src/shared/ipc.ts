@@ -60,6 +60,7 @@ export const IPC = {
   evFullscreen: 'ev:fullscreen',
   evRecentChanged: 'ev:recent-changed',
   assistantReply: 'assistant:reply',
+  assistantReady: 'assistant:ready',
   assistantsState: 'assistant:state',
   assistantsPause: 'assistant:pause',
   evAssistantCall: 'ev:assistant-call',
@@ -100,6 +101,8 @@ export interface AssistantCall {
   title: string;
   /** Set when the user is to be asked first: what it wants to do, in words (e.g. look at pictures). */
   ask?: string;
+  /** Changes play out at a pace you can follow, or are made at once (Settings → AI assistants). */
+  pace?: 'watch' | 'instant';
 }
 
 /** What an assistant gets back: words, data and pictures (PNG, base64). */

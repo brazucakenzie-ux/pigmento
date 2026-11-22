@@ -1,3 +1,4 @@
+import { BLEND_MODES as BLEND_MODE_LIST } from '@shared/styles';
 import type { RGBA } from '../core/color';
 import { Surface } from '../raster/Surface';
 import { defaultTimeline, type Timeline } from '../anim/timeline';
@@ -10,40 +11,9 @@ import type { Guide } from './guides';
 import { hasTrimKeys, hasTrimTies, type VectorNode } from '../vector/model';
 
 /** Canvas 2D composite operation names; also implemented in JS (raster/blend.ts). */
-export type BlendMode =
-  | 'normal'
-  | 'multiply'
-  | 'screen'
-  | 'overlay'
-  | 'darken'
-  | 'lighten'
-  | 'color-dodge'
-  | 'color-burn'
-  | 'difference'
-  | 'soft-light'
-  | 'hard-light'
-  | 'hue'
-  | 'saturation'
-  | 'color'
-  | 'luminosity';
+export type BlendMode = (typeof BLEND_MODE_LIST)[number];
 
-export const BLEND_MODES: BlendMode[] = [
-  'normal',
-  'multiply',
-  'screen',
-  'overlay',
-  'darken',
-  'lighten',
-  'color-dodge',
-  'color-burn',
-  'difference',
-  'soft-light',
-  'hard-light',
-  'hue',
-  'saturation',
-  'color',
-  'luminosity',
-];
+export const BLEND_MODES: BlendMode[] = [...BLEND_MODE_LIST];
 
 let nextId = 1;
 export function newId(prefix: string): string {

@@ -37,14 +37,19 @@ export async function newImage(width: number, height: number, paper: RGBA | null
   if (!(await confirmDiscard())) return false;
   if (!(await hasMemoryFor(width, height))) return false;
   try {
-    engine.newDocument(width, height, paper, dpi);
+    replaceWithNew(width, height, paper, dpi);
   } catch (err) {
     reportError(err);
     return false;
   }
+  return true;
+}
+
+/** Replace the picture with a new, unsaved one, without asking (throws if it can't be made). */
+export function replaceWithNew(width: number, height: number, paper: RGBA | null, dpi: number): void {
+  engine.newDocument(width, height, paper, dpi);
   useUi.setState({ file: { path: null, name: null, format: null } });
   window.pigmento.window.setDocState({ dirty: false, hasFile: false });
-  return true;
 }
 
 function reportError(err: unknown, fallbackKey: 'error.generic' = 'error.generic'): void {
@@ -82,7 +87,7 @@ export const pngCodec: PngCodec = {
 
 /** More than one layer (or a group): a flat image format can't hold it. */
 /** Saved selections live only in projects. */
-function hasSavedSelections(): boolean {
+export function hasSavedSelections(): boolean {
   return engine.doc.savedSelections.length > 0;
 }
 
@@ -169,7 +174,8 @@ async function encodeFlattened(format: ImageFormat, quality: number): Promise<Ui
   return engine.codecs.encode(format, img.w, img.h, img.data, quality, engine.doc.dpi);
 }
 
-async function writeTo(path: string, format: FileFormat, fromSaveAs: boolean): Promise<boolean> {
+/** Write the picture to `path`. A flat format asks about quality and losses, unless `quality` is given. */
+async function writeTo(path: string, format: FileFormat, fromSaveAs: boolean, given?: number): Promise<boolean> {
   engine.commitLive();
   const name = path.split(/[\\/]/).pop() ?? path;
   let bytes: Uint8Array;
@@ -183,8 +189,8 @@ async function writeTo(path: string, format: FileFormat, fromSaveAs: boolean): P
       const selections = hasSavedSelections();
       const transparent = hasTransparency(engine.flatten(false).data);
       const settings = useUi.getState().settings.export;
-      let quality = format === 'jpeg' ? settings.jpegQuality : settings.webpQuality;
-      if (fromSaveAs || layers || selections) {
+      let quality = given ?? (format === 'jpeg' ? settings.jpegQuality : settings.webpQuality);
+      if (given === undefined && (fromSaveAs || layers || selections)) {
         const q = await askQuality(format, transparent, layers, selections);
         if (q === null) return false;
         quality = q;
@@ -205,6 +211,12 @@ async function writeTo(path: string, format: FileFormat, fromSaveAs: boolean): P
   if (format !== 'pigm' && engine.anim.animated) showToast({ kind: 'info', key: 'notice.savedFrame', params: { name, n: engine.anim.frame + 1 } });
   else showToast({ kind: 'info', key: 'notice.saved', params: { name } });
   return true;
+}
+
+/** Save to `path` without any dialog (AI assistants): JPEG and WebP at `quality`, or the export setting. */
+export function saveTo(path: string, format: FileFormat, quality?: number): Promise<boolean> {
+  const settings = useUi.getState().settings.export;
+  return writeTo(path, format, false, quality ?? (format === 'jpeg' ? settings.jpegQuality : settings.webpQuality));
 }
 
 export async function save(): Promise<boolean> {
@@ -252,9 +264,14 @@ async function encodeExport(c: ExportChoice): Promise<Uint8Array> {
 export async function exportImage(c: ExportChoice): Promise<boolean> {
   const res = await window.pigmento.files.showSaveDialog({ defaultName: exportFileName(c), format: c.format, exportOnly: true });
   if (!res) return false;
-  const name = res.path.split(/[\\/]/).pop() ?? res.path;
+  return exportTo(res.path, c);
+}
+
+/** Export a copy to `path` (a path main has allowed), without a dialog. */
+export async function exportTo(path: string, c: ExportChoice): Promise<boolean> {
+  const name = path.split(/[\\/]/).pop() ?? path;
   try {
-    await window.pigmento.files.write(res.path, await encodeExport(c));
+    await window.pigmento.files.write(path, await encodeExport(c));
   } catch (err) {
     const e = err as { key?: unknown };
     if (typeof e?.key === 'string') reportError(err);

@@ -1,46 +1,14 @@
 import { BrowserWindow } from 'electron';
 import { z } from 'zod';
-import type { AssistantResult } from '@shared/ipc';
+import { IMAGE_TOOLS, LAYER_TOOLS, PAINT_TOOLS } from './edit';
+import { PICTURE_TOOLS } from './pictures';
+import type { ToolDef } from './types';
 
 /**
  * The tools AI assistants can call. Each is one kind of thing a person does in Pigmento, checked
  * against the permission for that kind (Settings → AI assistants). Most run in a window, on the
  * picture there; a few are answered here in the main process.
  */
-
-/** The kinds of things an assistant does, each with its own permission. */
-export type AssistantKind = 'look' | 'edit' | 'files' | 'pictures' | 'settings';
-
-/** A window: its id (from list_windows) and title. */
-export interface WindowInfo {
-  id: number;
-  title: string;
-  /** It's the one you're working in. */
-  current: boolean;
-}
-
-export interface ToolContext {
-  /** Every open Pigmento window. */
-  windows(): WindowInfo[];
-}
-
-export interface ToolDef {
-  name: string;
-  title: string;
-  description: string;
-  kind: AssistantKind;
-  /** Its arguments (a window tool also takes an optional `window`). */
-  input: z.ZodRawShape;
-  /** It only reads (it never changes a picture, a file or a setting). */
-  readOnly: boolean;
-  /** Answered in the main process (otherwise the window does it). */
-  main?: (ctx: ToolContext, args: Record<string, unknown>) => AssistantResult;
-}
-
-/** The optional argument every window tool takes: which window (from list_windows; the one you're working in if left out). */
-export const WINDOW_ARG = {
-  window: z.number().int().positive().optional().describe('Which Pigmento window (an id from list_windows). Leave it out for the window the user is working in.'),
-};
 
 /** The biggest picture image an assistant can ask for. */
 export const MAX_IMAGE_SIZE = 2048;
@@ -53,6 +21,7 @@ export const TOOLS: readonly ToolDef[] = [
     kind: 'look',
     input: {},
     readOnly: true,
+    noWindow: true,
     main: (ctx) => {
       const windows = ctx.windows();
       return { text: windows.map((w) => `${w.id}: ${w.title}${w.current ? ' (the one being worked in)' : ''}`).join('\n') || 'No windows are open.', data: { windows } };
@@ -93,6 +62,10 @@ export const TOOLS: readonly ToolDef[] = [
     input: { what: z.enum(['tools', 'brushes', 'shapes', 'effects', 'actions']).describe('Which list.') },
     readOnly: true,
   },
+  ...PICTURE_TOOLS,
+  ...LAYER_TOOLS,
+  ...PAINT_TOOLS,
+  ...IMAGE_TOOLS,
 ];
 
 

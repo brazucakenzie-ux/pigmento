@@ -31,6 +31,7 @@ import { clearAutosave, listRecoverable, readAutosave, registerSession, releaseS
 import { listPatterns, MAX_PATTERN_BYTES, removePattern, savePattern } from './patterns';
 import { listShapes, removeShape, saveShape } from './shapes';
 import { listBrushes, removeBrush, saveBrush } from './brushes';
+import { isActing } from './mcp/acting';
 import { ASSET_KINDS, isAssetKind, type OpenedAsset } from '@shared/assets';
 import {
   TOP_BAR_HEIGHT,
@@ -62,6 +63,7 @@ function isFormat(v: unknown): v is FileFormat {
 
 export function registerIpc(): void {
   ipcMain.handle(IPC.openDialog, async (e) => {
+    if (isActing(e.sender)) return null;
     const win = senderWindow(e);
     const res = await dialog.showOpenDialog(win, {
       title: tm('dialog.open.title'),
@@ -84,12 +86,14 @@ export function registerIpc(): void {
   });
 
   ipcMain.handle(IPC.chooseFolder, async (e): Promise<string | null> => {
+    if (isActing(e.sender)) return null;
     const win = senderWindow(e);
     const res = win ? await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'] }) : await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] });
     return res.canceled || !res.filePaths[0] ? null : res.filePaths[0];
   });
 
   ipcMain.handle(IPC.saveDialog, async (e, req: SaveDialogRequest): Promise<SaveDialogResult | null> => {
+    if (isActing(e.sender)) return null;
     const win = senderWindow(e);
     if (!req || typeof req.defaultName !== 'string' || !isFormat(req.format)) {
       throw new Error('Invalid save request');
@@ -129,6 +133,7 @@ export function registerIpc(): void {
 
   // Non-image files: the main process picks, reads and writes them; nothing is granted.
   ipcMain.handle(IPC.assetOpen, async (e, kind: unknown): Promise<OpenedAsset | null> => {
+    if (isActing(e.sender)) return null;
     if (!isAssetKind(kind)) throw new Error('Invalid file kind');
     const k = ASSET_KINDS[kind];
     const res = await dialog.showOpenDialog(senderWindow(e), {
@@ -148,6 +153,7 @@ export function registerIpc(): void {
   });
 
   ipcMain.handle(IPC.assetSave, async (e, kind: unknown, name: unknown, data: unknown): Promise<string | null> => {
+    if (isActing(e.sender)) return null;
     if (!isAssetKind(kind) || typeof name !== 'string') throw new Error('Invalid save request');
     const k = ASSET_KINDS[kind];
     const bytes = bytesArg(data, k.maxBytes);
@@ -232,6 +238,7 @@ export function registerIpc(): void {
   });
 
   ipcMain.handle(IPC.confirmSave, async (e, docName: unknown) => {
+    if (isActing(e.sender)) return 'cancel';
     const win = senderWindow(e);
     const name = typeof docName === 'string' ? docName : 'Untitled';
     const res = await dialog.showMessageBox(win, {
@@ -248,6 +255,7 @@ export function registerIpc(): void {
   });
 
   ipcMain.handle(IPC.showError, async (e, title: unknown, message: unknown) => {
+    if (isActing(e.sender)) return;
     const win = senderWindow(e);
     await dialog.showMessageBox(win, {
       type: 'error',
@@ -309,6 +317,7 @@ export function registerIpc(): void {
   });
 
   ipcMain.handle(IPC.print, async (e, req: PrintRequest) => {
+    if (isActing(e.sender)) return false;
     const win = senderWindow(e);
     if (!req || typeof req.widthPx !== 'number' || typeof req.heightPx !== 'number') {
       throw new Error('Invalid print request');

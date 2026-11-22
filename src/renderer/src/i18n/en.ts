@@ -6,6 +6,7 @@ import { settingsEn } from './settings.en';
 import { tourEn } from './tour.en';
 import { errorsEn } from './errors.en';
 import { animEn } from './anim.en';
+import { assistantsEn } from './assistants.en';
 
 /** English strings. Keys are grouped by area; placeholders use {name}. */
 export const en = {
@@ -866,4 +867,5 @@ export const en = {
   ...tourEn,
   ...errorsEn,
   ...animEn,
+  ...assistantsEn,
 } as const;

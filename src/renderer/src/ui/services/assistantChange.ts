@@ -12,8 +12,8 @@ export interface AssistantChange {
   label: I18nKey;
   /** Plays the change out on screen without making it (skipped when drawing is instant). */
   watch?: () => Promise<void>;
-  /** Makes the change; what it returns goes back to the assistant. */
-  apply: () => AssistantResult;
+  /** Makes the change (it may wait, for work done on workers); what it returns goes back to the assistant. */
+  apply: () => AssistantResult | Promise<AssistantResult>;
 }
 
 export function isChange(r: AssistantResult | AssistantChange): r is AssistantChange {
@@ -23,5 +23,5 @@ export function isChange(r: AssistantResult | AssistantChange): r is AssistantCh
 /** Watch it (unless drawing is instant), then make it as one undo step. */
 export async function carryOutChange(history: History, change: AssistantChange, pace: 'watch' | 'instant'): Promise<AssistantResult> {
   if (pace === 'watch' && change.watch) await change.watch();
-  return history.group(change.label, change.apply);
+  return history.named(change.label, change.apply);
 }

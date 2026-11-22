@@ -101,7 +101,8 @@
   color: var(--text);
   background: transparent;
 }
-.assistant-popover {
+/* Only while open: a closed popover is hidden by the browser, which display would undo. */
+.assistant-popover:popover-open {
   display: flex;
   flex-direction: column;
   gap: 8px;

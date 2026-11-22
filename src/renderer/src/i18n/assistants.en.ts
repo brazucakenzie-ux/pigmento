@@ -1,0 +1,23 @@
+/** AI assistants: the names of their undo steps, one for each tool that changes the picture. */
+export const assistantsEn = {
+  'assistant.step.add_layer': 'Assistant: Add layer',
+  'assistant.step.delete_layer': 'Assistant: Delete layer',
+  'assistant.step.move_layer': 'Assistant: Move layer',
+  'assistant.step.group_layers': 'Assistant: Group layers',
+  'assistant.step.set_layer': 'Assistant: Set layer',
+  'assistant.step.select': 'Assistant: Select',
+  'assistant.step.transform_pixels': 'Assistant: Move pixels',
+  'assistant.step.set_colors': 'Assistant: Colours',
+  'assistant.step.fill': 'Assistant: Fill',
+  'assistant.step.brush_stroke': 'Assistant: Brush stroke',
+  'assistant.step.draw_line': 'Assistant: Line',
+  'assistant.step.draw_shape': 'Assistant: Shape',
+  'assistant.step.draw_path': 'Assistant: Path',
+  'assistant.step.add_text': 'Assistant: Text',
+  'assistant.step.resize_image': 'Assistant: Resize',
+  'assistant.step.crop': 'Assistant: Crop',
+  'assistant.step.canvas_size': 'Assistant: Canvas size',
+  'assistant.step.rotate_flip': 'Assistant: Rotate or flip',
+  'assistant.step.apply_effect': 'Assistant: Effect',
+  'assistant.step.run_action': 'Assistant: Action',
+} as const;
