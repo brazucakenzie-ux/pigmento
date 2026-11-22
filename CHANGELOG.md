@@ -2,6 +2,36 @@
 
 All notable changes to Pigmento. Versions follow [Semantic Versioning](https://semver.org).
 
+## [1.4.0] — 2026-11-22
+
+Pigmento for AI assistants: an assistant can use Pigmento the way you do, through the Model Context Protocol (MCP), while you watch.
+
+### Connecting
+- Any MCP client can connect: Claude Desktop, Claude Code, VS Code, Cursor and others. It runs `Pigmento.exe --mcp`, which reaches the Pigmento you have open, or starts it. Several assistants can be connected at once.
+- Settings → **AI assistants** shows what to add to each client, with a Copy button. A **local HTTP address** for clients that connect by URL can be turned on. It answers only on this PC, only with the key in its address, and never to web pages.
+
+### What assistants may do
+- Each kind of thing has its own setting: **Allowed**, **Ask each time** or **Not allowed**. The kinds are looking at pictures, drawing and editing, opening, saving and exporting files (anywhere or in one folder), new, closing and switching pictures, and changing Pigmento's settings. All are allowed at first.
+- An assistant can never change the AI assistants settings. **Ask each time** asks in Pigmento's own dialog.
+- It never replaces unsaved work or an existing file unless it says so.
+
+### Watching
+- The title bar shows who is connected. **Assistant activity** lists what they did and why anything was refused. **Stop AI assistants** (Ctrl+Shift+Q) stops them all until you let them go on.
+- Strokes, lines and paths are drawn at a pace you can follow, shapes grow as if dragged, and text is typed out. You can make it instant instead.
+- Each change is one undo step named "Assistant: …". Your tool, brush settings and colours stay as you left them, and the timeline goes to the frame an assistant works on.
+
+### What they can do (40 tools)
+- **Look:** picture info, and PNGs of the picture, a layer, a region or an animation frame. Also lists of the tools, brushes, shapes, effects and actions there are, and Pigmento's settings.
+- **Pictures and files:** new, open, save, save as, export, close and switch windows.
+- **Layers and selections:** add, delete, move, group and set layers; select by rectangle, ellipse, polygon, magic wand, colour range, all, none and invert, and feather, grow, shrink or border; move, scale, rotate and flip pixels.
+- **Painting:** colours, fill, brush strokes with any brush and pressure, the eraser, lines with arrowheads, any library shape, curved paths, and text.
+- **The image and effects:** resize, crop, canvas size, rotate and flip; any adjustment or filter with its settings; any action by name; and settings.
+- **Animation:**
+  - Pieces from a selection, a layer, an image or a 3D box, with keyframes for every value, easing and curves.
+  - Loops, following, hinges, paths and facing the way they go, trails, Draw on and Erase behind, and spin.
+  - Frame-by-frame drawings, the timeline, the camera and the light, and GIF and MP4 export.
+- The [tool reference](docs/mcp.md) describes every tool.
+
 ## [1.3.1] — 2026-11-22
 
 Drawings on pieces: a piece can change from drawing to drawing while it moves or stays put.

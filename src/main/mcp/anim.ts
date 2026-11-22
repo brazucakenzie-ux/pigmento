@@ -24,7 +24,7 @@ export const ANIM_TOOLS: readonly ToolDef[] = [
     kind: 'edit',
     readOnly: false,
     input: {
-      from: z.enum(['selection', 'layer', 'image', 'box']),
+      from: z.enum(['selection', 'layer', 'image', 'box']).describe("What to make it from."),
       layer: z.string().optional().describe('selection and layer: the pixels layer (an id); it becomes the active layer. The active layer if left out.'),
       keepOriginal: z.boolean().optional().describe('selection and layer: leave the pixels on the layer too (false: they move into the piece).'),
       path: z.string().optional().describe('image: the image file’s full path.'),
@@ -53,15 +53,15 @@ export const ANIM_TOOLS: readonly ToolDef[] = [
       piece: PIECE,
       frame: FRAME,
       x: z.number().optional().describe('Where its pivot is, in picture pixels.'),
-      y: z.number().optional(),
+      y: z.number().optional().describe("Where its pivot is, down."),
       scale: z.number().optional().describe('Size, times as drawn (1); sets both scaleX and scaleY. Negative flips it.'),
-      scaleX: z.number().optional(),
-      scaleY: z.number().optional(),
+      scaleX: z.number().optional().describe("Width, times as drawn (negative flips it)."),
+      scaleY: z.number().optional().describe("Height, times as drawn (negative flips it)."),
       rotate: z.number().optional().describe('Degrees, clockwise (720 is two whole turns).'),
       skew: z.number().min(-85).max(85).optional().describe('Degrees.'),
       opacity: z.number().min(0).max(1).optional().describe('0 (gone) to 1.'),
       scrollX: z.number().optional().describe('A repeating piece: how far its tiles have slid, in its own pixels.'),
-      scrollY: z.number().optional(),
+      scrollY: z.number().optional().describe("How far its tiles have slid down."),
       depth: z.number().optional().describe('3D: pixels behind the canvas (negative: in front).'),
       tilt: z.number().optional().describe('3D: degrees tipped back.'),
       turn: z.number().optional().describe('3D: degrees turned round.'),
@@ -82,7 +82,7 @@ export const ANIM_TOOLS: readonly ToolDef[] = [
     readOnly: false,
     input: {
       piece: PIECE,
-      name: z.string().min(1).max(200).optional(),
+      name: z.string().min(1).max(200).optional().describe("Its new name."),
       loop: z.enum(['off', 'loop', 'pingpong']).optional().describe('After its last keyframe: stop (off), go round again (loop), or back and forth (pingpong).'),
       follow: z.string().optional().describe('Another piece (an id) it moves with from now on, staying where it is; "none" lets go.'),
       hinge: z
@@ -163,13 +163,14 @@ export const ANIM_TOOLS: readonly ToolDef[] = [
     input: {
       layer: z.string().describe('The shapes layer (an id).'),
       objects: z.array(z.string()).min(1).describe('The shapes (object ids from get_picture_info).'),
-      effect: z.enum(['drawOn', 'eraseBehind']).optional(),
+      effect: z.enum(['drawOn', 'eraseBehind']).optional().describe("Draw on (drawn from nothing) or Erase behind (erased from its start)."),
       from: FRAME.optional().describe('The frame it starts (1 if left out).'),
       to: FRAME.optional().describe('The frame it ends (the last if left out).'),
-      easing: EASING.optional(),
+      easing: EASING.optional().describe("How it speeds up and slows down (linear if left out)."),
       tie: z
         .union([z.object({ piece: z.string(), end: z.enum(['start', 'end']).optional().describe('Which end of the line follows the piece (end: drawn up to it; start: erased behind it).'), gap: z.number().optional().describe('Pixels behind the piece.') }), z.literal('none')])
-        .optional(),
+        .optional()
+        .describe('Tie an end of the line to a piece that follows it, or none to untie.'),
     },
   },
   {

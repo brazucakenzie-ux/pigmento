@@ -8,7 +8,7 @@ import type { AppHandle } from './harness';
 
 const electronExe = createRequire(__filename)('electron') as unknown as string;
 
-export async function connectStdio(h: AppHandle, clients: Client[]): Promise<Client> {
+export async function connectStdio(h: AppHandle, clients: Client[], name = 'e2e-client'): Promise<Client> {
   const transport = new StdioClientTransport({
     command: electronExe,
     args: ['.', '--mcp'],
@@ -16,7 +16,7 @@ export async function connectStdio(h: AppHandle, clients: Client[]): Promise<Cli
     env: { ...(process.env as Record<string, string>), PIGMENTO_USER_DATA: h.userData },
     stderr: 'pipe',
   });
-  const client = new Client({ name: 'e2e-client', version: '1.0.0' });
+  const client = new Client({ name, version: '1.0.0' });
   await client.connect(transport);
   clients.push(client);
   return client;

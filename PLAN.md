@@ -608,5 +608,5 @@ Decisions (agreed with the user on 2026-11-22, Stop 8A's the same day; the rest 
 **Stop 8D — Polish and release**
 - [x] 8.17 Accessibility: axe audit of the AI assistants settings, the badge, the activity panel and the Ask each time dialogs in light, dark and high contrast; all of it reachable by keyboard
 - [x] 8.18 Performance: looking at a 1080p picture in under 100 ms, a PNG of it in under 300 ms; a client's calls never stall the window; strokes at the watch speed don't hold up the next call (+ perf e2e)
-- [ ] 8.19 User guide (setting up a client, the permissions, what assistants can do), a tool reference (`docs/mcp.md`), README feature and screenshot, CHANGELOG 1.4.0, version 1.4.0, third-party notices for the SDK
+- [x] 8.19 User guide (setting up a client, the permissions, what assistants can do), a tool reference (`docs/mcp.md`), README feature and screenshot, CHANGELOG 1.4.0, version 1.4.0, third-party notices for the SDK
 - [ ] 8.20 `npm run check` green, installer rebuilt and smoke-tested (the installed `Pigmento.exe --mcp` included); final report listing every 1.4.0 feature with its status; then, after asking, tag `v1.4.0` and publish the release (steps in `docs/releasing.md`)

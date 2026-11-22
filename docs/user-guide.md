@@ -327,10 +327,53 @@ The Image tab resizes the picture or the canvas, crops, rotates and flips, and i
 
 ## Settings
 
-File → Settings (Ctrl+Alt+S) has two pages:
+File → Settings (Ctrl+Alt+S) has three pages:
 
 - **General** sets the interface size (80–200 %) and Simple or Full mode.
+- **AI assistants** sets what AI assistants may do and how to connect one (see [AI assistants](#ai-assistants)).
 - **Keyboard shortcuts** lists every command. Press **+** on a row, then press the keys you want, or a mouse side button. If the keys are already taken, Pigmento asks whether to move them over; tools can also share a letter, and pressing it again switches between them. Remove a shortcut with its ×, or reset one command or all of them.
+
+## AI assistants
+
+An AI assistant can use Pigmento the way you do, through the Model Context Protocol (MCP). It looks at your picture, then paints, edits, animates and saves, in the window you have open, while you watch. It works with any MCP client, such as Claude Desktop, Claude Code, VS Code and Cursor. Pigmento has no assistant of its own: you connect the one you use.
+
+### Connecting an assistant
+
+1. Open File → Settings (Ctrl+Alt+S) → **AI assistants**. Under **Connect an assistant**, choose yours. Pigmento shows what to add to it, with a **Copy** button.
+2. Add it to the assistant:
+   - **Claude Desktop:** paste it into the config file from Settings → Developer → Edit config.
+   - **Claude Code:** run the command shown in a terminal.
+   - **VS Code:** paste it into `.vscode/mcp.json` in a project, or into your user MCP settings.
+   - **Cursor:** paste it into `mcp.json` (`%USERPROFILE%\.cursor\mcp.json` for every project).
+   - **Another MCP client:** give it the command and arguments shown.
+3. Start the assistant again. It runs `Pigmento.exe --mcp` to reach Pigmento, which starts Pigmento if it isn't running.
+
+Some clients connect by a URL instead. For them, turn on **Let assistants connect by a local address too** and copy the address. Only programs on this PC can reach it, with the key in the address, and web pages never can. **New key** makes a new address, and the old one stops working.
+
+### What assistants may do
+
+Each kind of thing has its own setting: **Allowed**, **Ask each time** or **Not allowed**. All are Allowed at first.
+
+- **Look at pictures:** picture info, and images of the picture, a layer, a region or a frame.
+- **Draw and edit:** layers, selections, painting, effects, the image and animation.
+- **Open, save and export files:** anywhere, or, with **Only open, save and export files in one folder**, only there.
+- **New, close and switch pictures.**
+- **Change Pigmento's settings:** the theme, the view and the rest.
+
+An assistant can never change the AI assistants settings. **Ask each time** asks in Pigmento's own dialog: **Allow** (Enter) or **Don't allow** (Esc). Turn off **Allow AI assistants** to stop them connecting at all.
+
+### Watching what they do
+
+- While an assistant is connected, the title bar shows its name. Click it to see who's connected, stop them, or show their activity.
+- **Assistant activity**, in the side panel, lists what assistants have done, newest first, and why anything was refused.
+- **Stop AI assistants** (Ctrl+Shift+Q, the badge or the panel) refuses whatever they ask until you let them go on.
+- Strokes, lines and paths are drawn at a pace you can follow, shapes grow as if dragged, and text is typed out. Set **Drawing** to **Instantly** to skip that.
+- When they work at another animation frame, the timeline goes there.
+- Each change is one undo step named "Assistant: …", so Ctrl+Z takes their work back a step at a time.
+- Your tool, brush settings and colours stay as you left them, unless an assistant sets the colours on purpose.
+- An assistant has to say whether to save or throw away unsaved changes before it replaces or closes a picture. It replaces an existing file only when it says so.
+
+The [tool reference](mcp.md) lists everything assistants can do, for the curious and for anyone writing their own client.
 
 ## Keyboard shortcuts
 
@@ -350,6 +393,7 @@ These are the defaults; F1 always shows the current ones.
 | Brush size | [ and ] (or the mouse side buttons) |
 | Swap colours, Reset colours | X, D |
 | Settings | Ctrl+Alt+S |
+| Stop AI assistants, or let them go on | Ctrl+Shift+Q |
 | Animate tool | A |
 | Perspective plane tool | M |
 | Move the selected piece (fold a hinged one, slide the camera when its row is selected) | Arrow keys (Shift: 10 px, or 15° for a fold) |
