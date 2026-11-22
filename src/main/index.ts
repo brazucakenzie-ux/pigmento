@@ -10,17 +10,29 @@ import { flushSettings, loadSettings } from './settings';
 import { IPC } from '@shared/ipc';
 import { broadcastTheme, createWindow, openFileInApp } from './windows';
 import { installErrorHandlers } from './errors';
+import { spawn } from 'node:child_process';
+import { MCP_SWITCH, mcpPipeName, runBridge, stdinStream } from './mcp/bridge';
 
 const userDataOverride = process.env.PIGMENTO_USER_DATA;
 app.setName('Pigmento');
 app.setPath('userData', userDataOverride ?? path.join(app.getPath('appData'), 'Pigmento'));
 if (process.platform === 'win32') app.setAppUserModelId('app.pigmento.desktop');
 
-registerSchemes();
-
-installErrorHandlers();
-const gotLock = app.requestSingleInstanceLock();
-if (!gotLock) {
+// Started by an MCP client: be its bridge to the Pigmento that's running (starting it if need be),
+// with no window and without the one-app lock, until the client or Pigmento ends the conversation.
+const bridging = process.argv.includes(MCP_SWITCH);
+if (bridging) {
+  const start = () => spawn(process.execPath, app.isPackaged ? [] : [app.getAppPath()], { detached: true, stdio: 'ignore', env: process.env }).unref();
+  const io = { input: stdinStream(), output: process.stdout, error: (m: string) => void process.stderr.write(`${m}\n`) };
+  void runBridge(mcpPipeName(app.getPath('userData')), io, start).then((code) => app.exit(code));
+} else {
+  registerSchemes();
+  installErrorHandlers();
+}
+const gotLock = !bridging && app.requestSingleInstanceLock();
+if (bridging) {
+  // The bridge runs on its own (above).
+} else if (!gotLock) {
   app.quit();
 } else {
   app.on('second-instance', (_event, argv, cwd) => {
