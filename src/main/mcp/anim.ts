@@ -65,6 +65,7 @@ export const ANIM_TOOLS: readonly ToolDef[] = [
       tilt: z.number().optional().describe('3D: degrees tipped back.'),
       turn: z.number().optional().describe('3D: degrees turned round.'),
       fold: z.number().optional().describe('A hinged piece: degrees folded round its edge.'),
+      progress: z.number().optional().describe('A piece following a path: how far along it, 0 (start) to 1 (end); past 1 goes round a closed path again.'),
       easing: EASING.optional().describe('How it moves from this keyframe to the next: linear, easeIn, easeOut, easeInOut, or hold (jumps at the next).'),
       curveIn: POINT.nullable().optional().describe('Bends its path arriving here: a handle relative to this keyframe’s position (null: straight).'),
       curveOut: POINT.nullable().optional().describe('Bends its path leaving here towards the next keyframe (null: straight).'),
@@ -75,7 +76,7 @@ export const ANIM_TOOLS: readonly ToolDef[] = [
     name: 'set_piece',
     title: 'Piece',
     description:
-      'Change a piece: its name; how its moves repeat after the last keyframe (loop); follow another piece (moving with it) or hang off one of its edges (hinge), or let go; what shows of its back when turned round in 3D; its shading by the light; tiling copies of it; its pivot; or delete it.',
+      'Change a piece: its name; how its moves repeat after the last keyframe (loop); follow another piece (moving with it) or hang off one of its edges (hinge), or let go; move along a path (a shape on a shapes layer), facing its way; spin forever; what shows of its back when turned round in 3D; its shading by the light; tiling copies of it; its pivot; or delete it.',
     kind: 'edit',
     readOnly: false,
     input: {
@@ -91,11 +92,83 @@ export const ANIM_TOOLS: readonly ToolDef[] = [
           fold: z.number().optional().describe('Degrees folded round the edge (0 if left out).'),
         })
         .optional(),
+      path: z
+        .union([z.object({ object: z.string().describe('A shape on a shapes layer (an object id from get_picture_info).'), outline: z.number().int().min(0).optional().describe('Which of its outlines (0, the first, if left out).') }), z.literal('none')])
+        .optional()
+        .describe('Move along a shape: from its start at its first keyframe to its end at its last (progress in set_keyframe changes that). none stops, keeping the motion as keyframes.'),
+      facesItsWay: z.boolean().optional().describe('Turn to face the way it moves.'),
+      artAngle: z.number().optional().describe('Which way its art points as drawn, in degrees (0 right, 90 down), for facing its way.'),
+      spin: z
+        .union([
+          z.object({
+            frame: FRAME.optional().describe('From this frame (the first if left out).'),
+            spin: z.number().optional().describe('Turns a second in its own plane (negative: the other way).'),
+            tilt: z.number().optional().describe('3D: turns a second tipping back.'),
+            turn: z.number().optional().describe('3D: turns a second turning round.'),
+            easing: EASING.optional(),
+          }),
+          z.literal('stop'),
+        ])
+        .optional()
+        .describe('Spin forever at speeds (keyed from a frame), or stop.'),
       back: z.enum(['mirror', 'hide']).optional().describe('3D: its back shows mirrored, or not at all.'),
       shade: z.number().min(0).max(1).optional().describe('3D: how much the light shades it, 0 (off) to 1.'),
       repeat: z.enum(['none', 'x', 'y', 'both']).optional().describe('Tile copies of it across (x), down (y) or both.'),
       pivot: z.union([POINT, z.literal('centre')]).optional().describe('The point it turns and scales about, in picture pixels, or centre (a group’s: the middle of its pieces).'),
       delete: z.boolean().optional().describe('Delete the piece (and the pieces that follow it).'),
+    },
+  },
+  {
+    name: 'set_trail',
+    title: 'Trail',
+    description:
+      'A trail a piece leaves as it moves: add one made as a preset (rocketSmoke, cometTail, sparkles, speedLines or echo), make one over as a preset, change its settings, or remove it. Trails show when the animation plays or is exported.',
+    kind: 'edit',
+    readOnly: false,
+    input: {
+      piece: PIECE,
+      add: z.enum(['rocketSmoke', 'cometTail', 'sparkles', 'speedLines', 'echo']).optional().describe('Add a trail made as this preset.'),
+      trail: z.string().optional().describe('The trail to change or remove (an id from get_picture_info; the piece’s first if left out).'),
+      preset: z.enum(['rocketSmoke', 'cometTail', 'sparkles', 'speedLines', 'echo']).optional().describe('Make that trail over as this preset.'),
+      settings: z
+        .object({
+          rate: z.number().min(0).optional().describe('Puffs born each second.'),
+          spacing: z.number().min(0).optional().describe('One puff each time it travels this many pixels (0: none).'),
+          lifetime: z.number().min(0).optional().describe('Seconds each puff lives.'),
+          size: z.number().min(0).optional().describe('Puff width at birth, in pixels.'),
+          growth: z.number().min(0).optional().describe('Size at the end of its life, times the size at birth.'),
+          drift: z.number().optional().describe('Pixels a second the puffs drift.'),
+          driftAngle: z.number().optional().describe('Which way they drift, in degrees (-90 is up).'),
+          spread: z.number().min(0).optional().describe('Random scatter, pixels a second.'),
+          opacity: z.number().min(0).max(1).optional(),
+          fade: z.number().min(0).max(1).optional().describe('How much they fade by the end of their life.'),
+          colors: z.array(z.string()).min(2).max(4).optional().describe('Colours over their life, #rrggbb, 2 to 4.'),
+          front: z.boolean().optional().describe('In front of the piece instead of behind it.'),
+          copies: z.number().int().min(1).optional().describe('Echo: how many copies.'),
+          gap: z.number().int().min(1).optional().describe('Echo: frames between copies.'),
+          emitter: POINT.optional().describe('Where it comes from, in the piece’s own pixels.'),
+        })
+        .optional(),
+      remove: z.boolean().optional().describe('Remove the trail.'),
+    },
+  },
+  {
+    name: 'set_trim',
+    title: 'Trim',
+    description:
+      'Animate shapes on a shapes layer being drawn: Draw on (the outline drawn from nothing to all of it) or Erase behind (from all of it to nothing, from its start), between two frames; and tie a trim’s end to a piece following the shape, so the line is drawn up to it or erased behind it.',
+    kind: 'edit',
+    readOnly: false,
+    input: {
+      layer: z.string().describe('The shapes layer (an id).'),
+      objects: z.array(z.string()).min(1).describe('The shapes (object ids from get_picture_info).'),
+      effect: z.enum(['drawOn', 'eraseBehind']).optional(),
+      from: FRAME.optional().describe('The frame it starts (1 if left out).'),
+      to: FRAME.optional().describe('The frame it ends (the last if left out).'),
+      easing: EASING.optional(),
+      tie: z
+        .union([z.object({ piece: z.string(), end: z.enum(['start', 'end']).optional().describe('Which end of the line follows the piece (end: drawn up to it; start: erased behind it).'), gap: z.number().optional().describe('Pixels behind the piece.') }), z.literal('none')])
+        .optional(),
     },
   },
   {

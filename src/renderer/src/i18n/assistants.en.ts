@@ -25,4 +25,6 @@ export const assistantsEn = {
   'assistant.step.set_piece': 'Assistant: Piece',
   'assistant.step.set_animation': 'Assistant: Animation',
   'assistant.step.edit_drawing': 'Assistant: Drawing',
+  'assistant.step.set_trail': 'Assistant: Trail',
+  'assistant.step.set_trim': 'Assistant: Trim',
 } as const;

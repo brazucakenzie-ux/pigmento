@@ -4,10 +4,11 @@ import type { Easing } from '@engine/anim/interpolate';
 import type { LoopMode } from '@engine/anim/timeline';
 import type { CelLoopMode } from '@engine/anim/cels';
 import type { Back, Piece, PieceLoop, Repeat } from '@engine/anim/piece';
+import type { TrailPreset } from '@engine/anim/trail';
 import { t } from '../../i18n';
 import { engine } from '../state/engine';
 import { updateSettings, useUi } from '../state/store';
-import { bool, chooseLayer, int, num, pixelLayer, str, type Handler } from './assistantArgs';
+import { bool, changeable, chooseLayer, colorArg, int, layerArg, num, pixelLayer, str, type Handler } from './assistantArgs';
 import { placeImageFrom } from './files';
 
 /**
@@ -121,6 +122,7 @@ export const ANIM_HANDLERS: Record<string, Handler> = {
     set('tilt', num(args.tilt));
     set('turn', num(args.turn));
     set('fold', num(args.fold));
+    set('progress', num(args.progress) !== undefined ? num(args.progress)! * 100 : undefined);
     set('easing', str(args.easing) as Easing | undefined);
     const curve: { in?: Point | null; out?: Point | null } = {};
     if (args.curveIn !== undefined) curve.in = args.curveIn === null ? null : pointOf(args.curveIn);
@@ -149,6 +151,18 @@ export const ANIM_HANDLERS: Record<string, Handler> = {
     const hingeArg = typeof args.hinge === 'object' && args.hinge !== null ? (args.hinge as Record<string, unknown>) : null;
     const hingeTo = hingeArg ? pieceArg(hingeArg.to) : null;
     const pivot = args.pivot === 'centre' ? 'centre' : pointOf(args.pivot);
+    // A path: a shape on a shapes layer.
+    let pathTo: { layerId: string; objectId: string; sub: number } | 'none' | null = null;
+    if (args.path === 'none') pathTo = 'none';
+    else if (typeof args.path === 'object' && args.path !== null) {
+      const o = args.path as Record<string, unknown>;
+      const objectId = str(o.object) ?? '';
+      const layer = engine.doc.vectorLayers().find((l) => l.objects.some((n) => n.id === objectId));
+      if (!layer) throw new Error(`There’s no shape ${objectId} on a shapes layer. get_picture_info lists each shapes layer’s objects.`);
+      pathTo = { layerId: layer.id, objectId, sub: int(o.outline) ?? 0 };
+    }
+    const spinArg = args.spin === 'stop' ? 'stop' : typeof args.spin === 'object' && args.spin !== null ? (args.spin as Record<string, unknown>) : null;
+    const spinFrame = spinArg && spinArg !== 'stop' ? (frameArg(spinArg.frame) ?? 0) : 0;
     return {
       label: 'assistant.step.set_piece',
       apply: () => {
@@ -165,6 +179,18 @@ export const ANIM_HANDLERS: Record<string, Handler> = {
           const childEdge = (str(hingeArg.childEdge) as Edge | undefined) ?? OPPOSITE[edge];
           explained(() => a.hinge(p.id, hingeTo.id, { edge, childEdge, offset: 0, along: 1, across: 1 }, ((num(hingeArg.fold) ?? 0) * Math.PI) / 180), `“${p.name}” can’t hang from “${hingeTo.name}”.`);
         }
+        if (pathTo === 'none') a.follow(p.id, null);
+        else if (pathTo) explained(() => a.follow(p.id, pathTo), `“${p.name}” can’t follow that shape.`);
+        const faces = bool(args.facesItsWay);
+        const artAngle = num(args.artAngle);
+        if (faces !== undefined || artAngle !== undefined) a.setFace(p.id, { ...(faces !== undefined ? { on: faces } : {}), ...(artAngle !== undefined ? { angle: (artAngle * Math.PI) / 180 } : {}) });
+        if (spinArg === 'stop') a.stopSpin(p.id);
+        else if (spinArg) {
+          const change: { spin?: number; tilt?: number; turn?: number; easing?: Easing } = {};
+          for (const k of ['spin', 'tilt', 'turn'] as const) if (num(spinArg[k]) !== undefined) change[k] = num(spinArg[k]);
+          if (str(spinArg.easing)) change.easing = str(spinArg.easing) as Easing;
+          explained(() => a.setSpin(p.id, spinFrame, change), `“${p.name}” can’t spin.`);
+        }
         const back = str(args.back) as Back | undefined;
         if (back) a.setBack(p.id, back);
         const shade = num(args.shade);
@@ -179,6 +205,80 @@ export const ANIM_HANDLERS: Record<string, Handler> = {
         }
         const now = a.piece(p.id) ?? p;
         return { text: `Set the piece “${now.name}”.`, data: { piece: now.id, follows: now.link?.parent ?? null, hinged: !!now.link?.hinge, loop: now.loop } };
+      },
+    };
+  },
+
+  set_trail: (args) => {
+    const p = pieceArg(args.piece);
+    const add = str(args.add) as TrailPreset | undefined;
+    const given = str(args.trail);
+    const s = typeof args.settings === 'object' && args.settings !== null ? (args.settings as Record<string, unknown>) : null;
+    const change: Record<string, unknown> = {};
+    if (s) {
+      for (const k of ['rate', 'spacing', 'lifetime', 'size', 'growth', 'drift', 'spread', 'opacity', 'fade', 'copies', 'gap'] as const) if (num(s[k]) !== undefined) change[k] = num(s[k]);
+      if (num(s.driftAngle) !== undefined) change.driftAngle = (num(s.driftAngle)! * Math.PI) / 180;
+      if (bool(s.front) !== undefined) change.front = bool(s.front);
+      const emitter = pointOf(s.emitter);
+      if (emitter) change.emitter = emitter;
+      if (Array.isArray(s.colors)) {
+        const colors = s.colors.map((c) => colorArg(c, 'trail colour')!);
+        change.colors = colors.map((color, i) => ({ pos: i / (colors.length - 1), color }));
+      }
+    }
+    const preset = str(args.preset) as TrailPreset | undefined;
+    const remove = bool(args.remove) === true;
+    if (!add && !given && !p.trails.length) throw new Error(`“${p.name}” has no trail yet: add one (add: a preset).`);
+    if (given && !p.trails.some((t) => t.id === given)) throw new Error(`“${p.name}” has no trail ${given}; its trails are ${p.trails.map((t) => t.id).join(', ') || 'none'}.`);
+    return {
+      label: 'assistant.step.set_trail',
+      apply: () => {
+        const a = engine.anim;
+        a.select(p.id);
+        let id = given ?? p.trails[0]?.id;
+        if (add) {
+          const made = a.addTrail(p.id, add);
+          if (!made) explained(() => false, `“${p.name}” can’t have another trail.`);
+          id = made ?? id;
+        }
+        if (!id) throw new Error('No trail to change.');
+        if (preset) a.presetTrail(p.id, id, preset);
+        if (Object.keys(change).length) a.setTrail(p.id, id, change);
+        if (remove) {
+          a.removeTrail(p.id, id);
+          return { text: `Removed the trail from “${p.name}”.` };
+        }
+        const t = (a.piece(p.id) ?? p).trails.find((x) => x.id === id);
+        return { text: `“${p.name}” has the trail ${id}.`, data: { trail: id, kind: t?.kind ?? null } };
+      },
+    };
+  },
+
+  set_trim: (args) => {
+    const layer = layerArg(args.layer)!;
+    if (layer.kind !== 'vector') throw new Error(`“${layer.name}” isn’t a shapes layer: trims animate shapes on a shapes layer.`);
+    changeable(layer);
+    const ids = (Array.isArray(args.objects) ? args.objects : []).map((v) => String(v));
+    const missing = ids.filter((id) => !layer.objects.some((n) => n.id === id));
+    if (missing.length) throw new Error(`“${layer.name}” has no object ${missing.join(', ')}. get_picture_info lists its objects.`);
+    const effect = str(args.effect) as 'drawOn' | 'eraseBehind' | undefined;
+    const len = engine.doc.timeline.length;
+    const from = frameArg(args.from) ?? 0;
+    const to = frameArg(args.to) ?? len - 1;
+    const tieArg = args.tie === 'none' ? 'none' : typeof args.tie === 'object' && args.tie !== null ? (args.tie as Record<string, unknown>) : null;
+    const tiePiece = tieArg && tieArg !== 'none' ? pieceArg(tieArg.piece) : null;
+    if (!effect && !tieArg) throw new Error('Say what to do: effect (drawOn or eraseBehind), tie, or both.');
+    return {
+      label: 'assistant.step.set_trim',
+      apply: () => {
+        chooseLayer(layer.id);
+        engine.setVectorSelection(ids);
+        if (effect) explained(() => engine.drawOn(effect, from, to, (str(args.easing) as Easing | undefined) ?? 'linear'), 'Those shapes can’t be trimmed.');
+        if (tieArg === 'none') engine.tieTrim(null);
+        else if (tieArg && tiePiece) engine.tieTrim({ piece: tiePiece.id, end: str(tieArg.end) === 'start' ? 'start' : 'end', gap: num(tieArg.gap) ?? 0 });
+        const what = effect === 'drawOn' ? `drawn on from frame ${from + 1} to ${to + 1}` : effect ? `erased behind from frame ${from + 1} to ${to + 1}` : '';
+        const tied = tiePiece ? `${what ? ', and ' : ''}tied to “${tiePiece.name}”` : tieArg === 'none' ? `${what ? ', and ' : ''}untied` : '';
+        return { text: `${ids.length === 1 ? 'The shape is' : `${ids.length} shapes are`} ${what}${tied}.` };
       },
     };
   },

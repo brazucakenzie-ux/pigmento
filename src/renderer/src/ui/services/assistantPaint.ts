@@ -110,8 +110,12 @@ function shapeChange(label: 'assistant.step.draw_shape' | 'assistant.step.draw_l
     apply: () => {
       live();
       redraw(obj, finish);
+      const layer = engine.doc.activeLayer;
+      const before = layer.kind === 'vector' ? new Set(layer.objects.map((n) => n.id)) : null;
       engine.commitLive(true);
-      return { text };
+      const after = engine.doc.layerById(layer.id);
+      const made = before && after?.kind === 'vector' ? after.objects.filter((n) => !before.has(n.id)).map((n) => n.id) : [];
+      return made.length ? { text: `${text} Its object id is ${made[0]}.`, data: { object: made[0] } } : { text };
     },
   };
 }
