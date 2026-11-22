@@ -545,3 +545,50 @@ A piece made with Animate selection can switch between drawings while it moves o
 ### Side step: release 1.3.1 (requested after drawings on pieces)
 - [x] Version 1.3.1 in `package.json`, its CHANGELOG section dated (drawings on pieces), README mention; `npm run check` green; installers rebuilt and the packaged app smoke-tested; then tagged `v1.3.1` so `release.yml` builds the unsigned installer, portable exe and checksums, and the GitHub release published (steps in `docs/releasing.md`)
 - Notes: lint, type-check, 667 unit tests and 160 e2e tests pass (20 opt-in skipped). `npm run dist` built `Pigmento-Setup-1.3.1.exe`, the portable exe and the checksums, unsigned. The packaged app (dist/win-unpacked) was smoke-tested without installing, with a temporary profile: it reports 1.3.1; a red square lifted as a piece, copied to a second drawing with a blue line painted across and cycling, shows the same in the picture, on screen and in export frames on frames 1, 2, 7, 8, 23 and 24; GIF and MP4 export; nothing is logged as an error. Tagged `v1.3.1` on 54eb9ea as asked. The release build on GitHub (run 44980271655) passed and built the installers unsigned; their SHA-256 sums match the checksum file. The release (the three files and the 1.3.1 notes) was published on 2026-11-22, and the files downloaded from it match the checksums. This PC still has 1.3.0 installed.
+
+### Milestone 8 — Pigmento for AI assistants (MCP), version 1.4.0 (requested after 1.3.1)
+An AI assistant can use Pigmento the way a person does, through the Model Context Protocol (MCP): it looks at the picture, then draws, edits, animates and exports, in the window you have open, while you watch. Each thing it does is one undo step with its own name, so you can step back through its work. It works with any MCP client (Claude Desktop, Claude Code, VS Code, Cursor and others). It's very free by default, and a Settings tab narrows what assistants may do. Split into four stops; each ends with a working app, `npm run check` green and a report, then waits for "continue". Each item is ticked in the same commit as its work.
+
+Words used in the UI:
+- **AI assistant:** a program connected to Pigmento over MCP (the window says which one, by the name it gives).
+- **Assistant activity:** the side panel listing what assistants have done, newest first, each with its undo step.
+- **Stop assistants:** pauses every connected assistant at once; what they ask to do next is refused until you let them go on.
+
+Decisions (agreed with the user on 2026-11-22; the rest proposed, to agree at their stop):
+- **Any MCP client** (agreed): the standard transports, so no client needs anything made for Pigmento. Over stdio, a client starts `Pigmento.exe --mcp`; over Streamable HTTP, it connects to a local address.
+- **In your window, while you watch** (agreed): an assistant works on the picture in the Pigmento window you're using (or another open one it names), never a hidden copy. What it draws appears as it's made.
+- **Very free by default, configurable** (agreed): out of the box an assistant can do everything a person can, files included, without asking each time. Settings → AI assistants turns each kind of thing off, or makes it ask.
+- **The bridge** (proposed for 8A): `Pigmento.exe --mcp` runs before the one-window-app check and opens no window. It passes messages between the client (stdio) and the Pigmento that's running, over a named pipe only your Windows account can open, starting Pigmento first if it isn't running. Several clients can be connected at once.
+- **Streamable HTTP** (proposed for 8A): off by default; when on, it listens on 127.0.0.1 only, on a port you choose, with a token in the address the settings show, and refuses requests from web pages (their Origin) so a website can't reach it.
+- **Permissions** (proposed for 8A), each one Allowed, Ask each time or Not allowed, defaults in brackets: look at pictures (allowed); draw and edit (allowed); open, save and export files (allowed, anywhere; optionally only inside one folder); new, close and switch pictures (allowed); change Pigmento's settings (allowed). An assistant can never change the AI assistants settings themselves. "Ask each time" asks in Pigmento's own dialog, naming the assistant and what it wants to do.
+- **Watching** (proposed for 8A): strokes and shapes are drawn at a pace you can follow (a stroke over about half a second), or instantly (a setting). The title bar shows a badge while an assistant is connected; clicking it opens Assistant activity. **Stop assistants** is on the badge and the panel, with a keyboard shortcut. Undo labels read "Assistant: …".
+- **Seeing the picture** (proposed for 8A): an assistant can ask for the picture, a layer, a region or an animation frame as a PNG, scaled to at most 2048 px on its long side by default, so it can check its own work.
+- **Left out of 1.4.0** (proposed): access from other computers, Pigmento calling AI models itself (no chat inside Pigmento), recording your own actions as macros, and MCP's sampling and elicitation (Pigmento asks you itself, in its own dialogs).
+
+**Stop 8A — Connected and looking**
+- [ ] 8.1 The bridge: `Pigmento.exe --mcp` speaks MCP over stdio without a window, connects to the running Pigmento over a per-user named pipe (starting it if needed), and serves several clients at once (+ unit tests)
+- [ ] 8.2 The server in the app: MCP (the official TypeScript SDK) over the pipe, and over Streamable HTTP on 127.0.0.1 when turned on (token, Origin check); calls reach the window you're working in or one the assistant names; errors come back as plain-language tool errors (+ e2e with an SDK client)
+- [ ] 8.3 Settings → AI assistants: on or off, the permissions and their defaults, the folder limit, the watch speed, Streamable HTTP, and ready-to-copy setup for Claude Desktop, Claude Code, VS Code, Cursor and any other client (+ unit tests of the settings)
+- [ ] 8.4 Watching: the connection badge, the Assistant activity panel, Stop assistants (badge, panel and shortcut), "Ask each time" dialogs, one named undo step per change (+ e2e)
+- [ ] 8.5 Looking: picture info (size, layers, pieces, timeline, selection, frame), pictures and windows open, the picture, a layer, a region or a frame as a PNG, and the tools, brushes, shapes, effects and actions there are; the same as MCP resources (+ e2e)
+- [ ] 8.6 E2e: an MCP client connects through `--mcp`, reads a picture, gets it as a PNG matching the screen, is refused once a permission is turned off and paused by Stop assistants; `npm run check` green; report
+
+**Stop 8B — Drawing and editing**
+- [ ] 8.7 Pictures: new, open, save, save as, export to the still formats, close and switch, as the file permissions allow (+ e2e)
+- [ ] 8.8 Layers and selections: add, delete, reorder, group and set layers' properties; select by rectangle, ellipse, polygon, magic wand and colour range, all, none and invert; move and transform pixels (+ unit tests, e2e)
+- [ ] 8.9 Painting: colours, fill, brush strokes from points (with pressure) with any brush, the eraser, shapes from the library with their settings and style, pen paths, lines and text, drawn at the watch speed (+ e2e)
+- [ ] 8.10 The image and effects: resize, crop, canvas size, rotate and flip; adjustments and filters with their settings; any action in the app by its name (+ e2e)
+- [ ] 8.11 E2e: an MCP client paints a small scene (a sky, a sun, a hill, a word, a blur), saves it and opens it again; undo takes back its steps one by one; `npm run check` green; report
+
+**Stop 8C — Animating**
+- [ ] 8.12 Pieces: Animate selection, Piece from layer and Place image; keyframes for every value, easing, curves and loops; following, hinges, groups and boxes; 3D, the camera and the light (+ e2e)
+- [ ] 8.13 The timeline and drawings: length, frame rate, the frame shown, playing; drawings on layers and on pieces (new, copy, clear, delete, timing, loop) (+ e2e)
+- [ ] 8.14 Motion: following a path, facing the way it goes, trims (Draw on, Erase behind), trails and their presets, spin forever (+ e2e)
+- [ ] 8.15 Exporting animation as a GIF or MP4, as the file permissions allow (+ e2e)
+- [ ] 8.16 E2e: an MCP client makes a red square that switches to one with a blue line, cycling, and a rocket leaving smoke along a path, and exports them as GIFs that are checked frame by frame; `npm run check` green; report
+
+**Stop 8D — Polish and release**
+- [ ] 8.17 Accessibility: axe audit of the AI assistants settings, the badge, the activity panel and the Ask each time dialogs in light, dark and high contrast; all of it reachable by keyboard
+- [ ] 8.18 Performance: looking at a 1080p picture in under 100 ms, a PNG of it in under 300 ms; a client's calls never stall the window; strokes at the watch speed don't hold up the next call (+ perf e2e)
+- [ ] 8.19 User guide (setting up a client, the permissions, what assistants can do), a tool reference (`docs/mcp.md`), README feature and screenshot, CHANGELOG 1.4.0, version 1.4.0, third-party notices for the SDK
+- [ ] 8.20 `npm run check` green, installer rebuilt and smoke-tested (the installed `Pigmento.exe --mcp` included); final report listing every 1.4.0 feature with its status; then, after asking, tag `v1.4.0` and publish the release (steps in `docs/releasing.md`)
