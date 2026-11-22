@@ -58,9 +58,10 @@ test('an assistant makes, saves, exports, opens, switches and closes pictures, n
   const flat = await call('save_file', { path: png });
   expect(flat.text).toMatch(/PNG keeps the picture as it looks, not its layers/);
   expect(flat.data).toMatchObject({ format: 'png', keptEverything: false });
-  // An existing file is replaced only when the assistant says so.
-  expect((await call('save_file', { path: png })).text).toMatch(/already exists\. Say overwrite: true/);
-  expect((await call('save_file', { path: png, overwrite: true })).ok).toBe(true);
+  // That's its own file now: saving to it again is plain Save. Another file there is replaced only when the assistant says so.
+  expect((await call('save_file', { path: png })).ok).toBe(true);
+  expect((await call('save_file', { path: pigm })).text).toMatch(/already exists\. Say overwrite: true/);
+  expect(await info()).toMatchObject({ name: 'Scene.png' });
   expect((await call('save_file', { path: path.join(dir, 'Scene.txt') })).text).toMatch(/has to end in \.pigm/);
   expect((await call('save_file', { path: 'Scene.png' })).text).toMatch(/full path/);
 
@@ -69,6 +70,8 @@ test('an assistant makes, saves, exports, opens, switches and closes pictures, n
   expect(await call('export_image', { path: half, scale: 0.5 })).toMatchObject({ ok: true, data: { width: 200, height: 150 } });
   expect(pngSize(half)).toEqual({ width: 200, height: 150 });
   expect((await call('export_image', { path: half })).text).toMatch(/already exists/);
+  expect(await call('export_image', { path: half, overwrite: true })).toMatchObject({ ok: true, data: { width: 400, height: 300 } });
+  expect(pngSize(half)).toEqual({ width: 400, height: 300 });
   expect((await call('export_image', { path: path.join(dir, 'x.pigm') })).text).toMatch(/save_file saves \.pigm/);
   expect(await info()).toMatchObject({ name: 'Scene.png' });
 
