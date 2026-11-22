@@ -35,7 +35,12 @@ const api: PigmentoApi = {
     onChanged: (cb) => subscribe<[RecentFile[]]>(IPC.evRecentChanged, cb),
   },
   assistant: {
-    onCall: (cb) => subscribe<[AssistantCall]>(IPC.evAssistantCall, cb),
+    onCall: (cb) => {
+      const stop = subscribe<[AssistantCall]>(IPC.evAssistantCall, cb);
+      // Main sends calls once the page listens (a new window, or after a reload).
+      ipcRenderer.send(IPC.assistantReady);
+      return stop;
+    },
     reply: (id, reply) => ipcRenderer.send(IPC.assistantReply, id, reply),
     state: () => ipcRenderer.invoke(IPC.assistantsState),
     onState: (cb) => subscribe<[AssistantsState]>(IPC.evAssistantsState, cb),

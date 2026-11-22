@@ -1,11 +1,9 @@
 // AI assistants (Milestone 8): an MCP client connected the way any client connects, through
 // `Pigmento --mcp` (stdio), and over the local HTTP address when that's turned on.
-import { createRequire } from 'node:module';
-import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { connectStdio as connect, decode as decodeIn, firstText, imageOf, near, setAssistants as setIn, type Pixel } from './assistantClient';
 import { launchApp, ready, type AppHandle } from './harness';
 
 let h: AppHandle;
@@ -16,38 +14,15 @@ test.beforeEach(async () => {
   await ready(h.page);
 });
 
+const connectStdio = () => connect(h, clients);
+const setAssistants = (change: Record<string, unknown>) => setIn(h, change);
+const decode = (base64: string, points: { x: number; y: number }[]) => decodeIn(h, base64, points);
+
 test.afterEach(async () => {
   await Promise.all(clients.splice(0).map((c) => c.close().catch(() => undefined)));
   expect(h.errors).toEqual([]);
   await h.close();
 });
-
-const electronExe = createRequire(__filename)('electron') as unknown as string;
-
-/** An MCP client started the way any client starts Pigmento: `Pigmento --mcp`, on the test's profile. */
-async function connectStdio(): Promise<Client> {
-  const transport = new StdioClientTransport({
-    command: electronExe,
-    args: ['.', '--mcp'],
-    cwd: path.resolve(__dirname, '../..'),
-    env: { ...(process.env as Record<string, string>), PIGMENTO_USER_DATA: h.userData },
-    stderr: 'pipe',
-  });
-  const client = new Client({ name: 'e2e-client', version: '1.0.0' });
-  await client.connect(transport);
-  clients.push(client);
-  return client;
-}
-
-type Text = { type: string; text?: string };
-const firstText = (r: unknown) => ((r as { content?: Text[] }).content ?? []).find((c) => c.type === 'text')?.text ?? '';
-
-/** Change the AI assistants settings, as the Settings tab would. */
-const setAssistants = (change: Record<string, unknown>) =>
-  h.page.evaluate(async (c) => {
-    const s = await window.pigmento.settings.get();
-    await window.pigmento.settings.set({ assistants: { ...s.assistants, ...c } });
-  }, change);
 
 test('an MCP client connects through Pigmento --mcp, finds the tools and reads the picture', async () => {
   const client = await connectStdio();
@@ -156,30 +131,9 @@ test('you see who is connected and what they do, and can stop them, or have them
   await expect(badge).toHaveCount(0);
 });
 
-type Pixel = { r: number; g: number; b: number; a: number };
 const RED: Pixel = { r: 220, g: 30, b: 30, a: 255 };
 const BLUE: Pixel = { r: 30, g: 60, b: 220, a: 255 };
 const GREEN: Pixel = { r: 30, g: 200, b: 60, a: 255 };
-
-const imageOf = (r: unknown) => ((r as { content?: { type: string; data?: string; mimeType?: string }[] }).content ?? []).find((c) => c.type === 'image');
-
-/** A PNG an assistant got, decoded in the page: its size and the pixels at some points. */
-const decode = (base64: string, points: { x: number; y: number }[]) =>
-  h.page.evaluate(
-    async ([b64, pts]) => {
-      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-      const bmp = await createImageBitmap(new Blob([bytes], { type: 'image/png' }), { premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
-      const c = new OffscreenCanvas(bmp.width, bmp.height);
-      const ctx = c.getContext('2d')!;
-      ctx.drawImage(bmp, 0, 0);
-      const d = ctx.getImageData(0, 0, bmp.width, bmp.height).data;
-      const at = (x: number, y: number) => (y * bmp.width + x) * 4;
-      return { width: bmp.width, height: bmp.height, pixels: pts.map(({ x, y }) => ({ r: d[at(x, y)], g: d[at(x, y) + 1], b: d[at(x, y) + 2], a: d[at(x, y) + 3] })) };
-    },
-    [base64, points] as const,
-  );
-
-const near = (a: Pixel, b: Pixel, tolerance = 2) => Math.max(Math.abs(a.r - b.r), Math.abs(a.g - b.g), Math.abs(a.b - b.b), Math.abs(a.a - b.a)) <= tolerance;
 
 test('an assistant looks at the picture as a PNG that matches the screen: all of it, a layer, a region or a frame', async () => {
   const { page } = h;

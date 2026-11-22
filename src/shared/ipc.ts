@@ -60,6 +60,7 @@ export const IPC = {
   evFullscreen: 'ev:fullscreen',
   evRecentChanged: 'ev:recent-changed',
   assistantReply: 'assistant:reply',
+  assistantReady: 'assistant:ready',
   assistantsState: 'assistant:state',
   assistantsPause: 'assistant:pause',
   evAssistantCall: 'ev:assistant-call',

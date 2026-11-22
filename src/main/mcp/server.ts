@@ -1,16 +1,17 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import http from 'node:http';
 import net from 'node:net';
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, type WebContents } from 'electron';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { CallToolResult, ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
 import { ASSISTANT_ASK as ASK, IPC, type AssistantCall, type AssistantReply, type AssistantResult, type AssistantsState } from '@shared/ipc';
-import type { Settings } from '@shared/settings';
 import { getSettings, updateSettings } from '../settings';
+import { allowCloseAndClose, createWindow, markWindowUsed } from '../windows';
 import { AssistantsBook } from './book';
-import { RESOURCES, TOOLS, WINDOW_ARG, windowFor, type ResourceDef, type ToolDef } from './tools';
+import { RESOURCES, TOOLS, windowFor, type ResourceDef } from './tools';
+import { WINDOW_ARG, type AssistantKind, type AssistantSettings, type ToolContext, type ToolDef, type WindowPicture } from './types';
 
 /**
  * The MCP server inside Pigmento: AI assistants connect over the named pipe (through the
@@ -18,8 +19,6 @@ import { RESOURCES, TOOLS, WINDOW_ARG, windowFor, type ResourceDef, type ToolDef
  * is a session of its own; tool calls go to the window being worked in (or the one named) and
  * come back as that window answers them.
  */
-
-type AssistantSettings = Settings['assistants'];
 
 /** What assistants are told about Pigmento when they connect. */
 const INSTRUCTIONS = [
@@ -30,6 +29,10 @@ const INSTRUCTIONS = [
 
 /** How long a window has to answer a call before the assistant is told it didn't. */
 const CALL_TIMEOUT_MS = 120_000;
+/** How long a new (or reloading) window has to get ready for calls. */
+const READY_TIMEOUT_MS = 30_000;
+/** The window's own part of a call: what main needs to know about its picture. */
+const PICTURE_STATE = 'pigmento.picture';
 
 /** A tool's answer, as MCP gives it to the assistant. */
 function toResult(r: AssistantResult): CallToolResult {
@@ -61,6 +64,9 @@ export class AssistantHost {
   private readonly pending = new Map<number, { resolve: (r: AssistantReply) => void; win: BrowserWindow }>();
   private nextId = 1;
   private lastFocused: BrowserWindow | null = null;
+  /** Windows whose page is listening for calls, and calls waiting for one to be. */
+  private readonly ready = new WeakSet<WebContents>();
+  private readonly waiting = new Map<WebContents, (() => void)[]>();
   /** Who's connected, whether they're stopped, and what they've done (every window shows it). */
   private readonly book = new AssistantsBook((s: AssistantsState) => {
     for (const w of BrowserWindow.getAllWindows()) w.webContents.send(IPC.evAssistantsState, s);
@@ -72,6 +78,13 @@ export class AssistantHost {
   ) {
     app.on('browser-window-focus', (_e, w) => (this.lastFocused = w));
     ipcMain.handle(IPC.assistantsState, () => this.book.state());
+    ipcMain.on(IPC.assistantReady, (e) => {
+      this.ready.add(e.sender);
+      for (const go of this.waiting.get(e.sender) ?? []) go();
+      this.waiting.delete(e.sender);
+    });
+    // A page that reloads listens again once it's loaded.
+    app.on('web-contents-created', (_e, wc) => wc.on('did-start-loading', () => this.ready.delete(wc)));
     ipcMain.on(IPC.assistantsPause, (_e, paused: unknown) => this.book.setPaused(paused === true));
     ipcMain.on(IPC.assistantReply, (e, id: unknown, reply: unknown) => {
       const p = typeof id === 'number' ? this.pending.get(id) : undefined;
@@ -175,7 +188,12 @@ export class AssistantHost {
     for (const tool of TOOLS) {
       mcp.registerTool(
         tool.name,
-        { title: tool.title, description: tool.description, inputSchema: tool.main ? tool.input : { ...tool.input, ...WINDOW_ARG }, annotations: { readOnlyHint: tool.readOnly, openWorldHint: false } },
+        {
+          title: tool.title,
+          description: tool.description,
+          inputSchema: tool.noWindow ? tool.input : { ...WINDOW_ARG, ...tool.input },
+          annotations: { readOnlyHint: tool.readOnly, destructiveHint: tool.destructive ?? false, openWorldHint: false },
+        },
         async (args: Record<string, unknown>) => this.call(tool, args, client()),
       );
     }
@@ -213,20 +231,74 @@ export class AssistantHost {
     const refuse = (error: string): AssistantReply => ({ ok: false, error });
     if (!s.enabled) return refuse('AI assistants are turned off in Pigmento (Settings → AI assistants).');
     if (this.book.paused) return refuse('The user has stopped AI assistants in Pigmento for now. Try again once they let you go on.');
-    if (s[tool.kind] === 'deny') return refuse(`Pigmento doesn’t let AI assistants ${KIND_WORDS[tool.kind]} (Settings → AI assistants).`);
     try {
       const { window: id, ...rest } = args as { window?: number } & Record<string, unknown>;
-      const win = windowFor(tool.main ? undefined : id, this.lastFocused);
+      const win = windowFor(tool.noWindow ? undefined : id, this.lastFocused);
       const call = { id: 0, tool: tool.name, args: rest, client, title: tool.title };
-      if (s[tool.kind] === 'ask') {
-        const answer = await this.callWindow(win, { ...call, tool: ASK, ask: KIND_WORDS[tool.kind] });
-        if (!answer.ok) return answer;
-      }
-      if (tool.main) return { ok: true, result: tool.main({ windows: () => this.windows() }, args) };
+      // Each kind is checked once a call (asking, if that's the setting).
+      const permitted = new Set<AssistantKind>();
+      const permit = async (kind: AssistantKind): Promise<void> => {
+        if (permitted.has(kind)) return;
+        const now = getSettings().assistants;
+        if (now[kind] === 'deny') throw new Error(`Pigmento doesn’t let AI assistants ${KIND_WORDS[kind]} (Settings → AI assistants).`);
+        if (now[kind] === 'ask') {
+          const answer = await this.callWindow(win, { ...call, tool: ASK, ask: KIND_WORDS[kind] });
+          if (!answer.ok) throw new Error(answer.error);
+        }
+        permitted.add(kind);
+      };
+      await permit(tool.kind);
+      if (tool.main) return { ok: true, result: await tool.main(this.context(win, s, permit), rest) };
       return await this.callWindow(win, call);
     } catch (err) {
       return refuse(err instanceof Error ? err.message : String(err));
     }
+  }
+
+  /** What a tool answered here can do. */
+  private context(win: BrowserWindow, settings: AssistantSettings, permit: (kind: AssistantKind) => Promise<void>): ToolContext {
+    const call = async (target: BrowserWindow, tool: string, args: Record<string, unknown>) => {
+      const reply = await this.callWindow(target, { id: 0, tool, args, client: '', title: '' });
+      if (!reply.ok) throw new Error(reply.error);
+      return reply.result;
+    };
+    return {
+      win,
+      settings,
+      windows: () => this.windows(),
+      call,
+      permit,
+      picture: async (target) => (await call(target, PICTURE_STATE, {})).data as WindowPicture,
+      newWindow: async () => {
+        const w = createWindow(null);
+        markWindowUsed(w);
+        this.lastFocused = w;
+        await this.whenReady(w);
+        return w;
+      },
+      close: (target) => allowCloseAndClose(target),
+      focus: (target) => {
+        if (target.isMinimized()) target.restore();
+        target.show();
+        target.focus();
+        this.lastFocused = target;
+      },
+    };
+  }
+
+  /** Resolves once a window's page listens for calls. */
+  private whenReady(win: BrowserWindow): Promise<void> {
+    const wc = win.webContents;
+    if (this.ready.has(wc)) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('The Pigmento window didn’t get ready in time.')), READY_TIMEOUT_MS);
+      const list = this.waiting.get(wc) ?? [];
+      list.push(() => {
+        clearTimeout(timer);
+        resolve();
+      });
+      this.waiting.set(wc, list);
+    });
   }
 
   private windows() {
@@ -235,7 +307,13 @@ export class AssistantHost {
   }
 
   /** Ask a window to carry out a call, and wait for its answer (or for it to close). */
-  private callWindow(win: BrowserWindow, call: AssistantCall): Promise<AssistantReply> {
+  private async callWindow(win: BrowserWindow, call: AssistantCall): Promise<AssistantReply> {
+    try {
+      await this.whenReady(win);
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+    if (win.isDestroyed()) return { ok: false, error: 'The window was closed.' };
     const id = this.nextId++;
     return new Promise((resolve) => {
       const done = (r: AssistantReply) => {
