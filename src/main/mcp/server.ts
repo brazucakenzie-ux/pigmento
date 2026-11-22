@@ -5,12 +5,12 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult, ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
 import { ASSISTANT_ASK as ASK, IPC, type AssistantCall, type AssistantReply, type AssistantResult, type AssistantsState } from '@shared/ipc';
 import type { Settings } from '@shared/settings';
 import { getSettings, updateSettings } from '../settings';
 import { AssistantsBook } from './book';
-import { TOOLS, WINDOW_ARG, windowFor, type ToolDef } from './tools';
+import { RESOURCES, TOOLS, WINDOW_ARG, windowFor, type ResourceDef, type ToolDef } from './tools';
 
 /**
  * The MCP server inside Pigmento: AI assistants connect over the named pipe (through the
@@ -24,7 +24,7 @@ type AssistantSettings = Settings['assistants'];
 /** What assistants are told about Pigmento when they connect. */
 const INSTRUCTIONS = [
   'Pigmento is a painting and animation app for Windows. Its tools act on the picture in the window the user is working in, while they watch, or in the window you name (an id from list_windows).',
-  'Positions and sizes are in picture pixels, from the top-left corner. Start with get_picture_info to see the picture you are working on.',
+  'Positions and sizes are in picture pixels, from the top-left corner, and animation frames are numbered from 1, as in the timeline. Start with get_picture_info to see the picture you are working on, and use get_picture_image to look at it and check your work.',
   'Every change you make is one undo step the user can take back.',
 ].join(' ');
 
@@ -168,7 +168,7 @@ export class AssistantHost {
 
   /** An MCP server for one conversation (session: its place in the book), with every tool. */
   private makeServer(session: number): McpServer {
-    const mcp = new McpServer({ name: 'pigmento', title: 'Pigmento', version: this.version }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });
+    const mcp = new McpServer({ name: 'pigmento', title: 'Pigmento', version: this.version }, { capabilities: { tools: {}, resources: {} }, instructions: INSTRUCTIONS });
     const client = () => mcp.server.getClientVersion()?.title ?? mcp.server.getClientVersion()?.name ?? 'An AI assistant';
     // It shows as connected once it says who it is.
     mcp.server.oninitialized = () => this.book.named(session, client());
@@ -179,36 +179,53 @@ export class AssistantHost {
         async (args: Record<string, unknown>) => this.call(tool, args, client()),
       );
     }
+    for (const res of RESOURCES) {
+      const tool = TOOLS.find((d) => d.name === res.tool);
+      if (!tool) throw new Error(`The resource ${res.uri} has no tool ${res.tool}`);
+      mcp.registerResource(res.name, res.uri, { title: res.title, description: res.description, mimeType: res.mimeType }, (uri) => this.read(uri, res, tool, client()));
+    }
     return mcp;
   }
 
   /** Carry out one call, noting it in the book. */
   private async call(tool: ToolDef, args: Record<string, unknown>, client: string): Promise<CallToolResult> {
-    const result = await this.carryOut(tool, args, client);
-    const message = result.isError ? result.content.find((c) => c.type === 'text')?.text : undefined;
-    this.book.record(client, tool.title, !result.isError, message);
-    return result;
+    const reply = await this.carryOut(tool, args, client);
+    this.book.record(client, tool.title, reply.ok, reply.ok ? undefined : reply.error);
+    return reply.ok ? toResult(reply.result) : failure(reply.error);
+  }
+
+  /** Read a resource through its tool (the same permission, noted in the book the same way). */
+  private async read(uri: URL, res: ResourceDef, tool: ToolDef, client: string): Promise<ReadResourceResult> {
+    const reply = await this.carryOut(tool, {}, client);
+    this.book.record(client, tool.title, reply.ok, reply.ok ? undefined : reply.error);
+    if (!reply.ok) throw new Error(reply.error);
+    const image = reply.result.images?.[0];
+    if (res.mimeType === 'image/png') {
+      if (!image) throw new Error('The window gave no image.');
+      return { contents: [{ uri: uri.href, mimeType: image.mimeType, blob: image.base64 }] };
+    }
+    return { contents: [{ uri: uri.href, mimeType: res.mimeType, text: JSON.stringify(reply.result.data ?? null, null, 2) }] };
   }
 
   /** One call: unless assistants are stopped or its kind isn't allowed (asking you first, if that's the setting), here or in its window. */
-  private async carryOut(tool: ToolDef, args: Record<string, unknown>, client: string): Promise<CallToolResult> {
+  private async carryOut(tool: ToolDef, args: Record<string, unknown>, client: string): Promise<AssistantReply> {
     const s = getSettings().assistants;
-    if (!s.enabled) return failure('AI assistants are turned off in Pigmento (Settings → AI assistants).');
-    if (this.book.paused) return failure('The user has stopped AI assistants in Pigmento for now. Try again once they let you go on.');
-    if (s[tool.kind] === 'deny') return failure(`Pigmento doesn’t let AI assistants ${KIND_WORDS[tool.kind]} (Settings → AI assistants).`);
+    const refuse = (error: string): AssistantReply => ({ ok: false, error });
+    if (!s.enabled) return refuse('AI assistants are turned off in Pigmento (Settings → AI assistants).');
+    if (this.book.paused) return refuse('The user has stopped AI assistants in Pigmento for now. Try again once they let you go on.');
+    if (s[tool.kind] === 'deny') return refuse(`Pigmento doesn’t let AI assistants ${KIND_WORDS[tool.kind]} (Settings → AI assistants).`);
     try {
       const { window: id, ...rest } = args as { window?: number } & Record<string, unknown>;
       const win = windowFor(tool.main ? undefined : id, this.lastFocused);
       const call = { id: 0, tool: tool.name, args: rest, client, title: tool.title };
       if (s[tool.kind] === 'ask') {
         const answer = await this.callWindow(win, { ...call, tool: ASK, ask: KIND_WORDS[tool.kind] });
-        if (!answer.ok) return failure(answer.error);
+        if (!answer.ok) return answer;
       }
-      if (tool.main) return toResult(tool.main({ windows: () => this.windows() }, args));
-      const reply = await this.callWindow(win, call);
-      return reply.ok ? toResult(reply.result) : failure(reply.error);
+      if (tool.main) return { ok: true, result: tool.main({ windows: () => this.windows() }, args) };
+      return await this.callWindow(win, call);
     } catch (err) {
-      return failure(err instanceof Error ? err.message : String(err));
+      return refuse(err instanceof Error ? err.message : String(err));
     }
   }
 
