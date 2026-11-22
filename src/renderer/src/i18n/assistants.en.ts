@@ -20,4 +20,8 @@ export const assistantsEn = {
   'assistant.step.rotate_flip': 'Assistant: Rotate or flip',
   'assistant.step.apply_effect': 'Assistant: Effect',
   'assistant.step.run_action': 'Assistant: Action',
+  'assistant.step.make_piece': 'Assistant: Make piece',
+  'assistant.step.set_keyframe': 'Assistant: Keyframe',
+  'assistant.step.set_piece': 'Assistant: Piece',
+  'assistant.step.set_animation': 'Assistant: Animation',
 } as const;
