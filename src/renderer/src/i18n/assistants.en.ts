@@ -24,4 +24,5 @@ export const assistantsEn = {
   'assistant.step.set_keyframe': 'Assistant: Keyframe',
   'assistant.step.set_piece': 'Assistant: Piece',
   'assistant.step.set_animation': 'Assistant: Animation',
+  'assistant.step.edit_drawing': 'Assistant: Drawing',
 } as const;

@@ -99,6 +99,23 @@ export const ANIM_TOOLS: readonly ToolDef[] = [
     },
   },
   {
+    name: 'edit_drawing',
+    title: 'Drawing',
+    description:
+      'Frame-by-frame drawings, on a pixels layer or a piece: a new drawing (blank, or a copy of the one shown) starting at a frame, clearing or deleting the drawing shown at a frame, moving where a drawing starts, or looping the drawings for the whole animation. Painting tools paint on a layer’s drawing shown at the frame shown (set_animation frame, or the frame a tool works at).',
+    kind: 'edit',
+    readOnly: false,
+    input: {
+      on: z.string().optional().describe('The pixels layer or piece (an id). The active layer if left out.'),
+      action: z.enum(['new', 'copy', 'clear', 'delete', 'retime', 'loop']).describe('new (blank) or copy (of the one shown), starting at frame; clear or delete the drawing shown at frame; retime: drawing starts at start; loop the drawings.'),
+      frame: FRAME.optional().describe('new, copy, clear and delete: the frame (the frame shown if left out); the timeline goes there.'),
+      drawing: z.number().int().min(2).optional().describe('retime: which drawing (numbered from 1; the first always starts at frame 1).'),
+      start: FRAME.optional().describe('retime: the frame it starts at.'),
+      loop: z.enum(['cycle', 'pingpong', 'off']).optional().describe('loop: round and round (cycle), back and forth (pingpong), or not (off: the last drawing holds).'),
+      loopEnd: FRAME.optional().describe('loop: the last frame of the cycle (the last drawing shows until then).'),
+    },
+  },
+  {
     name: 'set_animation',
     title: 'Animation',
     description:

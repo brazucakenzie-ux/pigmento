@@ -2,6 +2,7 @@ import type { Point } from '@engine/core/geometry';
 import type { Edge } from '@engine/anim/frames';
 import type { Easing } from '@engine/anim/interpolate';
 import type { LoopMode } from '@engine/anim/timeline';
+import type { CelLoopMode } from '@engine/anim/cels';
 import type { Back, Piece, PieceLoop, Repeat } from '@engine/anim/piece';
 import { t } from '../../i18n';
 import { engine } from '../state/engine';
@@ -178,6 +179,56 @@ export const ANIM_HANDLERS: Record<string, Handler> = {
         }
         const now = a.piece(p.id) ?? p;
         return { text: `Set the piece “${now.name}”.`, data: { piece: now.id, follows: now.link?.parent ?? null, hinged: !!now.link?.hinge, loop: now.loop } };
+      },
+    };
+  },
+
+  edit_drawing: (args) => {
+    const on = str(args.on);
+    const piece = on ? engine.anim.piece(on) : null;
+    let id: string;
+    let name: string;
+    if (piece) [id, name] = [piece.id, `the piece “${piece.name}”`];
+    else {
+      chooseLayer(on);
+      const l = pixelLayer();
+      [id, name] = [l.id, `the layer “${l.name}”`];
+    }
+    const action = str(args.action) ?? '';
+    const frame = frameArg(args.frame) ?? engine.doc.timeline.frame;
+    const drawingsOf = () => {
+      const p = engine.anim.piece(id);
+      if (p) return { starts: p.drawings?.map((c) => c.start + 1) ?? [], loop: p.drawingLoop };
+      const info = engine.anim.info();
+      return { starts: (info.cels[id] ?? []).map((s) => s + 1), loop: info.celLoops[id] ?? null };
+    };
+    const index = int(args.drawing);
+    const start = frameArg(args.start);
+    if (action === 'retime' && (index === undefined || start === undefined)) throw new Error('retime needs the drawing (numbered from 1) and the frame it starts at.');
+    const looping = drawingsOf().loop;
+    if (action === 'retime' && looping && start! >= looping.end) throw new Error('The drawings loop until frame ' + looping.end + ', so a drawing can’t start after that: give the loop a later end first (action: loop, with loopEnd), or turn it off.');
+    const mode = str(args.loop);
+    if (action === 'loop' && !mode) throw new Error('Say how to loop: cycle, pingpong or off.');
+    const loopEnd = int(args.loopEnd);
+    return {
+      label: 'assistant.step.edit_drawing',
+      apply: () => {
+        const a = engine.anim;
+        if (['new', 'copy', 'clear', 'delete'].includes(action)) goTo(frame);
+        const why = `That can’t be done to ${name}.`;
+        if (action === 'new' || action === 'copy') explained(() => a.newDrawing(id, action === 'copy'), why);
+        else if (action === 'clear') explained(() => a.clearDrawing(id), why);
+        else if (action === 'delete') explained(() => a.deleteDrawing(id), why);
+        else if (action === 'retime') explained(() => a.moveDrawing(id, index! - 1, start!), `Drawing ${index} of ${name} can’t start at frame ${start! + 1}.`);
+        else {
+          const want = mode === 'off' ? null : (mode as CelLoopMode);
+          // Already looping that way: only its end changes.
+          if ((drawingsOf().loop?.mode ?? null) !== want) explained(() => a.setDrawingLoop(id, want), why);
+          if (loopEnd !== undefined && mode !== 'off') explained(() => a.setLoopEnd(id, loopEnd), `The loop of ${name} can’t end at frame ${loopEnd}.`);
+        }
+        const d = drawingsOf();
+        const loop = d.loop ? `, ${d.loop.mode === 'cycle' ? 'cycling' : 'back and forth'} to frame ${d.loop.end}` : '';
+        return { text: `${name[0].toUpperCase()}${name.slice(1)} has drawings starting at frame${d.starts.length === 1 ? '' : 's'} ${d.starts.join(', ') || '1'}${loop}.`, data: { drawings: d.starts, loop: d.loop } };
       },
     };
   },
