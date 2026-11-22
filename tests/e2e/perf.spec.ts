@@ -1,5 +1,7 @@
 import { writeFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
+import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { connectStdio, firstText, setAssistants } from './assistantClient';
 import { drag, launchApp, ready, tempFile, type AppHandle } from './harness';
 
 let h: AppHandle;
@@ -412,4 +414,109 @@ test('1.3: a 240-frame 1080p MP4 of the smoke, loops and spin over the box scene
   const mp4 = await page.evaluate(() => window.__pigmentoTest!.encodeAnimation('mp4', 240));
   console.warn('240-frame 1920×1080 MP4 of the box + trails + spin + loops (s):', (mp4.ms / 1000).toFixed(1), 'size (KB):', Math.round(mp4.bytes / 1024));
   expect(mp4.ms).toBeLessThan(30_000);
+});
+
+/** Start noting the time of every frame the window draws (see frameGaps). */
+const watchFrames = (page: Page) =>
+  page.evaluate(() => {
+    const w = window as unknown as { __frames?: number[]; __framesOn?: boolean };
+    w.__frames = [];
+    w.__framesOn = true;
+    const tick = (t: number) => {
+      w.__frames!.push(t);
+      if (w.__framesOn) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+
+/** Stop, and give the gaps between frames (ms), sorted. */
+const frameGaps = (page: Page) =>
+  page.evaluate(() => {
+    const w = window as unknown as { __frames?: number[]; __framesOn?: boolean };
+    w.__framesOn = false;
+    const f = w.__frames ?? [];
+    return f
+      .slice(1)
+      .map((t, i) => t - f[i])
+      .sort((a, b) => a - b);
+  });
+
+test('AI assistants: looking at a 1080p picture takes under 100 ms, a PNG of it under 300 ms, and calls never stall the window', async () => {
+  test.setTimeout(120_000);
+  h = await launchApp();
+  const { page } = h;
+  await ready(page);
+  const clients: Client[] = [];
+  try {
+    const client = await connectStdio(h, clients);
+    const call = async (name: string, args: Record<string, unknown> = {}) => {
+      const t0 = performance.now();
+      const r = await client.callTool({ name, arguments: args });
+      expect(r.isError, `${name}: ${firstText(r)}`).toBeFalsy();
+      return performance.now() - t0;
+    };
+    await setAssistants(h, { pace: 'instant' });
+    await call('new_picture', { width: 1920, height: 1080, where: 'this', unsaved: 'discard' });
+    // Something to look at: a sky, a few layers with shapes and strokes.
+    await call('fill', { color: '#8cc8ff' });
+    for (let i = 0; i < 4; i++) {
+      await call('add_layer', { name: `Layer ${i + 2}` });
+      await call('draw_shape', { shape: 'star-5', x: 200 + i * 400, y: 300, width: 300, height: 300, fill: '#ffcc33' });
+      await call('brush_stroke', { points: [{ x: 100, y: 900 - i * 50 }, { x: 1800, y: 800 - i * 50 }], size: 30, color: '#335533' });
+    }
+    await call('get_picture_info');
+    await call('get_picture_image', { maxSize: 2048 });
+    await watchFrames(page);
+    const looks: number[] = [];
+    const pngs: number[] = [];
+    for (let i = 0; i < 10; i++) {
+      looks.push(await call('get_picture_info'));
+      pngs.push(await call('get_picture_image', { maxSize: 2048 }));
+    }
+    const gaps = await frameGaps(page);
+    const median = (a: number[]) => [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)];
+    const p95 = gaps[Math.floor(gaps.length * 0.95)];
+    console.warn(`assistants at 1080p: picture info median ${median(looks).toFixed(0)} ms, full-size PNG median ${median(pngs).toFixed(0)} ms; window frame gaps p95 ${p95.toFixed(0)} ms, longest ${gaps[gaps.length - 1].toFixed(0)} ms over ${gaps.length} frames`);
+    expect(median(looks)).toBeLessThan(100);
+    expect(median(pngs)).toBeLessThan(300);
+    // The window keeps drawing while the calls come in.
+    expect(p95).toBeLessThan(34);
+    expect(gaps[gaps.length - 1]).toBeLessThan(200);
+  } finally {
+    await Promise.all(clients.map((c) => c.close().catch(() => undefined)));
+  }
+});
+
+test('AI assistants: a long stroke at the watch pace adds at most 1.5 s, and the window draws smoothly meanwhile', async () => {
+  test.setTimeout(120_000);
+  h = await launchApp();
+  const { page } = h;
+  await ready(page);
+  const clients: Client[] = [];
+  try {
+    const client = await connectStdio(h, clients);
+    await client.callTool({ name: 'new_picture', arguments: { width: 1920, height: 1080, where: 'this', unsaved: 'discard' } });
+    const stroke = { points: Array.from({ length: 60 }, (_, i) => ({ x: 60 + i * 30, y: 540 + Math.sin(i / 4) * 300 })), size: 24, color: '#cc3333' };
+    // A look first, so the times below are only the stroke's.
+    await client.callTool({ name: 'get_picture_info', arguments: {} });
+    await watchFrames(page);
+    const t0 = performance.now();
+    const r = await client.callTool({ name: 'brush_stroke', arguments: stroke });
+    const watched = performance.now() - t0;
+    const gaps = await frameGaps(page);
+    expect(r.isError).toBeFalsy();
+    await setAssistants(h, { pace: 'instant' });
+    const t1 = performance.now();
+    await client.callTool({ name: 'brush_stroke', arguments: { ...stroke, color: '#3333cc' } });
+    const instant = performance.now() - t1;
+    const p95 = gaps[Math.floor(gaps.length * 0.95)];
+    console.warn(`assistants: a ${stroke.points.length}-point stroke watched in ${watched.toFixed(0)} ms, instantly in ${instant.toFixed(0)} ms; frame gaps meanwhile p95 ${p95.toFixed(0)} ms, longest ${gaps[gaps.length - 1].toFixed(0)} ms`);
+    // The pace is about half a second, up to 1.5 s for long strokes.
+    expect(watched).toBeLessThan(1500 + instant + 250);
+    expect(watched).toBeGreaterThan(1000);
+    expect(p95).toBeLessThan(34);
+    expect(gaps[gaps.length - 1]).toBeLessThan(100);
+  } finally {
+    await Promise.all(clients.map((c) => c.close().catch(() => undefined)));
+  }
 });

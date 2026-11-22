@@ -1,6 +1,8 @@
 import { test } from '@playwright/test';
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
+import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { connectStdio, setAssistants } from './assistantClient';
 import { clickDoc, drag, launchApp, ready } from './harness';
 
 // Captures screenshots of key UI states for visual review (not an assertion test).
@@ -907,6 +909,57 @@ test('capture trails', async () => {
     await page.screenshot({ path: path.join(out, 'trails.png') });
     console.warn('errors:', JSON.stringify(h.errors));
   } finally {
+    await h.close();
+  }
+});
+
+test('capture assistants', async () => {
+  test.skip(!process.env.PIGMENTO_SCREENSHOT, 'Set PIGMENTO_SCREENSHOT=1 to capture screenshots');
+  const out = process.env.PIGMENTO_SCREENSHOT_DIR ?? path.resolve('test-results');
+  const h = await launchApp();
+  const { page } = h;
+  const clients: Client[] = [];
+  try {
+    await ready(page);
+    await page.getByRole('tab', { name: 'View' }).click();
+    await page.getByRole('button', { name: 'Light' }).click();
+    await page.getByRole('tab', { name: 'Home' }).click();
+    // An assistant (by a plain name) paints a scene, as one undo step a call.
+    const client = await connectStdio(h, clients, 'AI assistant');
+    const call = (name: string, args: Record<string, unknown> = {}) => client.callTool({ name, arguments: args });
+    await setAssistants(h, { pace: 'instant' });
+    await call('new_picture', { width: 1280, height: 800, where: 'this', unsaved: 'discard' });
+    await call('add_layer', { name: 'Sky' });
+    await call('fill', { color: '#8cc8ff' });
+    await call('add_layer', { name: 'Hills' });
+    await call('draw_path', {
+      points: [
+        { x: 0, y: 800 },
+        { x: 0, y: 560, out: { x: 300, y: 400 } },
+        { x: 700, y: 600, in: { x: 520, y: 470 }, out: { x: 900, y: 700 } },
+        { x: 1280, y: 520, in: { x: 1100, y: 420 } },
+        { x: 1280, y: 800 },
+      ],
+      closed: true,
+      fill: '#4a9f52',
+      outline: 'none',
+    });
+    const sun = await call('add_layer', { name: 'Sun' });
+    await call('draw_shape', { shape: 'circle', x: 940, y: 90, width: 170, height: 170, fill: '#ffd23f', outline: 'none' });
+    await call('apply_effect', { effect: 'gaussianBlur', settings: { radius: 14 }, layer: (sun.structuredContent as { layer: string }).layer });
+    await call('add_layer', { name: 'Words' });
+    await call('add_text', { text: 'Painted by an AI assistant', x: 90, y: 110, size: 44, bold: true, color: '#1d1b2b' });
+    await call('get_picture_image', { maxSize: 1024 });
+    await call('select', { shape: 'none' });
+    // History and Assistant activity in view.
+    const panel = page.locator('.sidepanel, aside').first();
+    for (const name of ['Navigator', 'Layers']) await panel.getByRole('button', { name, exact: true }).first().click();
+    await page.mouse.move(640, 790);
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: path.join(out, 'assistants.png') });
+    console.warn('errors:', JSON.stringify(h.errors));
+  } finally {
+    await Promise.all(clients.map((c) => c.close().catch(() => undefined)));
     await h.close();
   }
 });

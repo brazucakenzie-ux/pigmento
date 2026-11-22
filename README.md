@@ -19,6 +19,7 @@ Pigmento is a painting app for Windows 11 with the classic Paint layout. It also
 - **Animation:** cut a piece out of a layer and move, turn, stretch, skew and fade it with keyframes, with easing, curved motion paths and a movable pivot. You can also draw frame by frame with onion skin, on a layer or on a piece (so it can flap, flicker or blink while it moves). A timeline shows it all, and it exports as an animated GIF or an MP4 video.
 - **Pieces in 3D:** tilt and turn a piece like a sheet of paper in front of a camera, shade it by a light, and paint on it wherever it is. Hinge pieces edge to edge and fold them into boxes. Tile pieces into scrolling backgrounds that can start off the canvas, and pan or push the camera so near things pass faster than far ones.
 - **Paths, trails and loops:** send a piece along a path you draw, facing the way it goes, and draw the path on or erase it behind the piece as it travels. Pieces leave trails: smoke, a comet's tail, sparks, speed lines or fading copies of themselves. A layer's drawings and a piece's moves loop for as long as the timeline runs, and wheels and fans spin forever, fitted so a looping GIF never jumps.
+- **AI assistants:** any AI assistant that speaks the Model Context Protocol (Claude, Copilot in VS Code, Cursor and others) can use Pigmento while you watch. It can look at the picture, paint, edit, animate and export. Each change is an undo step of its own, Settings → AI assistants decides what assistants may do, and one shortcut stops them. The [tool reference](docs/mcp.md) lists all 40 tools.
 - **View aids:** zoom, rulers, gridlines and pixel grid, guides and snapping, turning the view, and a reference image.
 - **Made for everyone:** keyboard-friendly throughout (F6 moves between regions), with customisable shortcuts and an adjustable interface size. There are six themes, each in light and dark, including high contrast, and the app passes an automated WCAG 2.1 AA check.
 - **Safe with your work:** autosave and recovery, plain-language errors, a log for problems, and checks before pictures too big for memory.
@@ -28,6 +29,8 @@ Pigmento is a painting app for Windows 11 with the classic Paint layout. It also
 | ![The Shapes tab and its gallery](docs/screenshots/shapes.png) | ![The Brush Designer's dynamics](docs/screenshots/brush-designer.png) |
 | ![A drop shadow previewed live](docs/screenshots/effects.png) | ![A piece moving along its path, retimed on the timeline](docs/screenshots/animation.png) |
 | ![A shaded box folded from six hinged pieces, turned in 3D with the Perspective plane tool](docs/screenshots/pieces-3d.png) | ![A rocket following a drawn path and leaving smoke, the path erased behind it, and a windmill turning](docs/screenshots/trails.png) |
+
+![An AI assistant painting a scene through MCP: its name in the title bar, its undo steps and Assistant activity](docs/screenshots/assistants.png)
 
 The [user guide](docs/user-guide.md) explains everything; it's also in the app under Help → User guide.
 
@@ -64,6 +67,7 @@ npm run dist         # build dist/Pigmento-Setup-<version>.exe, the portable exe
 | `npm run smoke:installed` | Installs the built installer, smoke-tests the installed app, then uninstalls it |
 | `npm run icons` | Regenerates `build/icon.ico` and the PNG icons from `resources/logo.svg` |
 | `npm run notices` | Regenerates `THIRD-PARTY-NOTICES.md` (the full licence texts shipped with the app) after adding or updating a package the app bundles; the build fails if it's out of date |
+| `npm run mcp-docs` | Regenerates `docs/mcp.md`, the AI assistants' tool reference, from the tools themselves; a unit test fails if it's out of date |
 | `npm run lint`, `npm run typecheck` | ESLint and TypeScript on their own |
 
 The end-to-end tests use a temporary profile, so they never touch your real settings. A few extras are opt-in:
