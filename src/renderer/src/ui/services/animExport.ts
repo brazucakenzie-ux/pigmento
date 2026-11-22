@@ -21,22 +21,27 @@ export function animExportName(c: AnimExportChoice): string {
   return `${n}.${c.format}`;
 }
 
+/** Render and encode the animation as the choice says (throws if it can't). */
+export function encodeChoice(c: AnimExportChoice, onProgress: (done: number, total: number) => void, signal: AbortSignal): Promise<Uint8Array> {
+  engine.commitLive();
+  const transparent = c.format === 'gif' && c.transparent;
+  return encodeAnimation(
+    (f) => engine.animationFrameCanvas(f, { scale: c.scale, transparent }),
+    { format: c.format, frames: frameSequence(c.from, c.to, c.playback), fps: engine.anim.timeline.fps, repeat: c.playback === 'once' ? -1 : 0, transparent, quality: c.quality },
+    onProgress,
+    signal,
+  );
+}
+
 /**
  * Render and encode the animation, then ask where to save it. Resolves true when saved; false
  * when cancelled (by the signal or in the Save dialog) or when it failed (a message says why).
  */
 export async function exportAnimation(c: AnimExportChoice, onProgress: (done: number, total: number) => void, signal: AbortSignal): Promise<boolean> {
-  engine.commitLive();
   const frames = frameSequence(c.from, c.to, c.playback);
-  const transparent = c.format === 'gif' && c.transparent;
   let bytes: Uint8Array;
   try {
-    bytes = await encodeAnimation(
-      (f) => engine.animationFrameCanvas(f, { scale: c.scale, transparent }),
-      { format: c.format, frames, fps: engine.anim.timeline.fps, repeat: c.playback === 'once' ? -1 : 0, transparent, quality: c.quality },
-      onProgress,
-      signal,
-    );
+    bytes = await encodeChoice(c, onProgress, signal);
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') return false;
     if (err instanceof AnimExportError) showToast({ kind: 'error', key: err.key, params: { message: err.message } });

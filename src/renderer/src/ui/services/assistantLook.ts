@@ -26,6 +26,13 @@ interface LayerView {
   blend: string;
   active: boolean;
   children?: LayerView[];
+  objects?: { id: string; kind: string }[];
+}
+
+/** The objects on a shapes layer, top first: shapes (by kind) and groups. */
+function objectsOf(id: string): { id: string; kind: string }[] {
+  const l = engine.doc.layerById(id);
+  return l?.kind === 'vector' ? [...l.objects].reverse().map((o) => ({ id: o.id, kind: o.type === 'group' ? 'group' : o.shape })) : [];
 }
 
 function layerView(n: LayerNode, activeId: string): LayerView {
@@ -39,6 +46,7 @@ function layerView(n: LayerNode, activeId: string): LayerView {
     blend: n.blend,
     active: n.id === activeId,
     ...(n.kind === 'group' ? { children: [...n.children].reverse().map((c) => layerView(c, activeId)) } : {}),
+    ...(n.kind === 'vector' ? { objects: objectsOf(n.id) } : {}),
   };
 }
 
@@ -66,7 +74,28 @@ function pictureInfo(): AssistantResult {
       length: anim.length,
       fps: anim.fps,
       drawings: Object.fromEntries(Object.entries(anim.cels).map(([id, starts]) => [id, frames(starts)])),
-      pieces: anim.pieces.map((p) => ({ id: p.id, name: p.name, kind: p.kind, layer: p.layerId, keyframes: frames(p.keys.map((k) => k.frame)), drawings: frames(p.drawings) })),
+      loop: anim.loop,
+      pieces: anim.pieces.map((p) => {
+        const full = engine.anim.piece(p.id);
+        return {
+          id: p.id,
+          name: p.name,
+          kind: p.kind,
+          layer: p.layerId,
+          keyframes: frames(p.keys.map((k) => k.frame)),
+          drawings: frames(p.drawings),
+          loop: p.loop,
+          follows: p.parent,
+          hinged: p.hinged,
+          path: full?.follow ? { layer: full.follow.layerId, object: full.follow.objectId } : null,
+          facesItsWay: full?.face.on ?? false,
+          spins: p.spinKeys.length > 0,
+          trails: full?.trails.map((t) => t.id) ?? [],
+        };
+      }),
+      camera: { ...engine.doc.camera },
+      cameraMoves: frames(engine.doc.cameraKeys.map((k) => k.frame)),
+      light: { ...engine.doc.light },
     },
   };
   return { text: `${data.name}: ${data.width} × ${data.height} pixels, ${layers.count} layer${layers.count === 1 ? '' : 's'}${data.unsavedChanges ? ', with unsaved changes' : ''}.`, data };

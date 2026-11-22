@@ -446,6 +446,11 @@ export async function pasteFromFile(): Promise<void> {
 export async function placeImage(): Promise<boolean> {
   const path = await window.pigmento.files.showOpenDialog();
   if (!path) return false;
+  return placeImageFrom(path);
+}
+
+/** Place an image file (a path main has allowed) as a new piece. */
+export async function placeImageFrom(path: string): Promise<boolean> {
   const name = path.split(/[\\/]/).pop() ?? path;
   let img: ImageBuf | null;
   try {
