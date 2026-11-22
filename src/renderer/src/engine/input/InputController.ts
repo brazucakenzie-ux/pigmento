@@ -189,6 +189,8 @@ export class InputController {
   private onDown = (e: PointerEvent): void => {
     this.engine.perf.input(e.timeStamp);
     const engine = this.engine;
+    // An AI assistant's step is being made: the canvas waits for it.
+    if (engine.history.held) return;
     if (e.pointerType === 'pen') this.lastPenTime = e.timeStamp;
     if (e.pointerType === 'touch') {
       if (e.timeStamp - this.lastPenTime < PALM_REJECT_MS || this.toolPointerIsPen()) return;

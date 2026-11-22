@@ -131,6 +131,32 @@ export class History extends Emitter<HistoryEvents> {
     }
   }
 
+  /**
+   * One AI assistant's step: everything recorded until `fn` has finished (it may wait, for work
+   * done on workers) is one step named `label`, even a single command. Meanwhile the history is
+   * held: undo and redo do nothing, and the canvas and shortcuts wait, so nothing of yours mixes in.
+   */
+  async named<T>(label: I18nKey, fn: () => T | Promise<T>): Promise<T> {
+    if (this.collecting) return fn();
+    this.collecting = [];
+    this._held = true;
+    try {
+      return await fn();
+    } finally {
+      const parts = this.collecting;
+      this.collecting = null;
+      this._held = false;
+      if (parts.length) this.push(new CompoundCommand(label, parts));
+    }
+  }
+
+  private _held = false;
+
+  /** An assistant's step is being made (see named). */
+  get held(): boolean {
+    return this._held;
+  }
+
   /** Record a command whose effect has already been applied. */
   push(cmd: Command): void {
     if (this.busy) throw new Error('Cannot push while undoing/redoing');
@@ -156,7 +182,7 @@ export class History extends Emitter<HistoryEvents> {
   }
 
   undo(): boolean {
-    if (!this.canUndo) return false;
+    if (!this.canUndo || this._held) return false;
     this.busy = true;
     try {
       this.items[this._index - 1].undo();
@@ -169,7 +195,7 @@ export class History extends Emitter<HistoryEvents> {
   }
 
   redo(): boolean {
-    if (!this.canRedo) return false;
+    if (!this.canRedo || this._held) return false;
     this.busy = true;
     try {
       this.items[this._index].redo();

@@ -4,6 +4,7 @@ import { openDialog, useUi } from '../state/store';
 import { errorText, type Handler } from './assistantArgs';
 import { carryOutChange, isChange } from './assistantChange';
 import { LOOK_HANDLERS } from './assistantLook';
+import { LAYER_HANDLERS } from './assistantLayers';
 import { PICTURE_HANDLERS } from './assistantPictures';
 
 /**
@@ -11,7 +12,7 @@ import { PICTURE_HANDLERS } from './assistantPictures';
  * on its own picture, and answers each one with what it did or why it couldn't.
  */
 
-const HANDLERS: Record<string, Handler> = { ...LOOK_HANDLERS, ...PICTURE_HANDLERS };
+const HANDLERS: Record<string, Handler> = { ...LOOK_HANDLERS, ...PICTURE_HANDLERS, ...LAYER_HANDLERS };
 
 /** "Ask each time": the user says whether the assistant may go ahead (in Pigmento's own dialog). */
 function askUser(call: AssistantCall): Promise<AssistantResult> {

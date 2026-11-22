@@ -1,6 +1,6 @@
 import type { AssistantCall, AssistantResult } from '@shared/ipc';
 import { parseHex, type RGBA } from '@engine/core/color';
-import type { Layer } from '@engine/doc/Document';
+import type { Layer, RasterLayer } from '@engine/doc/Document';
 import { EngineError } from '@engine/Engine';
 import { t } from '../../i18n';
 import { engine } from '../state/engine';
@@ -39,4 +39,26 @@ export function layerArg(v: unknown): Layer | undefined {
 export function errorText(err: unknown): string {
   if (err instanceof EngineError) return t(err.key, err.params);
   return err instanceof Error ? err.message : String(err);
+}
+
+/** The layer the assistant named becomes the active one (as clicking it would); the active one if it named none. */
+export function chooseLayer(v: unknown): Layer {
+  const layer = layerArg(v);
+  if (layer && layer.id !== engine.doc.activeId) engine.layers.setActive(layer.id);
+  return engine.doc.activeLayer;
+}
+
+/** The layer can be changed: it isn't locked or hidden. */
+export function changeable(layer: Layer): void {
+  if (layer.locked) throw new Error(`The layer “${layer.name}” is locked. set_layer with locked: false unlocks it.`);
+  if (!engine.doc.isEffectivelyVisible(layer.id)) throw new Error(`The layer “${layer.name}” is hidden (or in a hidden group). set_layer with visible: true shows it.`);
+}
+
+/** The active layer, which has to be a pixels layer that can be changed. */
+export function pixelLayer(): RasterLayer {
+  const l = engine.doc.activeLayer;
+  if (l.kind === 'vector') throw new Error(`“${l.name}” is a shapes layer: this needs a pixels layer.`);
+  if (l.kind === 'group') throw new Error(`“${l.name}” is a group: name a pixels layer in it.`);
+  changeable(l);
+  return l;
 }
