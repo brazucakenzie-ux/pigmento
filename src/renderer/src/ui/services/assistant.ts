@@ -4,6 +4,7 @@ import { openDialog, useUi } from '../state/store';
 import { errorText, type Handler } from './assistantArgs';
 import { carryOutChange, isChange } from './assistantChange';
 import { LOOK_HANDLERS } from './assistantLook';
+import { IMAGE_HANDLERS } from './assistantImage';
 import { LAYER_HANDLERS } from './assistantLayers';
 import { PAINT_HANDLERS } from './assistantPaint';
 import { PICTURE_HANDLERS } from './assistantPictures';
@@ -13,7 +14,7 @@ import { PICTURE_HANDLERS } from './assistantPictures';
  * on its own picture, and answers each one with what it did or why it couldn't.
  */
 
-const HANDLERS: Record<string, Handler> = { ...LOOK_HANDLERS, ...PICTURE_HANDLERS, ...LAYER_HANDLERS, ...PAINT_HANDLERS };
+const HANDLERS: Record<string, Handler> = { ...LOOK_HANDLERS, ...PICTURE_HANDLERS, ...LAYER_HANDLERS, ...PAINT_HANDLERS, ...IMAGE_HANDLERS };
 
 /** "Ask each time": the user says whether the assistant may go ahead (in Pigmento's own dialog). */
 function askUser(call: AssistantCall): Promise<AssistantResult> {
@@ -38,7 +39,7 @@ async function carryOut(call: AssistantCall): Promise<AssistantResult> {
   if (!isChange(r)) return r;
   // Anything the user had going (a shape being drawn, a selection being moved) is finished first.
   engine.commitLive();
-  return carryOutChange(engine.history, r, useUi.getState().settings.assistants.pace);
+  return carryOutChange(engine.history, r, call.pace ?? useUi.getState().settings.assistants.pace);
 }
 
 /** Carry out assistants' calls in this window until the returned function stops it. */

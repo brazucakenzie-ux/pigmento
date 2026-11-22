@@ -59,7 +59,8 @@ test('an assistant paints strokes, fills, lines, shapes, paths and text that you
   await setAssistants(h, { pace: 'instant' });
   const t1 = Date.now();
   expect((await call('brush_stroke', { points: [{ x: 120, y: 100 }, { x: 180, y: 100 }], size: 30, erase: true })).text).toMatch(/^Erased a stroke/);
-  expect(Date.now() - t1).toBeLessThan(watched);
+  // (The pace comes with each call, so the window needn't have seen the setting change.)
+  expect(Date.now() - t1).toBeLessThan(300);
   expect(isColor(await px(150, 100), [255, 255, 255], 2)).toBe(true);
   expect(isColor(await px(250, 100), [255, 0, 0])).toBe(true);
   await setAssistants(h, { pace: 'watch' });

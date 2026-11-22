@@ -234,7 +234,7 @@ export class AssistantHost {
     try {
       const { window: id, ...rest } = args as { window?: number } & Record<string, unknown>;
       const win = windowFor(tool.noWindow ? undefined : id, this.lastFocused);
-      const call = { id: 0, tool: tool.name, args: rest, client, title: tool.title };
+      const call = { id: 0, tool: tool.name, args: rest, client, title: tool.title, pace: s.pace };
       // Each kind is checked once a call (asking, if that's the setting).
       const permitted = new Set<AssistantKind>();
       const permit = async (kind: AssistantKind): Promise<void> => {
@@ -258,7 +258,7 @@ export class AssistantHost {
   /** What a tool answered here can do. */
   private context(win: BrowserWindow, settings: AssistantSettings, permit: (kind: AssistantKind) => Promise<void>): ToolContext {
     const call = async (target: BrowserWindow, tool: string, args: Record<string, unknown>) => {
-      const reply = await this.callWindow(target, { id: 0, tool, args, client: '', title: '' });
+      const reply = await this.callWindow(target, { id: 0, tool, args, client: '', title: '', pace: settings.pace });
       if (!reply.ok) throw new Error(reply.error);
       return reply.result;
     };

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ARROW_HEADS, BLEND_MODES, DASH_STYLES } from '@shared/styles';
+import { setActing } from './acting';
 import type { ToolDef } from './types';
 
 /**
@@ -213,4 +214,90 @@ export const PAINT_TOOLS: readonly ToolDef[] = [
       layer: ON_LAYER,
     },
   }),
+];
+
+/** The image, effects, actions and settings (8.10). */
+export const IMAGE_TOOLS: readonly ToolDef[] = [
+  edit({
+    name: 'resize_image',
+    title: 'Resize',
+    description: 'Resize the whole picture (every layer). Give a width, a height (the other follows, keeping its shape), both, or a scale. The selection is let go first.',
+    input: {
+      width: z.number().int().min(1).max(30000).optional(),
+      height: z.number().int().min(1).max(30000).optional(),
+      scale: z.number().min(0.01).max(16).optional().describe('Times the size it is (0.5 is half).'),
+      method: z.enum(['bicubic', 'bilinear', 'nearest']).optional().describe('bicubic (smooth, if left out), bilinear, or nearest (keeps hard pixels, for pixel art).'),
+    },
+  }),
+  edit({
+    name: 'crop',
+    title: 'Crop',
+    description: 'Crop the picture to a rectangle, or to the selection if no rectangle is given.',
+    input: { x: z.number().int().optional(), y: z.number().int().optional(), width: z.number().int().positive().optional(), height: z.number().int().positive().optional() },
+  }),
+  edit({
+    name: 'canvas_size',
+    title: 'Canvas size',
+    description: 'Make the canvas bigger or smaller without scaling what’s on it: new space is see-through (the paper shows), and what falls outside is cut off.',
+    input: {
+      width: z.number().int().min(1).max(30000),
+      height: z.number().int().min(1).max(30000),
+      anchor: z.enum(['nw', 'n', 'ne', 'w', 'c', 'e', 'sw', 's', 'se']).optional().describe('Where the picture stays: nw is top-left (if left out), c the centre, se bottom-right…'),
+    },
+  }),
+  edit({
+    name: 'rotate_flip',
+    title: 'Rotate or flip',
+    description: 'Rotate the whole picture (90, 180 or 270 degrees keep every pixel; other angles grow the canvas to fit), and/or flip it. The selection is let go first.',
+    input: {
+      rotate: z.number().min(-360).max(360).optional().describe('Degrees, clockwise.'),
+      flip: z.enum(['horizontal', 'vertical']).optional(),
+    },
+  }),
+  edit({
+    name: 'apply_effect',
+    title: 'Effect',
+    description: 'Apply an adjustment or filter (ids from list_available with what: effects, which gives each one’s settings) to a pixels layer, inside the selection if there is one.',
+    input: {
+      effect: z.string().describe('The effect’s id.'),
+      settings: z.record(z.string(), z.unknown()).optional().describe('Its settings by key: numbers for sliders, true or false for toggles, a choice’s value, #rrggbb for colours, [[x, y], …] (0 to 1) for curves. The defaults are used for any left out.'),
+      layer: ON_LAYER,
+    },
+  }),
+  {
+    name: 'run_action',
+    title: 'Action',
+    description:
+      'Do one of Pigmento’s actions by its id (list_available with what: actions lists them and whether each can be used now), like layerMergeDown, layerFlatten, layerDuplicate, invertColors or gridlines (show the grid). File actions have their own tools; actions that would open a dialog are refused.',
+    kind: 'edit',
+    readOnly: false,
+    input: { action: z.string().describe('The action’s id.') },
+    main: async (ctx, args) => {
+      const about = (await ctx.call(ctx.win, 'pigmento.action', { action: args.action })).data as { settings: boolean };
+      // Actions that change what's shown (the grid, rulers, panels, the theme) change Pigmento's settings.
+      if (about.settings) await ctx.permit('settings');
+      setActing(ctx.win.webContents, true);
+      try {
+        return await ctx.call(ctx.win, 'run_action', { action: args.action });
+      } finally {
+        setActing(ctx.win.webContents, false);
+      }
+    },
+  },
+  {
+    name: 'get_settings',
+    title: 'Settings',
+    description: 'Pigmento’s settings, by section (the theme, the view, panels, export, animation and the rest), as change_settings takes them. The AI assistants settings aren’t included.',
+    kind: 'look',
+    readOnly: true,
+    input: {},
+  },
+  {
+    name: 'change_settings',
+    title: 'Change settings',
+    description: 'Change Pigmento’s settings: sections as get_settings gives them, each with just the values to change, like { "view": { "gridlines": true }, "theme": "forest" }. The AI assistants settings can only be changed by the user.',
+    kind: 'settings',
+    readOnly: false,
+    input: { changes: z.record(z.string(), z.unknown()).describe('The sections to change, and in each the values to change.') },
+  },
 ];

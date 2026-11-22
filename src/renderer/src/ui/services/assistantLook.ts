@@ -127,7 +127,7 @@ function available(what: unknown): AssistantResult {
   const list: Record<string, () => unknown[]> = {
     tools: () => toolRegistry.all().filter((d) => !d.hidden).map((d) => ({ id: d.id, name: t(d.labelKey), group: d.group, shortcut: d.shortcut ?? null })),
     brushes: () => brushRegistry.all().map((d) => ({ id: d.id, name: d.name ?? t(d.labelKey), category: d.category, eraser: d.eraser, personal: !!d.custom })),
-    shapes: () => shapeRegistry.all().map((d) => ({ id: d.id, name: d.name ?? t(d.labelKey), category: d.category, personal: !!d.custom })),
+    shapes: () => shapeRegistry.all().map((d) => ({ id: d.id, name: d.name ?? t(d.labelKey), category: d.category, personal: !!d.custom, settings: d.params.map((p) => ({ key: p.key, name: t(p.labelKey), min: p.min, max: p.max, default: p.default })) })),
     effects: () =>
       filterRegistry.all().map((d) => ({
         id: d.id,

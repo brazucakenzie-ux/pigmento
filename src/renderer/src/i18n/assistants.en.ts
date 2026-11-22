@@ -14,4 +14,10 @@ export const assistantsEn = {
   'assistant.step.draw_shape': 'Assistant: Shape',
   'assistant.step.draw_path': 'Assistant: Path',
   'assistant.step.add_text': 'Assistant: Text',
+  'assistant.step.resize_image': 'Assistant: Resize',
+  'assistant.step.crop': 'Assistant: Crop',
+  'assistant.step.canvas_size': 'Assistant: Canvas size',
+  'assistant.step.rotate_flip': 'Assistant: Rotate or flip',
+  'assistant.step.apply_effect': 'Assistant: Effect',
+  'assistant.step.run_action': 'Assistant: Action',
 } as const;
