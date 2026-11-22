@@ -15,6 +15,7 @@ import { loadReference } from '../services/reference';
 import { hasMemoryFor } from '../services/memory';
 import { filterRegistry } from '@engine/filters/FilterRegistry';
 import { THEME_FAMILIES } from '../theme/themes';
+import { toggleAssistants } from '../app/AssistantsUi';
 
 export type ActionGroup = 'file' | 'edit' | 'view' | 'tools' | 'image' | 'colors' | 'animation';
 
@@ -300,6 +301,7 @@ const base: Action[] = [
     },
     enabled: (s) => s.animation.pieces.length > 0 || Object.keys(s.animation.cels).length > 0,
   },
+  { id: 'stopAssistants', labelKey: 'action.stopAssistants', icon: 'pause', group: 'edit', shortcut: ['Ctrl+Shift+Q'], run: () => toggleAssistants(), checked: (s) => s.assistants.paused },
   // Frame-by-frame drawings on the active pixel layer (or the piece being painted on), at the frame shown.
   { id: 'newDrawing', labelKey: 'action.newDrawing', icon: 'new', group: 'animation', run: () => void addDrawing(drawingOwner(), false), enabled: canDraw },
   { id: 'copyDrawing', labelKey: 'action.copyDrawing', icon: 'copy', group: 'animation', run: () => void addDrawing(drawingOwner(), true), enabled: canDraw },

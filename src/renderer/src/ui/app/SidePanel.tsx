@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { t, type I18nKey } from '../../i18n';
+import { AssistantActivity } from './AssistantsUi';
 import { Icon } from '../icons/Icon';
 import { engine } from '../state/engine';
 import { updateSettings, useUi } from '../state/store';
@@ -133,6 +134,7 @@ function Navigator() {
 export function SidePanel() {
   const panels = useUi((s) => s.settings.panels);
   const simple = useUi((s) => s.settings.ui.mode === 'simple');
+  const assistantsSeen = useUi((s) => s.assistants.connected.length > 0 || s.assistants.paused || s.assistants.activity.length > 0);
   const [width, setWidth] = useState(panels.width);
   useEffect(() => setWidth(panels.width), [panels.width]);
   if (!panels.open) return null;
@@ -140,7 +142,9 @@ export function SidePanel() {
   const showNav = panels.visible.navigator !== false;
   // Simple mode has no Layers panel (the picture keeps its layers).
   const showLayers = panels.visible.layers !== false && !simple;
-  if (!showHistory && !showNav && !showLayers) return null;
+  // Assistant activity: while assistants are connected or stopped, or once they've done something.
+  const showAssistants = assistantsSeen;
+  if (!showHistory && !showNav && !showLayers && !showAssistants) return null;
 
   const onResize = (e: ReactPointerEvent<HTMLDivElement>) => {
     const startX = e.clientX;
@@ -206,6 +210,11 @@ export function SidePanel() {
       {showHistory ? (
         <Section id="history" title={t('panel.history')} icon="history" grow>
           <HistoryList />
+        </Section>
+      ) : null}
+      {showAssistants ? (
+        <Section id="assistants" title={t('panel.assistants')} icon="bot">
+          <AssistantActivity />
         </Section>
       ) : null}
     </aside>

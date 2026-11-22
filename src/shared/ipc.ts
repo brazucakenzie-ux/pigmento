@@ -9,6 +9,7 @@ export const IPC = {
   openDialog: 'files:open-dialog',
   saveDialog: 'files:save-dialog',
   readFile: 'files:read',
+  chooseFolder: 'files:choose-folder',
   writeFile: 'files:write',
   grantDropped: 'files:grant-dropped',
   clipboardRead: 'clipboard:read-image',
@@ -58,7 +59,58 @@ export const IPC = {
   evThemeChanged: 'ev:theme-changed',
   evFullscreen: 'ev:fullscreen',
   evRecentChanged: 'ev:recent-changed',
+  assistantReply: 'assistant:reply',
+  assistantsState: 'assistant:state',
+  assistantsPause: 'assistant:pause',
+  evAssistantCall: 'ev:assistant-call',
+  evAssistantsState: 'ev:assistants-state',
 } as const;
+
+/** One thing an assistant did (or tried to): what, by whom, when, and how it went. */
+export interface AssistantActivity {
+  id: number;
+  /** When (ms since 1970). */
+  time: number;
+  client: string;
+  /** The tool's title, e.g. Picture info. */
+  title: string;
+  ok: boolean;
+  /** Why it didn't happen. */
+  message?: string;
+}
+
+/** AI assistants as every window shows them: who's connected, whether they're stopped, what they've done. */
+export interface AssistantsState {
+  connected: { id: number; name: string }[];
+  paused: boolean;
+  activity: AssistantActivity[];
+}
+
+/** The call a window answers by asking the user whether an assistant may go ahead (its ask says what for). */
+export const ASSISTANT_ASK = 'pigmento.ask';
+
+/** A tool call from an AI assistant, for a window to carry out. */
+export interface AssistantCall {
+  id: number;
+  tool: string;
+  args: Record<string, unknown>;
+  /** The assistant's name, as its client gives it. */
+  client: string;
+  /** The tool's title, e.g. Picture info. */
+  title: string;
+  /** Set when the user is to be asked first: what it wants to do, in words (e.g. look at pictures). */
+  ask?: string;
+}
+
+/** What an assistant gets back: words, data and pictures (PNG, base64). */
+export interface AssistantResult {
+  text?: string;
+  data?: unknown;
+  images?: { mimeType: 'image/png'; base64: string }[];
+}
+
+/** A window's answer to a tool call: what it did, or why it couldn't (in plain words). */
+export type AssistantReply = { ok: true; result: AssistantResult } | { ok: false; error: string };
 
 export interface OpenedFile {
   path: string;
@@ -111,6 +163,8 @@ export interface AppInfo {
   firstRunTour: boolean;
   isPackaged: boolean;
   userData: string;
+  /** The command line an MCP client runs to reach this Pigmento. */
+  mcp: { command: string; args: string[] };
 }
 
 export interface AutosaveMeta {
@@ -146,6 +200,8 @@ export interface PigmentoApi {
     openAsset(kind: AssetKind): Promise<OpenedAsset | null>;
     /** Save bytes as a non-image file through a Save dialog; resolves the path, or null. */
     saveAsset(kind: AssetKind, defaultName: string, bytes: Uint8Array): Promise<string | null>;
+    /** Pick a folder (for the AI assistants' files limit); null if cancelled. */
+    chooseFolder(): Promise<string | null>;
     /** Resolve and grant a file dropped from Explorer; returns null if not openable. */
     pathForDroppedFile(file: File): Promise<string | null>;
   };
@@ -160,6 +216,16 @@ export interface PigmentoApi {
     remove(path: string): Promise<void>;
     clear(): Promise<void>;
     onChanged(cb: (list: RecentFile[]) => void): Unsubscribe;
+  };
+  /** AI assistants' tool calls (see main/mcp): carried out by the window, which answers each one. */
+  assistant: {
+    onCall(cb: (call: AssistantCall) => void): Unsubscribe;
+    reply(id: number, reply: AssistantReply): void;
+    /** Who's connected, whether they're stopped, and what they've done. */
+    state(): Promise<AssistantsState>;
+    onState(cb: (state: AssistantsState) => void): Unsubscribe;
+    /** Stop every assistant (true) or let them go on. */
+    pause(paused: boolean): void;
   };
   settings: {
     get(): Promise<Settings>;

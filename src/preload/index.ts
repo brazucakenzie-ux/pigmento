@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webFrame, webUtils, type IpcRendererEvent } from 'electron';
-import { IPC, type PigmentoApi, type RecentFile, type SystemTheme } from '@shared/ipc';
+import { IPC, type AssistantCall, type AssistantsState, type PigmentoApi, type RecentFile, type SystemTheme } from '@shared/ipc';
 
 function subscribe<T extends unknown[]>(channel: string, cb: (...args: T) => void): () => void {
   const listener = (_e: IpcRendererEvent, ...args: unknown[]) => cb(...(args as T));
@@ -12,6 +12,7 @@ const api: PigmentoApi = {
     showOpenDialog: () => ipcRenderer.invoke(IPC.openDialog),
     showSaveDialog: (req) => ipcRenderer.invoke(IPC.saveDialog, req),
     read: (path) => ipcRenderer.invoke(IPC.readFile, path),
+    chooseFolder: () => ipcRenderer.invoke(IPC.chooseFolder),
     write: (path, bytes) => ipcRenderer.invoke(IPC.writeFile, path, bytes),
     openAsset: (kind) => ipcRenderer.invoke(IPC.assetOpen, kind),
     saveAsset: (kind, name, bytes) => ipcRenderer.invoke(IPC.assetSave, kind, name, bytes),
@@ -32,6 +33,13 @@ const api: PigmentoApi = {
     remove: (path) => ipcRenderer.invoke(IPC.recentRemove, path),
     clear: () => ipcRenderer.invoke(IPC.recentClear),
     onChanged: (cb) => subscribe<[RecentFile[]]>(IPC.evRecentChanged, cb),
+  },
+  assistant: {
+    onCall: (cb) => subscribe<[AssistantCall]>(IPC.evAssistantCall, cb),
+    reply: (id, reply) => ipcRenderer.send(IPC.assistantReply, id, reply),
+    state: () => ipcRenderer.invoke(IPC.assistantsState),
+    onState: (cb) => subscribe<[AssistantsState]>(IPC.evAssistantsState, cb),
+    pause: (paused) => ipcRenderer.send(IPC.assistantsPause, paused),
   },
   settings: {
     get: () => ipcRenderer.invoke(IPC.settingsGet),

@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect } from 'react';
 import { t } from '../../i18n';
+import { startAssistants } from '../services/assistant';
+import { AssistantAskDialog } from '../dialogs/AssistantAskDialog';
 import { handleGlobalKey, handleGlobalPointer } from '../actions/keymap';
 import { TooltipLayer } from '../components/Tooltips';
 import { EditColorsDialog, PasteLargerDialog, QualityDialog, RecoverDialog, ShortcutsDialog } from '../dialogs/OtherDialogs';
@@ -132,6 +134,8 @@ function DialogHost() {
       return <ShortcutsDialog />;
     case 'about':
       return <AboutDialog />;
+    case 'assistantAsk':
+      return <AssistantAskDialog d={d} />;
     case 'recover':
       return <RecoverDialog items={d.items} />;
     case 'export':
@@ -202,7 +206,7 @@ export function App() {
         api.system.appInfo(),
       ]);
       if (cancelled) return;
-      useUi.setState({ settings, system, recent });
+      useUi.setState({ settings, system, recent, assistants: await api.assistant.state() });
       bindEngine(settings);
       if (info.isE2E) installTestHook();
       useUi.setState({ ready: true, tour: info.firstRunTour && !settings.ui.tour });
@@ -220,6 +224,8 @@ export function App() {
       api.recent.onChanged((recent) => useUi.setState({ recent })),
       api.window.onFullscreenChanged((fullscreen) => useUi.setState({ fullscreen })),
       api.window.onOpenFile((path) => void openPath(path)),
+      startAssistants(),
+      api.assistant.onState((assistants) => useUi.setState({ assistants })),
       api.window.onCloseRequested(() => {
         void (async () => {
           engine.commitLive();

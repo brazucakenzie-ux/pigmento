@@ -15,6 +15,11 @@ const hex6 = z.string().regex(/^#[0-9a-f]{6}$/i);
 /** A key combination as stored: optional Ctrl, Alt, Shift, then one key ("Ctrl+Shift+S", "F1", "Mouse5"). */
 export const SHORTCUT_COMBO = /^(Ctrl\+)?(Alt\+)?(Shift\+)?(\[|\]|[A-Za-z0-9]{1,12})$/;
 
+/** What an AI assistant may do of one kind: freely, after asking you each time, or not at all. */
+export const ASSISTANT_PERMISSIONS = ['allow', 'ask', 'deny'] as const;
+export type AssistantPermission = (typeof ASSISTANT_PERMISSIONS)[number];
+const assistantPermission = z.enum(ASSISTANT_PERMISSIONS);
+
 export const SettingsSchema = z.object({
   version: z.literal(1).default(1),
   theme: ThemeFamilyId.default('pigmento'),
@@ -144,6 +149,27 @@ export const SettingsSchema = z.object({
       tour: z.boolean().default(false),
     })
     .default({ scale: 1, mode: 'full', tour: false }),
+  /**
+   * AI assistants (over MCP; see main/mcp): allowed at all, what they may do (look at pictures,
+   * draw and edit, open/save/export files, new/close/switch pictures, change settings), the one
+   * folder files are limited to (null: anywhere), how their drawing is shown, and the local HTTP
+   * address (off unless turned on; its token is made when it's first needed).
+   */
+  assistants: z
+    .object({
+      enabled: z.boolean().default(true),
+      look: assistantPermission.default('allow'),
+      edit: assistantPermission.default('allow'),
+      files: assistantPermission.default('allow'),
+      folder: z.string().max(1000).nullable().default(null),
+      pictures: assistantPermission.default('allow'),
+      settings: assistantPermission.default('allow'),
+      pace: z.enum(['watch', 'instant']).default('watch'),
+      http: z.boolean().default(false),
+      httpPort: z.number().int().min(1024).max(65535).default(39217),
+      httpToken: z.string().regex(/^[0-9a-f]{0,64}$/).default(''),
+    })
+    .default({ enabled: true, look: 'allow', edit: 'allow', files: 'allow', folder: null, pictures: 'allow', settings: 'allow', pace: 'watch', http: false, httpPort: 39217, httpToken: '' }),
   window: z
     .object({
       x: z.number().optional(),

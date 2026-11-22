@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { FileFormat, ImageFormat } from '@shared/formats';
+import type { AssistantsState } from '@shared/ipc';
 import type { AutosaveEntry, RecentFile, SystemTheme } from '@shared/ipc';
 import { defaultSettings, type Settings } from '@shared/settings';
 import type { RGBA } from '@engine/core/color';
@@ -50,7 +51,9 @@ export type DialogState =
   /** An adjustment's or filter's settings, with a live preview. */
   | { kind: 'filter'; id: string }
   /** Settings: the interface and keyboard shortcuts. */
-  | { kind: 'settings'; page?: 'general' | 'shortcuts' }
+  | { kind: 'settings'; page?: 'general' | 'shortcuts' | 'assistants' }
+  /** An AI assistant wants to do something the settings say to ask about. */
+  | { kind: 'assistantAsk'; client: string; title: string; what: string; resolve: (allowed: boolean) => void }
   | { kind: 'userGuide' }
   | { kind: 'shortcuts' }
   | { kind: 'about' };
@@ -67,6 +70,8 @@ export interface FileState {
 
 export interface UiState {
   ready: boolean;
+  /** AI assistants: who's connected, whether they're stopped, what they've done (from main). */
+  assistants: AssistantsState;
   settings: Settings;
   system: SystemTheme;
   tab: RibbonTab;
@@ -120,6 +125,7 @@ export interface UiState {
 
 export const useUi = create<UiState>(() => ({
   ready: false,
+  assistants: { connected: [], paused: false, activity: [] },
   settings: defaultSettings(),
   system: { dark: false, highContrast: false, accent: null },
   tab: 'home',

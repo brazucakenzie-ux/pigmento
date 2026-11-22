@@ -491,9 +491,10 @@ export class Renderer {
 /**
    * The picture at `frame` for an export, drawn on the GPU with the same compositing as the screen
    * (no onion skin, live objects, guides or selection), at w × h, on `background` (null =
-   * see-through). The returned canvas is reused by the next call.
+   * see-through). `only` draws just that layer (shown even if it's hidden). The returned canvas is
+   * reused by the next call.
    */
-  frameCanvas(frame: number, w: number, h: number, background: string | null): OffscreenCanvas {
+  frameCanvas(frame: number, w: number, h: number, background: string | null, only: Layer | null = null): OffscreenCanvas {
     const dw = this.doc.width;
     const dh = this.doc.height;
     if (!this.exportFull || this.exportFull.canvas.width !== dw || this.exportFull.canvas.height !== dh) {
@@ -510,7 +511,13 @@ export class Renderer {
     }
     this.passPieces = this.doc.pieces.length ? piecesByLayer(this.doc.pieces) : null;
     this.trailPass = new Map();
-    this.drawLayers(full, this.doc.layers, r, frame);
+    const wasVisible = only?.visible ?? true;
+    if (only) only.visible = true;
+    try {
+      this.drawLayers(full, only ? [only] : this.doc.layers, r, frame);
+    } finally {
+      if (only) only.visible = wasVisible;
+    }
     this.trailPass = null;
     this.passPieces = null;
     full.restore();
@@ -527,6 +534,20 @@ export class Renderer {
     sc.imageSmoothingQuality = 'high';
     sc.drawImage(this.exportFull.canvas, 0, 0, w, h);
     return this.exportScaled.canvas;
+  }
+
+  /**
+   * `r` of the picture (or of one layer alone) at `frame`, scaled to w × h on a canvas of its own:
+   * what an AI assistant looks at.
+   */
+  lookCanvas(frame: number, r: Rect, w: number, h: number, background: string | null, only: Layer | null): OffscreenCanvas {
+    const full = this.frameCanvas(frame, this.doc.width, this.doc.height, background, only);
+    const canvas = new OffscreenCanvas(w, h);
+    const ctx = ctx2d(canvas);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(full, r.x, r.y, r.w, r.h, 0, 0, w, h);
+    return canvas;
   }
 
   /** Mirror canvas of a raster layer, if it exists. */

@@ -19,7 +19,32 @@ export const PACKAGES = [
   '@fontsource-variable/inter',
   'gifenc',
   'fflate',
+  // AI assistants (MCP): the SDK and what its server and Streamable HTTP transport use.
+  '@modelcontextprotocol/sdk',
+  'ajv',
+  'ajv-formats',
+  'fast-deep-equal',
+  'fast-uri',
+  'json-schema-traverse',
+  'zod-to-json-schema',
+  'hono',
+  '@hono/node-server',
+  'content-type',
 ];
+
+/**
+ * Packages bundled from a copy nested under another package (a different version from the one at
+ * the top of node_modules, which only the build tools use): name → the folder holding its copy.
+ */
+const NESTED = {
+  ajv: 'node_modules/@modelcontextprotocol/sdk/node_modules/ajv',
+  'json-schema-traverse': 'node_modules/@modelcontextprotocol/sdk/node_modules/json-schema-traverse',
+};
+
+/** The folder of a bundled package's installed copy. */
+export function packageDir(name) {
+  return NESTED[name] ? path.join(root, ...NESTED[name].split('/')) : path.join(root, 'node_modules', ...name.split('/'));
+}
 
 export const NOTICES_FILE = path.join(root, 'THIRD-PARTY-NOTICES.md');
 
@@ -38,7 +63,7 @@ export function renderNotices() {
     '',
   ];
   for (const name of PACKAGES) {
-    const dir = path.join(root, 'node_modules', ...name.split('/'));
+    const dir = packageDir(name);
     const pkg = JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8'));
     const text = readFileSync(licenceFile(dir), 'utf8').replace(/\r\n?/g, '\n').trim();
     parts.push(

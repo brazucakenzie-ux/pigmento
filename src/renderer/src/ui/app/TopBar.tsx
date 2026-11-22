@@ -4,6 +4,7 @@ import { action, runAction } from '../actions/actions';
 import { useShortcut } from '../actions/keymap';
 import { Icon } from '../icons/Icon';
 import { useUi } from '../state/store';
+import { AssistantBadge } from './AssistantsUi';
 
 function QuickButton({ id }: { id: string }) {
   const a = action(id);
@@ -50,6 +51,7 @@ export function TopBar() {
           </span>
         ) : null}
       </div>
+      <AssistantBadge />
     </header>
   );
 }

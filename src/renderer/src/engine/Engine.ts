@@ -1254,6 +1254,19 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
     return this.renderer.frameCanvas(clampFrame(frame, this.doc.timeline.length), w, h, bg);
   }
 
+  /**
+   * What an AI assistant looks at: `r` of the picture (on its paper, if there is one) or of one
+   * layer alone (shown even if it's hidden), at `frame`, scaled down to fit `maxSize`.
+   */
+  lookCanvas(o: { layer: Layer | null; r: Rect; frame: number; maxSize: number }): { canvas: OffscreenCanvas; scale: number } {
+    const scale = Math.min(1, o.maxSize / Math.max(o.r.w, o.r.h));
+    const w = Math.max(1, Math.round(o.r.w * scale));
+    const h = Math.max(1, Math.round(o.r.h * scale));
+    const p = this.doc.paper;
+    const bg = !o.layer && p ? toCss(p) : null;
+    return { canvas: this.renderer.lookCanvas(clampFrame(o.frame, this.doc.timeline.length), o.r, w, h, bg, o.layer), scale };
+  }
+
   /** Output size of an export at `scale`. */
   exportSize(scale: number): { w: number; h: number } {
     return { w: Math.max(1, Math.round(this.doc.width * scale)), h: Math.max(1, Math.round(this.doc.height * scale)) };
