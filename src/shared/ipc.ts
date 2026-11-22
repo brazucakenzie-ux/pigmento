@@ -9,6 +9,7 @@ export const IPC = {
   openDialog: 'files:open-dialog',
   saveDialog: 'files:save-dialog',
   readFile: 'files:read',
+  chooseFolder: 'files:choose-folder',
   writeFile: 'files:write',
   grantDropped: 'files:grant-dropped',
   clipboardRead: 'clipboard:read-image',
@@ -132,6 +133,8 @@ export interface AppInfo {
   firstRunTour: boolean;
   isPackaged: boolean;
   userData: string;
+  /** The command line an MCP client runs to reach this Pigmento. */
+  mcp: { command: string; args: string[] };
 }
 
 export interface AutosaveMeta {
@@ -167,6 +170,8 @@ export interface PigmentoApi {
     openAsset(kind: AssetKind): Promise<OpenedAsset | null>;
     /** Save bytes as a non-image file through a Save dialog; resolves the path, or null. */
     saveAsset(kind: AssetKind, defaultName: string, bytes: Uint8Array): Promise<string | null>;
+    /** Pick a folder (for the AI assistants' files limit); null if cancelled. */
+    chooseFolder(): Promise<string | null>;
     /** Resolve and grant a file dropped from Explorer; returns null if not openable. */
     pathForDroppedFile(file: File): Promise<string | null>;
   };

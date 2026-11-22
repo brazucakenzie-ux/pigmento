@@ -2621,6 +2621,64 @@ kbd {
   gap: 10px;
   padding-top: 12px;
 }
+/* Settings → AI assistants */
+.assistants-page {
+  max-height: min(60vh, 560px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.assistants-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  min-width: 0;
+}
+.assistants-options legend {
+  padding: 0 4px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.assistants-options:disabled {
+  opacity: 0.6;
+}
+.assistants-address-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.assistants-folder-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.assistants-folder,
+.assistants-address {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.assistants-address,
+.assistants-snippet {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: var(--fs-sm);
+  user-select: text;
+}
+.assistants-snippet {
+  margin: 0;
+  padding: 8px 10px;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre;
+  background: var(--bg-input, var(--bg-panel));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
 .shortcut-list {
   max-height: min(52vh, 460px);
   overflow-y: auto;

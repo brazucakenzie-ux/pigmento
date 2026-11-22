@@ -83,6 +83,12 @@ export function registerIpc(): void {
     return p;
   });
 
+  ipcMain.handle(IPC.chooseFolder, async (e): Promise<string | null> => {
+    const win = senderWindow(e);
+    const res = win ? await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'] }) : await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] });
+    return res.canceled || !res.filePaths[0] ? null : res.filePaths[0];
+  });
+
   ipcMain.handle(IPC.saveDialog, async (e, req: SaveDialogRequest): Promise<SaveDialogResult | null> => {
     const win = senderWindow(e);
     if (!req || typeof req.defaultName !== 'string' || !isFormat(req.format)) {
@@ -384,6 +390,8 @@ export function registerIpc(): void {
       firstRunTour: process.env.PIGMENTO_E2E !== '1' || process.env.PIGMENTO_E2E_TOUR === '1',
       isPackaged: app.isPackaged,
       userData: app.getPath('userData'),
+      // Packaged: Pigmento.exe --mcp; in development, Electron with the app's folder.
+      mcp: { command: process.execPath, args: app.isPackaged ? ['--mcp'] : [app.getAppPath(), '--mcp'] },
     }),
   );
 }
