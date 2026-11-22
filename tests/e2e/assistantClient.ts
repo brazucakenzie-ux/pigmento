@@ -52,3 +52,32 @@ export const decode = (h: AppHandle, base64: string, points: { x: number; y: num
   );
 
 export const near = (a: Pixel, b: Pixel, tolerance = 2) => Math.max(Math.abs(a.r - b.r), Math.abs(a.g - b.g), Math.abs(a.b - b.b), Math.abs(a.a - b.a)) <= tolerance;
+
+/** A GIF decoded in the page: its size, frame count, each frame's delay (ms), and pixels at some frames. */
+export const decodeGif = (h: AppHandle, base64: string, probes: { frame: number; x: number; y: number }[]) =>
+  h.page.evaluate(
+    async ({ b64, probes }) => {
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const dec = new ImageDecoder({ data: bytes, type: 'image/gif' });
+      await dec.tracks.ready;
+      const track = dec.tracks.selectedTrack!;
+      await dec.completed;
+      const first = (await dec.decode({ frameIndex: 0 })).image;
+      const size = { width: first.displayWidth, height: first.displayHeight };
+      first.close();
+      const delays: number[] = [];
+      for (let i = 0; i < track.frameCount; i++) delays.push(Math.round(((await dec.decode({ frameIndex: i })).image.duration ?? 0) / 1000));
+      const pixels: { r: number; g: number; b: number; a: number }[] = [];
+      for (const p of probes) {
+        const { image } = await dec.decode({ frameIndex: p.frame });
+        const c = new OffscreenCanvas(image.displayWidth, image.displayHeight);
+        const ctx = c.getContext('2d')!;
+        ctx.drawImage(image, 0, 0);
+        const d = ctx.getImageData(p.x, p.y, 1, 1).data;
+        pixels.push({ r: d[0], g: d[1], b: d[2], a: d[3] });
+        image.close();
+      }
+      return { ...size, frames: track.frameCount, delays, pixels };
+    },
+    { b64: base64, probes },
+  );

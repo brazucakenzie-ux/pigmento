@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { z } from 'zod';
 import { grantPath } from '../files';
 import { checkPath } from './paths';
@@ -186,6 +187,32 @@ export const ANIM_TOOLS: readonly ToolDef[] = [
       start: FRAME.optional().describe('retime: the frame it starts at.'),
       loop: z.enum(['cycle', 'pingpong', 'off']).optional().describe('loop: round and round (cycle), back and forth (pingpong), or not (off: the last drawing holds).'),
       loopEnd: FRAME.optional().describe('loop: the last frame of the cycle (the last drawing shows until then).'),
+    },
+  },
+  {
+    name: 'export_animation',
+    title: 'Export animation',
+    description: 'Export the animation (or some of its frames) as a GIF or an MP4 video, at a scale. The picture and its file don’t change.',
+    kind: 'files',
+    readOnly: false,
+    destructive: true,
+    input: {
+      path: z.string().describe('Where to save it: a full path ending in .gif or .mp4.'),
+      from: FRAME.optional().describe('The first frame (1 if left out).'),
+      to: FRAME.optional().describe('The last frame (the animation’s last if left out).'),
+      scale: z.number().min(0.05).max(4).optional().describe('Size compared with the picture (1 if left out).'),
+      playback: z.enum(['loop', 'once', 'pingpong']).optional().describe('Round and round, once, or back and forth (as the animation plays if left out).'),
+      transparent: z.boolean().optional().describe('GIF: leave the paper out.'),
+      quality: z.enum(['low', 'medium', 'high']).optional().describe('MP4: smaller, or sharper (high if left out).'),
+      overwrite: z.boolean().optional().describe('Replace the file if it’s already there.'),
+    },
+    main: async (ctx, args) => {
+      const p = await checkPath(args.path, { folder: ctx.settings.folder, mustExist: false, overwrite: args.overwrite === true });
+      const ext = path.extname(p).toLowerCase();
+      if (ext !== '.gif' && ext !== '.mp4') throw new Error('An animation is exported as a .gif or an .mp4 file (export_image makes still pictures).');
+      grantPath(p);
+      const { overwrite: _o, ...rest } = args;
+      return ctx.call(ctx.win, 'export_animation', { ...rest, path: p, format: ext.slice(1) });
     },
   },
   {

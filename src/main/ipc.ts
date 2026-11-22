@@ -184,7 +184,8 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.writeFile, async (_e, rawPath: unknown, data: unknown) => {
     const p = validatePathArg(rawPath);
     if (!isGranted(p)) throw new Error('Access to this file was not granted');
-    if (!isOpenablePath(p)) throw new Error('Unsupported file type');
+    // Pictures, and videos exported by an AI assistant (to a path main checked and allowed).
+    if (!isOpenablePath(p) && path.extname(p).toLowerCase() !== '.mp4') throw new Error('Unsupported file type');
     await atomicWrite(p, bytesArg(data, MAX_WRITE_BYTES));
   });
 

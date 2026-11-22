@@ -597,7 +597,7 @@ Decisions (agreed with the user on 2026-11-22, Stop 8A's the same day; the rest 
 - [x] 8.12 Pieces: Animate selection, Piece from layer and Place image; keyframes for every value, easing, curves and loops; following, hinges, groups and boxes; 3D, the camera and the light (+ e2e)
 - [x] 8.13 The timeline and drawings: length, frame rate, the frame shown, playing; drawings on layers and on pieces (new, copy, clear, delete, timing, loop) (+ e2e)
 - [x] 8.14 Motion: following a path, facing the way it goes, trims (Draw on, Erase behind), trails and their presets, spin forever (+ e2e)
-- [ ] 8.15 Exporting animation as a GIF or MP4, as the file permissions allow (+ e2e)
+- [x] 8.15 Exporting animation as a GIF or MP4, as the file permissions allow (+ e2e)
 - [ ] 8.16 E2e: an MCP client makes a red square that switches to one with a blue line, cycling, and a rocket leaving smoke along a path, and exports them as GIFs that are checked frame by frame; `npm run check` green; report
 
 **Stop 8D — Polish and release**

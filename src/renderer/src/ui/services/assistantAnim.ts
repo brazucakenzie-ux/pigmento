@@ -9,6 +9,10 @@ import { t } from '../../i18n';
 import { engine } from '../state/engine';
 import { updateSettings, useUi } from '../state/store';
 import { bool, changeable, chooseLayer, colorArg, int, layerArg, num, pixelLayer, str, type Handler } from './assistantArgs';
+import { frameSequence } from '@engine/anim/exportFrames';
+import { AnimExportError, type AnimFormat, type VideoQuality } from '@engine/io/animExport';
+import { encodeChoice, type AnimExportChoice } from './animExport';
+import { errorText } from './assistantArgs';
 import { placeImageFrom } from './files';
 
 /**
@@ -331,6 +335,33 @@ export const ANIM_HANDLERS: Record<string, Handler> = {
         return { text: `${name[0].toUpperCase()}${name.slice(1)} has drawings starting at frame${d.starts.length === 1 ? '' : 's'} ${d.starts.join(', ') || '1'}${loop}.`, data: { drawings: d.starts, loop: d.loop } };
       },
     };
+  },
+
+  export_animation: async (args) => {
+    const path = str(args.path) ?? '';
+    const format = str(args.format) as AnimFormat;
+    const tl = engine.doc.timeline;
+    const from = frameArg(args.from) ?? 0;
+    const to = frameArg(args.to) ?? tl.length - 1;
+    const c: AnimExportChoice = {
+      format,
+      from,
+      to,
+      scale: num(args.scale) ?? 1,
+      playback: (str(args.playback) as LoopMode | undefined) ?? tl.loop,
+      transparent: bool(args.transparent) ?? false,
+      quality: (str(args.quality) as VideoQuality | undefined) ?? 'high',
+    };
+    let bytes: Uint8Array;
+    try {
+      bytes = await encodeChoice(c, () => undefined, new AbortController().signal);
+    } catch (err) {
+      throw new Error(err instanceof AnimExportError ? t(err.key, { message: err.message }) : `The animation couldn’t be made: ${errorText(err)}`, { cause: err });
+    }
+    await window.pigmento.files.write(path, bytes);
+    const frames = frameSequence(from, to, c.playback).length;
+    const { w, h } = engine.exportSize(c.scale);
+    return { text: `Exported ${path}: ${frames} frames, ${w} × ${h} pixels, at ${tl.fps} a second.`, data: { path, format, frames, width: w, height: h, fps: tl.fps } };
   },
 
   set_animation: (args) => {
