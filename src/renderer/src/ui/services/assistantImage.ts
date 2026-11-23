@@ -1,5 +1,5 @@
 import { SettingsSchema, type Settings } from '@shared/settings';
-import { parseHex } from '@engine/core/color';
+import { parseHex, toHex8 } from '@engine/core/color';
 import { Selection } from '@engine/doc/Selection';
 import type { Anchor } from '@engine/Engine';
 import { filterRegistry } from '@engine/filters/FilterRegistry';
@@ -9,7 +9,7 @@ import { t } from '../../i18n';
 import { actions } from '../actions/actions';
 import { engine } from '../state/engine';
 import { closeDialog, updateSettings, useUi } from '../state/store';
-import { chooseLayer, int, num, pixelLayer, str, type Handler } from './assistantArgs';
+import { chooseLayer, colorArg, int, num, pixelLayer, str, type Handler } from './assistantArgs';
 import { hasMemoryFor } from './memory';
 
 /**
@@ -112,6 +112,26 @@ export const IMAGE_HANDLERS: Record<string, Handler> = {
       apply: () => {
         engine.canvasSize(w, h, (str(args.anchor) ?? 'nw') as Anchor);
         return { text: `The canvas is now ${size()}.`, data: { width: engine.doc.width, height: engine.doc.height } };
+      },
+    };
+  },
+
+  set_picture_properties: (args) => {
+    const dpi = int(args.dpi);
+    const hasPaper = args.paper !== undefined;
+    if (dpi === undefined && !hasPaper) throw new Error('Say what to change: dpi or paper.');
+    if (dpi !== undefined && (dpi < 1 || dpi > 10000)) throw new Error('dpi should be a whole number from 1 to 10000.');
+    const paper = hasPaper ? (args.paper === 'none' ? null : (colorArg(args.paper, 'paper') ?? null)) : undefined;
+    return {
+      label: 'assistant.step.set_picture_properties',
+      apply: () => {
+        engine.setProperties({ ...(dpi !== undefined ? { dpi } : {}), ...(hasPaper ? { paper } : {}) });
+        const outPaper = engine.doc.paper ? toHex8(engine.doc.paper) : null;
+        const parts = [
+          ...(dpi !== undefined ? [`${engine.doc.dpi} DPI`] : []),
+          ...(hasPaper ? [`paper ${outPaper ?? 'see-through'}`] : []),
+        ];
+        return { text: `Updated image properties (${parts.join(', ')}).`, data: { dpi: engine.doc.dpi, paper: outPaper } };
       },
     };
   },

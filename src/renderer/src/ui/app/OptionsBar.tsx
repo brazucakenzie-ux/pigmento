@@ -39,25 +39,53 @@ function FontPicker({ value, onChange, label }: { value: string; onChange: (v: s
   );
 }
 
-function OptionControl({ toolId, spec, values, inPopover = false }: { toolId: string; spec: OptionSpec; values: Record<string, unknown>; inPopover?: boolean }) {
+function attachedUnitKeys(specs: readonly OptionSpec[]): Set<string> {
+  const keys = new Set<string>();
+  for (const s of specs) if (s.type === 'slider' && s.unitOption) keys.add(s.unitOption);
+  return keys;
+}
+
+function OptionControl({ toolId, spec, values, specs, inPopover = false }: { toolId: string; spec: OptionSpec; values: Record<string, unknown>; specs: readonly OptionSpec[]; inPopover?: boolean }) {
   const set = (v: unknown) => engine.setToolOption(toolId, spec.key, v);
   const label = t(spec.labelKey);
   switch (spec.type) {
     case 'slider': {
       const v = Number(values[spec.key] ?? spec.default);
+      const unit = typeof spec.unit === 'function' ? spec.unit(values) : spec.unit;
+      const presets = typeof spec.presets === 'function' ? spec.presets(values) : spec.presets;
+      const unitSpec = spec.unitOption ? specs.find((o): o is Extract<OptionSpec, { type: 'segmented' }> => o.key === spec.unitOption && o.type === 'segmented') : undefined;
+      const unitVal = unitSpec ? String(values[unitSpec.key] ?? unitSpec.default) : undefined;
+      const setUnit = (nextUnit: string) => {
+        if (!unitSpec || nextUnit === unitVal) return;
+        if (spec.convertOnUnit && unitVal) {
+          const converted = Math.min(spec.max, Math.max(spec.min, Math.round(spec.convertOnUnit(v, unitVal, nextUnit, engine.doc.dpi))));
+          engine.setToolOptions(toolId, { [unitSpec.key]: nextUnit, [spec.key]: converted });
+        } else {
+          engine.setToolOption(toolId, unitSpec.key, nextUnit);
+        }
+      };
       return (
         <span className="opt">
           <span>{label}</span>
-          {spec.presets ? (
+          {presets ? (
             <span className="chips" role="group" aria-label={label}>
-              {spec.presets.map((p) => (
+              {presets.map((p) => (
                 <button key={p} type="button" className="chip" aria-pressed={v === p} onClick={() => set(p)}>
                   {p}
                 </button>
               ))}
             </span>
           ) : null}
-          <Slider value={v} onChange={set} min={spec.min} max={spec.max} step={spec.step} unit={spec.unit} log={spec.log} label={label} />
+          <Slider value={v} onChange={set} min={spec.min} max={spec.max} step={spec.step} unit={unit} showUnit={!unitSpec} log={spec.log} label={label} />
+          {unitSpec && unitVal ? (
+            <Segmented
+              value={unitVal}
+              onChange={setUnit}
+              label={t(unitSpec.labelKey)}
+              iconsOnly={unitSpec.iconsOnly}
+              choices={unitSpec.choices.map((c) => ({ value: c.value, label: t(c.labelKey), icon: c.icon }))}
+            />
+          ) : null}
         </span>
       );
     }
@@ -246,6 +274,7 @@ function OptionPopover({ toolId, spec, values }: { toolId: string; spec: Extract
   const label = t(spec.labelKey);
   const summary = spec.summary ? t(spec.summary(values)) : null;
   const inner = spec.options.filter((o) => !o.visibleIf || o.visibleIf(values));
+  const attached = attachedUnitKeys(inner);
   return (
     <span className="opt">
       <button ref={ref} type="button" className="opt-pop-btn" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
@@ -255,8 +284,8 @@ function OptionPopover({ toolId, spec, values }: { toolId: string; spec: Extract
         <Icon name="chevron-down" size={12} />
       </button>
       <Popover anchor={ref} open={open} onClose={close} label={label} className="opt-popover">
-        {inner.map((o) => (
-          <OptionControl key={o.key} toolId={toolId} spec={o} values={values} inPopover />
+        {inner.filter((o) => !attached.has(o.key)).map((o) => (
+          <OptionControl key={o.key} toolId={toolId} spec={o} values={values} specs={inner} inPopover />
         ))}
       </Popover>
     </span>
@@ -910,6 +939,7 @@ export function OptionsBar() {
   const tool = toolRegistry.get(toolId);
   if (!tool) return <div className="optionsbar" />;
   const visible = tool.id === 'move' && !shapeLayer ? [] : tool.options.filter((o) => (!o.visibleIf || o.visibleIf(values)) && !(simple && o.advanced));
+  const attached = attachedUnitKeys(visible);
   return (
     <div className="optionsbar" role="toolbar" aria-label={t('a11y.toolOptions')}>
       <span className="tool-name">
@@ -925,8 +955,8 @@ export function OptionsBar() {
           </label>
         ) : null}
         {tool.paintsPieces && !simple ? <PaintOnPiece /> : null}
-        {visible.map((spec) => (
-          <OptionControl key={spec.key} toolId={toolId} spec={spec} values={values} />
+        {visible.filter((o) => !attached.has(o.key)).map((spec) => (
+          <OptionControl key={spec.key} toolId={toolId} spec={spec} values={values} specs={visible} />
         ))}
         {toolId === 'transform' ? <TransformFields /> : null}
         {toolId === 'animate' ? <PieceFields /> : null}

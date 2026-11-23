@@ -12,7 +12,7 @@ const SECTIONS: readonly { title: string; tools: readonly string[] }[] = [
   { title: 'Pictures and files', tools: ['new_picture', 'open_file', 'save_file', 'export_image', 'close_window', 'focus_window'] },
   { title: 'Layers and selections', tools: ['add_layer', 'delete_layer', 'move_layer', 'group_layers', 'set_layer', 'select', 'transform_pixels'] },
   { title: 'Painting', tools: ['set_colors', 'fill', 'brush_stroke', 'draw_line', 'draw_shape', 'draw_path', 'add_text'] },
-  { title: 'The image, effects, actions and settings', tools: ['resize_image', 'crop', 'canvas_size', 'rotate_flip', 'apply_effect', 'run_action', 'change_settings'] },
+  { title: 'The image, effects, actions and settings', tools: ['resize_image', 'crop', 'canvas_size', 'set_picture_properties', 'rotate_flip', 'apply_effect', 'run_action', 'change_settings'] },
   { title: 'Animation', tools: ['make_piece', 'set_keyframe', 'set_piece', 'set_trail', 'set_trim', 'set_animation', 'edit_drawing', 'export_animation'] },
 ];
 

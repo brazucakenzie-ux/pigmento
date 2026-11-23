@@ -649,6 +649,11 @@ export class Engine extends Emitter<EngineEvents> implements ToolContext, Comman
   structureChanged(): void {
     this.updateReach();
     this.view.setDocSize(this.doc.width, this.doc.height);
+    if (this._live?.kind === 'text') {
+      const t = this._live as TextObject;
+      t.setDpi(this.doc.dpi);
+      this.emit('text', t.editState());
+    }
     this.renderer.resetDocument(this.doc);
     this.emit('doc', this.docInfo());
     this.emitView();

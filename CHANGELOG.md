@@ -2,6 +2,21 @@
 
 All notable changes to Pigmento. Versions follow [Semantic Versioning](https://semver.org).
 
+## [1.4.1] — 2026-11-23
+
+Text sizing in pixels or points, and image properties (DPI and paper) for AI assistants.
+
+### Text tool
+- The Text tool now defaults to **pixels (`px`)** (24 px, range 1–1000), so font sizes stay consistent regardless of the picture's DPI.
+- Added an inline **`px` | `pt`** toggle right next to the Size control in the options bar. Switching units converts the current size using the document's DPI so live text keeps its height, and updates the quick-pick presets (`16 / 24 / 48 / 96` in `px`, `12 / 18 / 24 / 48` in `pt`).
+- Changing document DPI (or undoing/redoing it) updates any open live text box immediately.
+
+### AI assistants (41 tools)
+- `get_picture_info` now reports the picture's **resolution (`dpi`)** alongside its pixel size (`new_picture` and `open_file` include `dpi` too, and `new_picture` accepts up to 10,000 DPI).
+- Added **`set_picture_properties`** to change the picture's resolution (`dpi`) and/or `paper` colour (`#rrggbb`, `#rrggbbaa`, or `none`) as a single undo step without resizing pixels.
+- `add_text` now defaults to **`px`** and accepts an optional `unit` (`px` or `pt`).
+- Updated the [tool reference](docs/mcp.md).
+
 ## [1.4.0] — 2026-11-22
 
 Pigmento for AI assistants: an assistant can use Pigmento the way you do, through the Model Context Protocol (MCP), while you watch.

@@ -6,9 +6,12 @@ import type { Selection } from '../doc/Selection';
 import type { TextEditState } from '../tools/Tool';
 import type { LiveObject } from './LiveObject';
 
+export type FontSizeUnit = 'px' | 'pt';
+
 export interface TextStyle {
   family: string;
-  sizePt: number;
+  size: number;
+  sizeUnit: FontSizeUnit;
   bold: boolean;
   italic: boolean;
   underline: boolean;
@@ -17,6 +20,17 @@ export interface TextStyle {
   color: RGBA;
   /** Opaque background colour, or null for transparent. */
   background: RGBA | null;
+}
+
+/** Font height in picture pixels (px stays fixed; pt scales by document DPI). */
+export function fontSizePx(size: number, unit: FontSizeUnit, dpi: number): number {
+  return Math.max(1, Math.round(unit === 'px' ? size : (size * dpi) / 72));
+}
+
+/** Convert a font size between px and pt at the given DPI, preserving drawn height. */
+export function convertFontSize(size: number, from: FontSizeUnit, to: FontSizeUnit, dpi: number): number {
+  if (from === to) return size;
+  return to === 'px' ? (size * dpi) / 72 : (size * 72) / dpi;
 }
 
 export const LINE_HEIGHT = 1.25;
@@ -52,7 +66,7 @@ export function cssFont(style: TextStyle, px: number): string {
  * here matches the CSS `white-space: pre` editor exactly.
  */
 export function layoutText(text: string, style: TextStyle, dpi: number, minW: number, minH: number): TextLayout {
-  const px = Math.max(1, Math.round((style.sizePt * dpi) / 72));
+  const px = fontSizePx(style.size, style.sizeUnit, dpi);
   const font = cssFont(style, px);
   const m = measurer();
   m.font = font;
@@ -84,7 +98,7 @@ export class TextObject implements LiveObject {
     public minW: number,
     public minH: number,
     public style: TextStyle,
-    private readonly dpi: number,
+    private dpi: number,
     private readonly docW: number,
     private readonly docH: number,
   ) {
@@ -103,6 +117,12 @@ export class TextObject implements LiveObject {
 
   setStyle(style: TextStyle): void {
     this.style = style;
+    this.update();
+  }
+
+  setDpi(dpi: number): void {
+    if (dpi <= 0 || dpi === this.dpi) return;
+    this.dpi = dpi;
     this.update();
   }
 

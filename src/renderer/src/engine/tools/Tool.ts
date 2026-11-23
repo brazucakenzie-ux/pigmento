@@ -41,18 +41,24 @@ interface OptionBase {
   advanced?: boolean;
 }
 
+export type SliderUnit = 'px' | '%' | 'pt' | '×' | '°';
+
 export type OptionSpec =
   | (OptionBase & {
       type: 'slider';
       min: number;
       max: number;
       step?: number;
-      unit?: 'px' | '%' | 'pt' | '×' | '°';
+      unit?: SliderUnit | ((values: Record<string, unknown>) => SliderUnit);
       default: number;
       /** Quick-pick values shown as chips (Paint-style size picker). */
-      presets?: number[];
+      presets?: number[] | ((values: Record<string, unknown>) => number[]);
       /** Logarithmic slider for wide ranges such as brush size. */
       log?: boolean;
+      /** Key of a sibling segmented option rendered inline as this slider's unit toggle. */
+      unitOption?: string;
+      /** Convert the slider's value when its unitOption switches, keeping drawn size stable. */
+      convertOnUnit?: (value: number, from: string, to: string, dpi: number) => number;
     })
   | (OptionBase & { type: 'toggle'; default: boolean; icon?: string })
   | (OptionBase & {

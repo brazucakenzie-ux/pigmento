@@ -205,7 +205,8 @@ export const PAINT_TOOLS: readonly ToolDef[] = [
       y: z.number().describe("Its top edge."),
       width: z.number().positive().optional().describe('Wrap lines at this width in pixels.'),
       font: z.string().optional().describe('A font on this PC, like Segoe UI (if left out), Arial, Georgia, Times New Roman, Consolas or Comic Sans MS.'),
-      size: z.number().min(1).max(1000).optional().describe('Size in points (24 if left out).'),
+      size: z.number().min(1).max(1000).optional().describe('Font size in the chosen unit (24 if left out).'),
+      unit: z.enum(['px', 'pt']).optional().describe('Unit for size: px (picture pixels, if left out) or pt (points, scaled by the picture’s DPI).'),
       bold: z.boolean().optional().describe("Bold."),
       italic: z.boolean().optional().describe("Italic."),
       underline: z.boolean().optional().describe("Underlined."),
@@ -249,6 +250,19 @@ export const IMAGE_TOOLS: readonly ToolDef[] = [
       width: z.number().int().min(1).max(30000).describe("The canvas’s new width, in pixels."),
       height: z.number().int().min(1).max(30000).describe("The canvas’s new height, in pixels."),
       anchor: z.enum(['nw', 'n', 'ne', 'w', 'c', 'e', 'sw', 's', 'se']).optional().describe('Where the picture stays: nw is top-left (if left out), c the centre, se bottom-right…'),
+    },
+  }),
+  edit({
+    name: 'set_picture_properties',
+    title: 'Image properties',
+    description: 'Change the picture’s resolution (DPI) and/or paper colour. Changing DPI doesn’t resize any pixels.',
+    input: {
+      dpi: z.number().int().min(1).max(10000).optional().describe('Resolution in dots per inch (96 for screen, 300 for print).'),
+      paper: z
+        .string()
+        .regex(/^(#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?|none)$/)
+        .optional()
+        .describe('The paper colour as #rrggbb (or #rrggbbaa), or none for see-through.'),
     },
   }),
   edit({

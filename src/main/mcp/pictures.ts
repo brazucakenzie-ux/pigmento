@@ -83,7 +83,7 @@ export const PICTURE_TOOLS: readonly ToolDef[] = [
         .regex(/^(#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?|none)$/)
         .optional()
         .describe('The paper colour as #rrggbb (or #rrggbbaa), or none for see-through. White if left out.'),
-      dpi: z.number().int().min(1).max(4800).optional().describe('Dots per inch, for printing (96 if left out).'),
+      dpi: z.number().int().min(1).max(10000).optional().describe('Dots per inch, for printing (96 if left out).'),
       where: WHERE,
       unsaved: UNSAVED,
     },

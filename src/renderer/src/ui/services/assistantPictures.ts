@@ -30,14 +30,14 @@ export const PICTURE_HANDLERS: Record<string, Handler> = {
     } catch (err) {
       throw new Error(errorText(err), { cause: err });
     }
-    return { text: `New picture: ${w} × ${h} pixels${paper ? '' : ', see-through'}.`, data: { width: w, height: h } };
+    return { text: `New picture: ${w} × ${h} pixels${paper ? '' : ', see-through'}.`, data: { width: w, height: h, dpi: engine.doc.dpi } };
   },
 
   open_file: async (args) => {
     const path = str(args.path) ?? '';
     engine.commitLive(true);
     if (!(await openPath(path, true))) throw new Error(`Pigmento couldn’t open ${path}.`);
-    return { text: `Opened ${nameOf()}: ${engine.doc.width} × ${engine.doc.height} pixels.`, data: { width: engine.doc.width, height: engine.doc.height, path } };
+    return { text: `Opened ${nameOf()}: ${engine.doc.width} × ${engine.doc.height} pixels.`, data: { width: engine.doc.width, height: engine.doc.height, dpi: engine.doc.dpi, path } };
   },
 
   save_file: async (args) => {

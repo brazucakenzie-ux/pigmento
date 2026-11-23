@@ -89,6 +89,9 @@ test('an assistant paints strokes, fills, lines, shapes, paths and text that you
   expect(await dark(500, 650, 200, 80)).toBe(0);
   expect((await call('add_text', { text: 'Hi there', x: 500, y: 650, size: 36, color: '#000000', bold: true })).ok).toBe(true);
   expect(await dark(500, 650, 200, 80)).toBeGreaterThan(20);
+  // Explicit pt unit scales with DPI (at 96 DPI, 24 pt = 32 px), while px stays fixed.
+  expect((await call('add_text', { text: 'Pt', x: 750, y: 650, size: 24, unit: 'pt', color: '#000000', bold: true })).ok).toBe(true);
+  expect(await dark(750, 650, 80, 60)).toBeGreaterThan(10);
 
   // On a shapes layer, a shape stays an object; text needs pixels.
   await call('add_layer', { kind: 'shapes', name: 'Objects' });
@@ -117,12 +120,15 @@ test('an assistant paints strokes, fills, lines, shapes, paths and text that you
     'Assistant: Line',
     'Assistant: Path',
     'Assistant: Text',
+    'Assistant: Text',
     'Assistant: Add layer',
     'Assistant: Shape',
   ]);
   await page.keyboard.press('Control+z');
   await page.keyboard.press('Control+z');
   await page.keyboard.press('Control+z');
+  await page.keyboard.press('Control+z');
   expect(await dark(500, 650, 200, 80)).toBe(0);
+  expect(await dark(750, 650, 80, 60)).toBe(0);
   expect(isColor(await px(550, 320), [0, 255, 255], 2)).toBe(true);
 });

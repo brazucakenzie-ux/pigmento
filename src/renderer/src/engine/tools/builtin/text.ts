@@ -1,5 +1,5 @@
 import { rectFromPoints, rectUnion, type Point } from '../../core/geometry';
-import { TextObject, type TextStyle } from '../../live/TextObject';
+import { convertFontSize, TextObject, type FontSizeUnit, type TextStyle } from '../../live/TextObject';
 import type { ToolContext } from '../Tool';
 import { registerTool } from '../ToolRegistry';
 
@@ -15,7 +15,8 @@ function styleFrom(ctx: ToolContext): TextStyle {
   const o = ctx.options('text');
   return {
     family: String(o.font ?? 'Segoe UI'),
-    sizePt: Number(o.size ?? 18),
+    size: Number(o.size ?? 24),
+    sizeUnit: o.sizeUnit === 'pt' ? 'pt' : 'px',
     bold: o.bold === true,
     italic: o.italic === true,
     underline: o.underline === true,
@@ -46,7 +47,30 @@ export default registerTool({
   paints: true,
   options: [
     { key: 'font', type: 'font', labelKey: 'opt.font', default: 'Segoe UI' },
-    { key: 'size', type: 'slider', labelKey: 'opt.fontSize', min: 4, max: 400, step: 1, unit: 'pt', default: 18, presets: [12, 18, 24, 48], log: true },
+    {
+      key: 'size',
+      type: 'slider',
+      labelKey: 'opt.fontSize',
+      min: 1,
+      max: 1000,
+      step: 1,
+      unit: (v) => (v.sizeUnit === 'pt' ? 'pt' : 'px'),
+      default: 24,
+      presets: (v) => (v.sizeUnit === 'pt' ? [12, 18, 24, 48] : [16, 24, 48, 96]),
+      log: true,
+      unitOption: 'sizeUnit',
+      convertOnUnit: (v, from, to, dpi) => convertFontSize(v, from as FontSizeUnit, to as FontSizeUnit, dpi),
+    },
+    {
+      key: 'sizeUnit',
+      type: 'segmented',
+      labelKey: 'opt.fontSizeUnit',
+      default: 'px',
+      choices: [
+        { value: 'px', labelKey: 'opt.fontSizeUnit.px' },
+        { value: 'pt', labelKey: 'opt.fontSizeUnit.pt' },
+      ],
+    },
     { key: 'bold', type: 'toggle', labelKey: 'opt.bold', default: false, icon: 'bold' },
     { key: 'italic', type: 'toggle', labelKey: 'opt.italic', default: false, icon: 'italic' },
     { key: 'underline', type: 'toggle', labelKey: 'opt.underline', default: false, icon: 'underline' },

@@ -17,6 +17,7 @@ export const assistantsEn = {
   'assistant.step.resize_image': 'Assistant: Resize',
   'assistant.step.crop': 'Assistant: Crop',
   'assistant.step.canvas_size': 'Assistant: Canvas size',
+  'assistant.step.set_picture_properties': 'Assistant: Image properties',
   'assistant.step.rotate_flip': 'Assistant: Rotate or flip',
   'assistant.step.apply_effect': 'Assistant: Effect',
   'assistant.step.run_action': 'Assistant: Action',

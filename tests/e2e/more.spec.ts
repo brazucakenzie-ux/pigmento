@@ -35,6 +35,43 @@ test('text tool types in place and rasterises on commit', async () => {
   expect(dark).toBeGreaterThan(30);
 });
 
+test('text tool toggles between px (DPI-independent) and pt (DPI-scaled)', async () => {
+  h = await launchApp();
+  await ready(h.page);
+  const { page } = h;
+  await page.keyboard.press('t');
+  const pxRadio = page.getByRole('radio', { name: 'px', exact: true });
+  const ptRadio = page.getByRole('radio', { name: 'pt', exact: true });
+  const sizeInput = page.locator('.optionsbar input.num[aria-label="Size"]');
+  await expect(pxRadio).toHaveAttribute('aria-checked', 'true');
+  await expect(sizeInput).toHaveValue('24');
+
+  // Switching px -> pt at 96 DPI converts 24 px to 18 pt and back without drifting.
+  await ptRadio.click();
+  await expect(ptRadio).toHaveAttribute('aria-checked', 'true');
+  await expect(sizeInput).toHaveValue('18');
+  await pxRadio.click();
+  await expect(sizeInput).toHaveValue('24');
+
+  // Raise DPI to 900 via Image properties: px text stays 24 px, while 12 pt becomes 150 px.
+  await page.keyboard.press('Control+e');
+  const props = page.getByRole('dialog', { name: 'Image properties' });
+  const dpiInput = props.getByRole('textbox', { name: 'Resolution (DPI)' });
+  await dpiInput.fill('900');
+  await props.getByRole('button', { name: 'OK' }).click();
+
+  await clickDoc(page, 100, 100);
+  const editor = page.locator('.text-editor');
+  await editor.waitFor();
+  const pxFont = await editor.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+  await ptRadio.click();
+  // Converting 24 px -> pt keeps the rendered size small; picking 12 pt scales with 900 DPI (150 px).
+  await page.locator('.optionsbar .chip', { hasText: /^12$/ }).click();
+  const ptFont = await editor.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+  expect(ptFont / pxFont).toBeCloseTo(150 / 24, 1);
+  await page.keyboard.press('Escape');
+});
+
 test('free-form selection lifts only the outlined pixels', async () => {
   h = await launchApp();
   await ready(h.page);

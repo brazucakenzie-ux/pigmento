@@ -76,6 +76,7 @@ export function Slider({
   step = 1,
   label,
   unit,
+  showUnit = true,
   log = false,
   width,
   showNumber = true,
@@ -87,6 +88,7 @@ export function Slider({
   step?: number;
   label: string;
   unit?: string;
+  showUnit?: boolean;
   log?: boolean;
   width?: number;
   showNumber?: boolean;
@@ -116,7 +118,7 @@ export function Slider({
       {showNumber ? (
         <>
           <NumberField value={value} onChange={onChange} min={min} max={max} step={step} label={label} />
-          {unit ? <span className="unit">{unit}</span> : null}
+          {unit && showUnit ? <span className="unit">{unit}</span> : null}
         </>
       ) : null}
     </span>

@@ -61,6 +61,7 @@ function pictureInfo(): AssistantResult {
   const data = {
     width: engine.doc.width,
     height: engine.doc.height,
+    dpi: engine.doc.dpi,
     file: s.file.path,
     name: s.file.name ?? 'Untitled',
     unsavedChanges: s.history.dirty,
@@ -98,7 +99,7 @@ function pictureInfo(): AssistantResult {
       light: { ...engine.doc.light },
     },
   };
-  return { text: `${data.name}: ${data.width} × ${data.height} pixels, ${layers.count} layer${layers.count === 1 ? '' : 's'}${data.unsavedChanges ? ', with unsaved changes' : ''}.`, data };
+  return { text: `${data.name}: ${data.width} × ${data.height} pixels, ${layers.count} layer${layers.count === 1 ? '' : 's'}, ${data.dpi} DPI${data.unsavedChanges ? ', with unsaved changes' : ''}.`, data };
 }
 
 /** The longest side of a picture image when the assistant doesn't say. */

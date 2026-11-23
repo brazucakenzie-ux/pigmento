@@ -269,6 +269,7 @@ export const PAINT_HANDLERS: Record<string, Handler> = {
     const [x, y] = [num(args.x), num(args.y)];
     if (x === undefined || y === undefined) throw new Error('Text needs x and y (its top-left corner).');
     const align = str(args.align) ?? 'left';
+    const sizeUnit = str(args.unit) === 'pt' ? 'pt' : 'px';
     const obj = new TextObject(
       Math.round(x),
       Math.round(y),
@@ -276,7 +277,8 @@ export const PAINT_HANDLERS: Record<string, Handler> = {
       0,
       {
         family: str(args.font) ?? 'Segoe UI',
-        sizePt: num(args.size) ?? 24,
+        size: num(args.size) ?? 24,
+        sizeUnit,
         bold: bool(args.bold) ?? false,
         italic: bool(args.italic) ?? false,
         underline: bool(args.underline) ?? false,

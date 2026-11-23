@@ -57,7 +57,7 @@ These tools are in Home → Tools. Hover over a tool to see what it does and its
 | Gradient | G | Linear, radial, angular or diamond blends between colours |
 | Colour picker | I | Takes a colour from the picture |
 | Magnifier | Z | Click to zoom in, right-click to zoom out, drag to zoom to an area |
-| Text | T | Type in any installed font, with bold, italic, underline, strikethrough and alignment |
+| Text | T | Type in any installed font, sized in pixels (px) or points (pt), with bold, italic, underline, strikethrough and alignment |
 
 The left mouse button paints with colour 1 and the right button with colour 2. Hold Shift while painting to draw a straight line. **[** and **]** change the tool's size, and so do the mouse's back and forward side buttons.
 

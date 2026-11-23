@@ -32,7 +32,7 @@ export const TOOLS: readonly ToolDef[] = [
     name: 'get_picture_info',
     title: 'Picture info',
     description:
-      'The picture in a window: its size in pixels, its paper colour, its layers (top first: id, name, kind, visible, opacity, blend mode, which is active), whether it has unsaved changes and its file, the selection, the tool and colours in use, and the animation (frame shown, length, frames a second, frame-by-frame drawings and pieces). Frames are numbered from 1, as in the timeline.',
+      'The picture in a window: its size in pixels, its resolution (DPI), its paper colour, its layers (top first: id, name, kind, visible, opacity, blend mode, which is active), whether it has unsaved changes and its file, the selection, the tool and colours in use, and the animation (frame shown, length, frames a second, frame-by-frame drawings and pieces). Frames are numbered from 1, as in the timeline.',
     kind: 'look',
     input: {},
     readOnly: true,

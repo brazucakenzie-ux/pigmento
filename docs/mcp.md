@@ -2,7 +2,7 @@
 
 <!-- Made from the tools themselves (src/main/mcp): run `npm run mcp-docs` after changing one. -->
 
-Pigmento offers 40 tools and 3 resources to AI assistants over the Model Context Protocol. The [user guide](user-guide.md#ai-assistants) says how to connect one and how to choose what assistants may do.
+Pigmento offers 41 tools and 3 resources to AI assistants over the Model Context Protocol. The [user guide](user-guide.md#ai-assistants) says how to connect one and how to choose what assistants may do.
 
 - Positions and sizes are in picture pixels, from the top-left corner. Animation frames are numbered from 1, as in the timeline.
 - Colours are `#rrggbb` or `#rrggbbaa`. Layers, pieces and shapes are named by the ids `get_picture_info` gives.
@@ -20,7 +20,7 @@ Permission: Look at pictures. Only reads.
 
 ### `get_picture_info` (Picture info)
 
-The picture in a window: its size in pixels, its paper colour, its layers (top first: id, name, kind, visible, opacity, blend mode, which is active), whether it has unsaved changes and its file, the selection, the tool and colours in use, and the animation (frame shown, length, frames a second, frame-by-frame drawings and pieces). Frames are numbered from 1, as in the timeline.
+The picture in a window: its size in pixels, its resolution (DPI), its paper colour, its layers (top first: id, name, kind, visible, opacity, blend mode, which is active), whether it has unsaved changes and its file, the selection, the tool and colours in use, and the animation (frame shown, length, frames a second, frame-by-frame drawings and pieces). Frames are numbered from 1, as in the timeline.
 
 Permission: Look at pictures. Only reads.
 
@@ -66,7 +66,7 @@ Permission: New, close and switch pictures.
 | `width` | whole number 1 to 30000 | Width in pixels. |
 | `height` | whole number 1 to 30000 | Height in pixels. |
 | `paper` (optional) | string | The paper colour as #rrggbb (or #rrggbbaa), or none for see-through. White if left out. |
-| `dpi` (optional) | whole number 1 to 4800 | Dots per inch, for printing (96 if left out). |
+| `dpi` (optional) | whole number 1 to 10000 | Dots per inch, for printing (96 if left out). |
 | `where` (optional) | `this`, `new` | This window or a new one. Left out: this window if its picture has no unsaved changes, otherwise a new window. |
 | `unsaved` (optional) | `save`, `discard` | What to do with unsaved changes in the picture this replaces or closes: save them first, or throw them away (that can’t be undone). Needed only when there are some. |
 
@@ -339,7 +339,8 @@ Permission: Draw and edit.
 | `y` | number | Its top edge. |
 | `width` (optional) | number | Wrap lines at this width in pixels. |
 | `font` (optional) | string | A font on this PC, like Segoe UI (if left out), Arial, Georgia, Times New Roman, Consolas or Comic Sans MS. |
-| `size` (optional) | number 1 to 1000 | Size in points (24 if left out). |
+| `size` (optional) | number 1 to 1000 | Font size in the chosen unit (24 if left out). |
+| `unit` (optional) | `px`, `pt` | Unit for size: px (picture pixels, if left out) or pt (points, scaled by the picture’s DPI). |
 | `bold` (optional) | boolean | Bold. |
 | `italic` (optional) | boolean | Italic. |
 | `underline` (optional) | boolean | Underlined. |
@@ -387,6 +388,17 @@ Permission: Draw and edit.
 | `width` | whole number 1 to 30000 | The canvas’s new width, in pixels. |
 | `height` | whole number 1 to 30000 | The canvas’s new height, in pixels. |
 | `anchor` (optional) | `nw`, `n`, `ne`, `w`, `c`, `e`, `sw`, `s`, `se` | Where the picture stays: nw is top-left (if left out), c the centre, se bottom-right… |
+
+### `set_picture_properties` (Image properties)
+
+Change the picture’s resolution (DPI) and/or paper colour. Changing DPI doesn’t resize any pixels.
+
+Permission: Draw and edit.
+
+| Argument | Type | Description |
+|---|---|---|
+| `dpi` (optional) | whole number 1 to 10000 | Resolution in dots per inch (96 for screen, 300 for print). |
+| `paper` (optional) | string | The paper colour as #rrggbb (or #rrggbbaa), or none for see-through. |
 
 ### `rotate_flip` (Rotate or flip)
 

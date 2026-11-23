@@ -25,9 +25,19 @@ test('an assistant resizes, crops, rotates, applies effects, runs actions and ch
     const r = await client.callTool({ name, arguments: args });
     return { ok: !r.isError, text: firstText(r), data: r.structuredContent as Record<string, unknown> | undefined };
   };
-  const info = async () => (await call('get_picture_info')).data as { width: number; height: number; selection: unknown; layers: { id: string }[] };
+  const info = async () => (await call('get_picture_info')).data as { width: number; height: number; dpi: number; paper: string | null; selection: unknown; layers: { id: string }[] };
   const px = (x: number, y: number) => page.evaluate(([a, b]) => window.__pigmentoTest!.pixel(a, b), [x, y] as const);
   const steps = async () => (await page.locator('.history-list button').allTextContents()).filter((s) => s.startsWith('Assistant: '));
+
+  // Picture properties: DPI is reported by get_picture_info and changed without resizing pixels.
+  expect(await info()).toMatchObject({ width: 1280, height: 800, dpi: 96, paper: '#ffffffff' });
+  expect((await call('set_picture_properties')).text).toMatch(/Say what to change: dpi or paper/);
+  expect((await call('set_picture_properties', { dpi: 300, paper: '#112233' })).data).toEqual({ dpi: 300, paper: '#112233ff' });
+  expect(await info()).toMatchObject({ width: 1280, height: 800, dpi: 300, paper: '#112233ff' });
+  expect((await call('set_picture_properties', { paper: 'none' })).data).toEqual({ dpi: 300, paper: null });
+  expect(await info()).toMatchObject({ dpi: 300, paper: null });
+  expect((await call('set_picture_properties', { dpi: 96, paper: '#ffffff' })).data).toEqual({ dpi: 96, paper: '#ffffffff' });
+  expect(await info()).toMatchObject({ width: 1280, height: 800, dpi: 96, paper: '#ffffffff' });
 
   // Resize keeps the shape when given one side; a selection is let go first.
   expect((await call('resize_image', { width: 640 })).data).toMatchObject({ width: 640, height: 400 });
@@ -87,6 +97,9 @@ test('an assistant resizes, crops, rotates, applies effects, runs actions and ch
 
   // One step each (the grid isn't an undo step: it's a setting).
   expect(await steps()).toEqual([
+    'Assistant: Image properties',
+    'Assistant: Image properties',
+    'Assistant: Image properties',
     'Assistant: Resize',
     'Assistant: Select',
     'Assistant: Resize',
