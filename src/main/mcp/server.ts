@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import http from 'node:http';
 import net from 'node:net';
 import { app, BrowserWindow, ipcMain, type WebContents } from 'electron';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { CallToolResult, ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
@@ -10,8 +10,8 @@ import { ASSISTANT_ASK as ASK, IPC, type AssistantCall, type AssistantReply, typ
 import { getSettings, updateSettings } from '../settings';
 import { allowCloseAndClose, createWindow, markWindowUsed } from '../windows';
 import { AssistantsBook } from './book';
-import { RESOURCES, TOOLS, windowFor, type ResourceDef } from './tools';
-import { WINDOW_ARG, type AssistantKind, type AssistantSettings, type ToolContext, type ToolDef, type WindowPicture } from './types';
+import { createMcpServer, windowFor, type ResourceDef } from './tools';
+import type { AssistantKind, AssistantSettings, ToolContext, ToolDef, WindowPicture } from './types';
 
 /**
  * The MCP server inside Pigmento: AI assistants connect over the named pipe (through the
@@ -19,13 +19,6 @@ import { WINDOW_ARG, type AssistantKind, type AssistantSettings, type ToolContex
  * is a session of its own; tool calls go to the window being worked in (or the one named) and
  * come back as that window answers them.
  */
-
-/** What assistants are told about Pigmento when they connect. */
-const INSTRUCTIONS = [
-  'Pigmento is a painting and animation app for Windows. Its tools act on the picture in the window the user is working in, while they watch, or in the window you name (an id from list_windows).',
-  'Positions and sizes are in picture pixels, from the top-left corner, and animation frames are numbered from 1, as in the timeline. Start with get_picture_info to see the picture you are working on, and use get_picture_image to look at it and check your work.',
-  'Every change you make is one undo step the user can take back.',
-].join(' ');
 
 /** How long a window has to answer a call before the assistant is told it didn't. */
 const CALL_TIMEOUT_MS = 120_000;
@@ -181,28 +174,11 @@ export class AssistantHost {
 
   /** An MCP server for one conversation (session: its place in the book), with every tool. */
   private makeServer(session: number): McpServer {
-    const mcp = new McpServer({ name: 'pigmento', title: 'Pigmento', version: this.version }, { capabilities: { tools: {}, resources: {} }, instructions: INSTRUCTIONS });
-    const client = () => mcp.server.getClientVersion()?.title ?? mcp.server.getClientVersion()?.name ?? 'An AI assistant';
-    // It shows as connected once it says who it is.
-    mcp.server.oninitialized = () => this.book.named(session, client());
-    for (const tool of TOOLS) {
-      mcp.registerTool(
-        tool.name,
-        {
-          title: tool.title,
-          description: tool.description,
-          inputSchema: tool.noWindow ? tool.input : { ...WINDOW_ARG, ...tool.input },
-          annotations: { readOnlyHint: tool.readOnly, destructiveHint: tool.destructive ?? false, openWorldHint: false },
-        },
-        async (args: Record<string, unknown>) => this.call(tool, args, client()),
-      );
-    }
-    for (const res of RESOURCES) {
-      const tool = TOOLS.find((d) => d.name === res.tool);
-      if (!tool) throw new Error(`The resource ${res.uri} has no tool ${res.tool}`);
-      mcp.registerResource(res.name, res.uri, { title: res.title, description: res.description, mimeType: res.mimeType }, (uri) => this.read(uri, res, tool, client()));
-    }
-    return mcp;
+    return createMcpServer(this.version, {
+      onInitialized: (client) => this.book.named(session, client),
+      callTool: (tool, args, client) => this.call(tool, args, client),
+      readResource: (uri, res, tool, client) => this.read(uri, res, tool, client),
+    });
   }
 
   /** Carry out one call, noting it in the book. */

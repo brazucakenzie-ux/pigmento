@@ -158,6 +158,7 @@ export const SettingsSchema = z.object({
   assistants: z
     .object({
       enabled: z.boolean().default(true),
+      openOnDemand: z.boolean().default(true),
       look: assistantPermission.default('allow'),
       edit: assistantPermission.default('allow'),
       files: assistantPermission.default('allow'),
@@ -169,7 +170,7 @@ export const SettingsSchema = z.object({
       httpPort: z.number().int().min(1024).max(65535).default(39217),
       httpToken: z.string().regex(/^[0-9a-f]{0,64}$/).default(''),
     })
-    .default({ enabled: true, look: 'allow', edit: 'allow', files: 'allow', folder: null, pictures: 'allow', settings: 'allow', pace: 'watch', http: false, httpPort: 39217, httpToken: '' }),
+    .default({ enabled: true, openOnDemand: true, look: 'allow', edit: 'allow', files: 'allow', folder: null, pictures: 'allow', settings: 'allow', pace: 'watch', http: false, httpPort: 39217, httpToken: '' }),
   window: z
     .object({
       x: z.number().optional(),

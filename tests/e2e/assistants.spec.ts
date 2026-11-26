@@ -1,7 +1,15 @@
 // AI assistants (Milestone 8): an MCP client connected the way any client connects, through
 // `Pigmento --mcp` (stdio), and over the local HTTP address when that's turned on.
+import { createHash } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import net from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { expect, test } from '@playwright/test';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { connectStdio as connect, decode as decodeIn, firstText, imageOf, near, setAssistants as setIn, type Pixel } from './assistantClient';
 import { launchApp, ready, type AppHandle } from './harness';
@@ -269,4 +277,72 @@ test('an assistant finds what Pigmento has, and reads the same views as resource
   // Reading them is looking: refused when looking isn't allowed.
   await setAssistants({ look: 'deny' });
   await expect(client.readResource({ uri: 'pigmento://picture/info' })).rejects.toThrow(/doesn’t let AI assistants look at pictures/);
+});
+
+test('on-demand setting is on by default: MCP connects without opening Pigmento, and opens it on the first tool call', async () => {
+  // Verify the toggle in Settings → AI assistants is on by default and persists when flipped.
+  const { page } = h;
+  await page.keyboard.press('Control+Alt+s');
+  await page.getByRole('tab', { name: 'AI assistants' }).click();
+  const toggle = page.getByRole('checkbox', { name: 'Only open Pigmento when an assistant uses it' });
+  await expect(toggle).toBeChecked();
+  await toggle.uncheck();
+  await expect.poll(() => page.evaluate(async () => (await window.pigmento.settings.get()).assistants.openOnDemand)).toBe(false);
+  await toggle.check();
+  await expect.poll(() => page.evaluate(async () => (await window.pigmento.settings.get()).assistants.openOnDemand)).toBe(true);
+  await page.keyboard.press('Escape');
+
+  // Fresh profile with NO Pigmento window running: connecting via --mcp discovers tools without opening Pigmento.
+  const userData = mkdtempSync(path.join(os.tmpdir(), 'pigmento-ondemand-'));
+  const pipe = `\\\\.\\pipe\\pigmento-mcp-${createHash('sha256').update(userData.toLowerCase()).digest('hex').slice(0, 16)}`;
+  const canConnectPipe = () =>
+    new Promise<boolean>((resolve) => {
+      const s = net.connect(pipe);
+      s.once('connect', () => {
+        s.destroy();
+        resolve(true);
+      });
+      s.once('error', () => resolve(false));
+    });
+  const electronExe = createRequire(__filename)('electron') as unknown as string;
+  const transport = new StdioClientTransport({
+    command: electronExe,
+    args: ['.', '--mcp'],
+    cwd: path.resolve(__dirname, '../..'),
+    env: { ...(process.env as Record<string, string>), PIGMENTO_USER_DATA: userData },
+    stderr: 'pipe',
+  });
+  const client = new Client({ name: 'ondemand-e2e', version: '1.0.0' });
+  try {
+    await client.connect(transport);
+    const { tools } = await client.listTools();
+    expect(tools.map((t) => t.name)).toContain('get_picture_info');
+    expect((await client.listResources()).resources).toHaveLength(3);
+    // Still no Pigmento instance listening on this profile's pipe.
+    expect(await canConnectPipe()).toBe(false);
+
+    // Calling a tool opens Pigmento on demand and answers normally.
+    const info = await client.callTool({ name: 'get_picture_info', arguments: {} });
+    expect(info.isError).toBeFalsy();
+    expect(info.structuredContent).toMatchObject({ width: 1280, height: 800, dpi: 96 });
+    expect(await canConnectPipe()).toBe(true);
+  } finally {
+    await client.close().catch(() => undefined);
+    // Stop the detached Pigmento app launched for this temporary profile.
+    try {
+      const escaped = userData.replace(/'/g, "''");
+      execFileSync(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-Command',
+          `$p = Get-CimInstance Win32_Process -Filter "Name='electron.exe'" | Where-Object { $_.CommandLine -like '*${escaped}*' }; $parents = $p | ForEach-Object { $_.ParentProcessId } | Sort-Object -Unique | Where-Object { (Get-Process -Id $_ -ErrorAction SilentlyContinue).ProcessName -eq 'electron' }; foreach ($id in @($p.ProcessId) + @($parents)) { if ($id) { Stop-Process -Id $id -Force -ErrorAction SilentlyContinue } }`,
+        ],
+        { stdio: 'ignore' },
+      );
+    } catch {
+      // ignore if already exited
+    }
+    rmSync(userData, { recursive: true, force: true });
+  }
 });

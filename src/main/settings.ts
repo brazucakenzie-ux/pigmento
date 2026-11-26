@@ -11,10 +11,15 @@ function settingsFile(): string {
   return path.join(app.getPath('userData'), 'settings.json');
 }
 
+/** Read settings straight from disk without caching (used by the standalone --mcp bridge). */
+export async function readSettingsFresh(): Promise<Settings> {
+  const raw = await readJsonFile(settingsFile());
+  return parseSettings(raw ?? {});
+}
+
 export async function loadSettings(): Promise<Settings> {
   if (current) return current;
-  const raw = await readJsonFile(settingsFile());
-  current = parseSettings(raw ?? {});
+  current = await readSettingsFresh();
   return current;
 }
 

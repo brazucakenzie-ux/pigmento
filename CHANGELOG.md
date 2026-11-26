@@ -2,6 +2,15 @@
 
 All notable changes to Pigmento. Versions follow [Semantic Versioning](https://semver.org).
 
+## [1.4.2] — 2026-11-26
+
+On-demand MCP startup: Pigmento no longer pops open when an AI app starts.
+
+### AI assistants
+- Added **Only open Pigmento when an assistant uses it** in Settings → **AI assistants** (on by default).
+- When turned on and Pigmento isn't already running, `Pigmento.exe --mcp` answers MCP discovery (`initialize`, `ping`, `tools/list`, `resources/list`) in standby without opening a window, and only opens Pigmento once an assistant actually calls a tool or reads a resource.
+- Closing Pigmento mid-session returns the bridge cleanly to standby and reconnects automatically on the next tool call. Turn the setting off to open Pigmento as soon as an AI app connects.
+
 ## [1.4.1] — 2026-11-23
 
 Text sizing in pixels or points, and image properties (DPI and paper) for AI assistants.

@@ -131,6 +131,11 @@ function AssistantsPage() {
       </fieldset>
       <fieldset className="assistants-options" disabled={!a.enabled}>
         <legend>{t('assistants.connect')}</legend>
+        <label className="check">
+          <input type="checkbox" checked={a.openOnDemand} onChange={(e) => set({ openOnDemand: e.target.checked })} />
+          {t('assistants.openOnDemand')}
+        </label>
+        <p className="dialog-note">{t('assistants.openOnDemandHint')}</p>
         <label className="field">
           <span className="label">{t('assistants.client')}</span>
           <select className="select" value={client} onChange={(e) => setClient(e.target.value as McpClient)}>

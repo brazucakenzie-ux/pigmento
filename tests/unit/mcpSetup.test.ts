@@ -35,15 +35,28 @@ describe('setting up an MCP client', () => {
 });
 
 describe('the AI assistants settings', () => {
-  it('are very free by default: on, everything allowed, files anywhere, drawing you can follow, no HTTP', () => {
-    expect(defaultSettings().assistants).toEqual({ enabled: true, look: 'allow', edit: 'allow', files: 'allow', folder: null, pictures: 'allow', settings: 'allow', pace: 'watch', http: false, httpPort: 39217, httpToken: '' });
+  it('are very free by default: on, open on demand, everything allowed, files anywhere, drawing you can follow, no HTTP', () => {
+    expect(defaultSettings().assistants).toEqual({
+      enabled: true,
+      openOnDemand: true,
+      look: 'allow',
+      edit: 'allow',
+      files: 'allow',
+      folder: null,
+      pictures: 'allow',
+      settings: 'allow',
+      pace: 'watch',
+      http: false,
+      httpPort: 39217,
+      httpToken: '',
+    });
   });
 
   it('keep what’s valid and fall back on the rest', () => {
-    const s = parseSettings({ assistants: { enabled: false, files: 'ask', folder: 'D:\\Art', pace: 'instant', http: true, httpPort: 40000, httpToken: 'abc123' } });
-    expect(s.assistants).toMatchObject({ enabled: false, files: 'ask', folder: 'D:\\Art', pace: 'instant', http: true, httpPort: 40000, httpToken: 'abc123', look: 'allow' });
+    const s = parseSettings({ assistants: { enabled: false, openOnDemand: false, files: 'ask', folder: 'D:\\Art', pace: 'instant', http: true, httpPort: 40000, httpToken: 'abc123' } });
+    expect(s.assistants).toMatchObject({ enabled: false, openOnDemand: false, files: 'ask', folder: 'D:\\Art', pace: 'instant', http: true, httpPort: 40000, httpToken: 'abc123', look: 'allow' });
     // A bad value anywhere in the section: the section's defaults (other settings kept).
-    for (const bad of [{ look: 'maybe' }, { httpPort: 80 }, { httpToken: 'not hex!' }, { pace: 'fast' }]) {
+    for (const bad of [{ look: 'maybe' }, { openOnDemand: 'yes' }, { httpPort: 80 }, { httpToken: 'not hex!' }, { pace: 'fast' }]) {
       const p = parseSettings({ assistants: bad, ui: { scale: 1.5 } });
       expect(p.assistants).toEqual(defaultSettings().assistants);
       expect(p.ui.scale).toBe(1.5);

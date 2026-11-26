@@ -346,7 +346,7 @@ An AI assistant can use Pigmento the way you do, through the Model Context Proto
    - **VS Code:** paste it into `.vscode/mcp.json` in a project, or into your user MCP settings.
    - **Cursor:** paste it into `mcp.json` (`%USERPROFILE%\.cursor\mcp.json` for every project).
    - **Another MCP client:** give it the command and arguments shown.
-3. Start the assistant again. It runs `Pigmento.exe --mcp` to reach Pigmento, which starts Pigmento if it isn't running.
+3. Start the assistant again. It runs `Pigmento.exe --mcp` to reach Pigmento. With **Only open Pigmento when an assistant uses it** turned on (the default), Pigmento stays closed when the AI app starts and only opens once it calls a Pigmento tool; turn it off to open Pigmento as soon as the assistant connects.
 
 Some clients connect by a URL instead. For them, turn on **Let assistants connect by a local address too** and copy the address. Only programs on this PC can reach it, with the key in the address, and web pages never can. **New key** makes a new address, and the old one stops working.
 

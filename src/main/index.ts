@@ -6,7 +6,7 @@ import { registerIpc } from './ipc';
 import { handleAppProtocol, registerSchemes } from './protocol';
 import { loadRecent, onRecentChanged, pruneRecent } from './recent';
 import { applySecurityPolicy } from './security';
-import { flushSettings, getSettings, loadSettings, onSettingsChanged } from './settings';
+import { flushSettings, getSettings, loadSettings, onSettingsChanged, readSettingsFresh } from './settings';
 import { AssistantHost } from './mcp/server';
 import { IPC } from '@shared/ipc';
 import { broadcastTheme, createWindow, openFileInApp } from './windows';
@@ -19,13 +19,25 @@ app.setName('Pigmento');
 app.setPath('userData', userDataOverride ?? path.join(app.getPath('appData'), 'Pigmento'));
 if (process.platform === 'win32') app.setAppUserModelId('app.pigmento.desktop');
 
-// Started by an MCP client: be its bridge to the Pigmento that's running (starting it if need be),
-// with no window and without the one-app lock, until the client or Pigmento ends the conversation.
+// Started by an MCP client: be its bridge to the Pigmento that's running (staying in standby until
+// a tool is used when openOnDemand is on, or starting Pigmento right away when it's off), with no
+// window and without the one-app lock, until the client ends the conversation.
 const bridging = process.argv.includes(MCP_SWITCH);
 if (bridging) {
   const start = () => spawn(process.execPath, app.isPackaged ? [] : [app.getAppPath()], { detached: true, stdio: 'ignore', env: process.env }).unref();
   const io = { input: stdinStream(), output: process.stdout, error: (m: string) => void process.stderr.write(`${m}\n`) };
-  void runBridge(mcpPipeName(app.getPath('userData')), io, start).then((code) => app.exit(code));
+  void readSettingsFresh()
+    .then((s) =>
+      runBridge(mcpPipeName(app.getPath('userData')), io, start, {
+        onDemand: s.assistants.openOnDemand
+          ? {
+              version: app.getVersion(),
+              canStart: async () => (await readSettingsFresh()).assistants.enabled,
+            }
+          : undefined,
+      }),
+    )
+    .then((code) => app.exit(code));
 } else {
   registerSchemes();
   installErrorHandlers();

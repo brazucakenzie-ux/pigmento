@@ -1,9 +1,18 @@
 import { BrowserWindow } from 'electron';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { CallToolResult, ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { ANIM_TOOLS } from './anim';
 import { IMAGE_TOOLS, LAYER_TOOLS, PAINT_TOOLS } from './edit';
 import { PICTURE_TOOLS } from './pictures';
-import type { ToolDef } from './types';
+import { WINDOW_ARG, type ToolDef } from './types';
+
+/** What assistants are told about Pigmento when they connect. */
+export const MCP_INSTRUCTIONS = [
+  'Pigmento is a painting and animation app for Windows. Its tools act on the picture in the window the user is working in, while they watch, or in the window you name (an id from list_windows).',
+  'Positions and sizes are in picture pixels, from the top-left corner, and animation frames are numbered from 1, as in the timeline. Start with get_picture_info to see the picture you are working on, and use get_picture_image to look at it and check your work.',
+  'Every change you make is one undo step the user can take back.',
+].join(' ');
 
 /**
  * The tools AI assistants can call. Each is one kind of thing a person does in Pigmento, checked
@@ -86,6 +95,38 @@ export const RESOURCES: readonly ResourceDef[] = [
   { name: 'picture-info', uri: 'pigmento://picture/info', title: 'Picture info', description: 'The picture in the window being worked in: size, layers, selection, animation.', mimeType: 'application/json', tool: 'get_picture_info' },
   { name: 'picture-image', uri: 'pigmento://picture/image', title: 'Picture image', description: 'The picture in the window being worked in, as a PNG up to 1024 pixels.', mimeType: 'image/png', tool: 'get_picture_image' },
 ];
+
+/** Build an MCP server populated with all Pigmento tools, resources, and instructions. */
+export function createMcpServer(
+  version: string,
+  handlers: {
+    callTool: (tool: ToolDef, args: Record<string, unknown>, client: string) => Promise<CallToolResult>;
+    readResource: (uri: URL, res: ResourceDef, tool: ToolDef, client: string) => Promise<ReadResourceResult>;
+    onInitialized?: (client: string) => void;
+  },
+): McpServer {
+  const mcp = new McpServer({ name: 'pigmento', title: 'Pigmento', version }, { capabilities: { tools: {}, resources: {} }, instructions: MCP_INSTRUCTIONS });
+  const client = () => mcp.server.getClientVersion()?.title ?? mcp.server.getClientVersion()?.name ?? 'An AI assistant';
+  if (handlers.onInitialized) mcp.server.oninitialized = () => handlers.onInitialized!(client());
+  for (const tool of TOOLS) {
+    mcp.registerTool(
+      tool.name,
+      {
+        title: tool.title,
+        description: tool.description,
+        inputSchema: tool.noWindow ? tool.input : { ...WINDOW_ARG, ...tool.input },
+        annotations: { readOnlyHint: tool.readOnly, destructiveHint: tool.destructive ?? false, openWorldHint: false },
+      },
+      async (args: Record<string, unknown>) => handlers.callTool(tool, args, client()),
+    );
+  }
+  for (const res of RESOURCES) {
+    const tool = TOOLS.find((d) => d.name === res.tool);
+    if (!tool) throw new Error(`The resource ${res.uri} has no tool ${res.tool}`);
+    mcp.registerResource(res.name, res.uri, { title: res.title, description: res.description, mimeType: res.mimeType }, (uri) => handlers.readResource(uri, res, tool, client()));
+  }
+  return mcp;
+}
 
 /** The window a tool acts on: the one named, or the one being worked in (the focused or the last focused). */
 export function windowFor(id: number | undefined, lastFocused: BrowserWindow | null): BrowserWindow {
